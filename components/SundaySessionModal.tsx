@@ -1,9 +1,9 @@
 'use client'
 
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import {
   X, ChevronRight, ChevronLeft, Loader2,
-  CheckCircle2, Sparkles, RotateCcw, Pencil,
+  CheckCircle2, RotateCcw, Pencil,
 } from 'lucide-react'
 import { cn, PILLAR_LABELS, FORMAT_LABELS, formatDay } from '@/lib/utils/helpers'
 import { getForwardPlanWeeks, getQuarter } from '@/lib/utils/helpers'
@@ -87,8 +87,8 @@ export default function SundaySessionModal({
 
     try {
       const results = await Promise.all(
-        weeks.map(w =>
-          fetch('/api/plan', {
+        weeks.map(async w => {
+          const res = await fetch('/api/plan', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -98,8 +98,13 @@ export default function SundaySessionModal({
               quarter: w.quarter,
               quarterTheme: w.quarterTheme,
             }),
-          }).then(r => r.json())
-        )
+          })
+          if (!res.ok) {
+            const text = await res.text()
+            throw new Error(`Theme proposal failed (${res.status}): ${text || 'No error details — check Vercel function logs'}`)
+          }
+          return res.json()
+        })
       )
 
       setWeeks(prev => prev.map((w, i) => ({
@@ -113,8 +118,8 @@ export default function SundaySessionModal({
     }
   }, [weeks])
 
-  // Auto-propose on mount
-  useState(() => { proposeThemes() })
+  // Auto-propose themes when modal opens
+  useEffect(() => { proposeThemes() }, [])
 
   // ── Step 2: Generate plans for confirmed themes ────────────────────
   const generatePlans = useCallback(async () => {
@@ -130,7 +135,7 @@ export default function SundaySessionModal({
 
           if (!theme) return { weekId: null, plan: [] }
 
-          // First ensure the week record exists in Supabase
+          // Create or fetch the week record in Supabase
           const createRes = await fetch('/api/weeks', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -141,9 +146,13 @@ export default function SundaySessionModal({
               theme,
             }),
           })
+          if (!createRes.ok) {
+            const text = await createRes.text()
+            throw new Error(`Failed to create week (${createRes.status}): ${text || 'Check Vercel function logs'}`)
+          }
           const { weekId } = await createRes.json()
 
-          // Then generate the plan
+          // Generate the 6-post plan
           const planRes = await fetch('/api/plan', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -153,6 +162,10 @@ export default function SundaySessionModal({
               theme,
             }),
           })
+          if (!planRes.ok) {
+            const text = await planRes.text()
+            throw new Error(`Failed to generate plan (${planRes.status}): ${text || 'Check Vercel function logs'}`)
+          }
           const { plan } = await planRes.json()
           return { weekId, plan: plan ?? [] }
         })
