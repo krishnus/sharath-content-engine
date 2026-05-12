@@ -8,6 +8,7 @@ import {
 } from 'lucide-react'
 import { cn, PILLAR_LABELS, FORMAT_LABELS, DAY_ORDER, formatDay } from '@/lib/utils/helpers'
 import Link from 'next/link'
+import SundaySessionModal from '@/components/SundaySessionModal'
 
 type Post = {
   id: string
@@ -41,9 +42,10 @@ type ForwardWeek = {
 }
 
 export default function DashboardPage() {
-  const [weeks, setWeeks]     = useState<ForwardWeek[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError]     = useState<string | null>(null)
+  const [weeks, setWeeks]           = useState<ForwardWeek[]>([])
+  const [loading, setLoading]       = useState(true)
+  const [error, setError]           = useState<string | null>(null)
+  const [showSession, setShowSession] = useState(false)
   const today = new Date()
 
   const fetchPlan = useCallback(async () => {
@@ -70,6 +72,14 @@ export default function DashboardPage() {
   return (
     <div className="px-6 py-8 max-w-5xl mx-auto space-y-8">
 
+      {/* Sunday Session Modal */}
+      {showSession && (
+        <SundaySessionModal
+          onClose={() => setShowSession(false)}
+          onComplete={() => { setShowSession(false); fetchPlan() }}
+        />
+      )}
+
       <div className="flex items-start justify-between">
         <div>
           <p className="section-label mb-2">Forward Plan</p>
@@ -82,21 +92,10 @@ export default function DashboardPage() {
         </div>
 
         {hasAnyData && (
-          <div className="text-right space-y-1">
-            <p className="text-xs text-ink-400">Buffer health</p>
-            <p className="text-sm font-mono text-cream">{approvedCount}/{totalNonSat} approved</p>
-            <div className="h-1.5 w-32 bg-ink-700 rounded-full overflow-hidden">
-              <div
-                className={cn(
-                  'h-full rounded-full transition-all duration-500',
-                  totalNonSat === 0 ? 'bg-ink-600' :
-                  approvedCount === totalNonSat ? 'bg-emerald-400' :
-                  approvedCount > 0 ? 'bg-amber-400' : 'bg-ink-600'
-                )}
-                style={{ width: totalNonSat > 0 ? `${(approvedCount / totalNonSat) * 100}%` : '0%' }}
-              />
-            </div>
-          </div>
+          <button className="btn-primary" onClick={() => setShowSession(true)}>
+            <Plus size={15} />
+            New Sunday Session
+          </button>
         )}
       </div>
 
@@ -116,7 +115,7 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {!loading && !error && !hasAnyData && <EmptyState />}
+      {!loading && !error && !hasAnyData && <EmptyState onStart={() => setShowSession(true)} />}
 
       {!loading && !error && hasAnyData && weeks.map((fw, i) => (
         <WeekPanel
@@ -124,13 +123,14 @@ export default function DashboardPage() {
           forwardWeek={fw}
           weekIndex={i}
           onRefresh={fetchPlan}
+          onStartSession={() => setShowSession(true)}
         />
       ))}
     </div>
   )
 }
 
-function EmptyState() {
+function EmptyState({ onStart }: { onStart: () => void }) {
   return (
     <div className="flex flex-col items-center justify-center py-20 text-center space-y-6 animate-in">
       <div className="w-14 h-14 rounded-2xl bg-gold-500/10 border border-gold-500/20 flex items-center justify-center">
@@ -151,10 +151,7 @@ function EmptyState() {
           <li className="flex gap-2"><span className="text-gold-500 font-medium">3.</span> Generate and approve all 10 Mon–Fri drafts</li>
         </ol>
       </div>
-      <button
-        className="btn-primary"
-        onClick={() => alert('Sunday session flow — coming in the next build.')}
-      >
+      <button className="btn-primary" onClick={onStart}>
         <Plus size={15} />
         Start Sunday Session
       </button>
@@ -164,11 +161,12 @@ function EmptyState() {
 }
 
 function WeekPanel({
-  forwardWeek, weekIndex, onRefresh,
+  forwardWeek, weekIndex, onRefresh, onStartSession,
 }: {
   forwardWeek: ForwardWeek
   weekIndex: number
   onRefresh: () => void
+  onStartSession: () => void
 }) {
   const [expanded, setExpanded] = useState(true)
   const { meta, data: week } = forwardWeek
@@ -219,7 +217,7 @@ function WeekPanel({
           {!week?.theme && (
             <button
               className="btn-primary text-xs px-3 py-2"
-              onClick={e => { e.stopPropagation(); alert('Theme proposal UI — coming next build.') }}
+              onClick={e => { e.stopPropagation(); onStartSession() }}
             >
               <Plus size={13} />
               Set theme
