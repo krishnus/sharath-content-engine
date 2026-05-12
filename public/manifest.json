@@ -1,0 +1,16 @@
+{
+  "name": "Sharath Content Engine",
+  "short_name": "SCE",
+  "description": "AI-powered content creation for Coach Sharath",
+  "start_url": "/dashboard",
+  "display": "standalone",
+  "background_color": "#0a0e1a",
+  "theme_color": "#0a0e1a",
+  "icons": [
+    {
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    }
+  ]
+}

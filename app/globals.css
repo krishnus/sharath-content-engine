@@ -1,0 +1,147 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --ink-950: #050810;
+    --ink-900: #0a0e1a;
+    --ink-800: #111827;
+    --ink-700: #1c2333;
+    --ink-600: #253047;
+    --ink-500: #3b4a6b;
+    --ink-400: #5a6e94;
+    --ink-300: #8497bb;
+    --gold-500: #c9a84c;
+    --gold-400: #dbbf6e;
+    --gold-200: #f4e9c0;
+    --cream: #f0edd8;
+    --cream-muted: #c2bfad;
+  }
+
+  * {
+    box-sizing: border-box;
+  }
+
+  html {
+    scroll-behavior: smooth;
+  }
+
+  body {
+    background-color: var(--ink-900);
+    color: var(--cream);
+    font-family: 'DM Sans', system-ui, sans-serif;
+  }
+
+  /* Custom scrollbar */
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { background: var(--ink-800); }
+  ::-webkit-scrollbar-thumb { background: var(--ink-500); border-radius: 3px; }
+  ::-webkit-scrollbar-thumb:hover { background: var(--ink-400); }
+
+  /* Selection */
+  ::selection { background: rgba(201, 168, 76, 0.25); color: var(--gold-200); }
+}
+
+@layer components {
+  /* Typography */
+  .display-heading {
+    @apply font-display font-light text-cream tracking-tight;
+  }
+
+  .section-label {
+    @apply text-xs uppercase tracking-widest text-cream-muted font-body font-medium;
+  }
+
+  /* Cards */
+  .card {
+    @apply bg-ink-800 border border-ink-700 rounded-xl;
+  }
+
+  .card-hover {
+    @apply card transition-all duration-200 hover:border-ink-500 hover:bg-ink-700;
+  }
+
+  /* Status badges */
+  .badge {
+    @apply inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium font-body;
+  }
+
+  .badge-draft     { @apply badge bg-ink-700 text-ink-300; }
+  .badge-edited    { @apply badge bg-purple-900/40 text-purple-300; }
+  .badge-approved  { @apply badge bg-emerald-900/40 text-emerald-300; }
+  .badge-scheduled { @apply badge bg-yellow-900/40 text-yellow-300; }
+  .badge-published { @apply badge bg-teal-900/40 text-teal-300; }
+  .badge-failed    { @apply badge bg-red-900/40 text-red-300; }
+  .badge-awaiting  { @apply badge bg-ink-700 text-ink-400 border border-ink-600 border-dashed; }
+
+  /* Pillar indicators */
+  .pillar-vedic      { @apply text-violet-400; }
+  .pillar-banker     { @apply text-blue-400; }
+  .pillar-coaching   { @apply text-emerald-400; }
+  .pillar-financial  { @apply text-amber-400; }
+  .pillar-inner      { @apply text-pink-400; }
+
+  /* Buttons */
+  .btn-primary {
+    @apply inline-flex items-center gap-2 px-4 py-2.5 rounded-lg
+           bg-gold-500 text-ink-900 font-medium text-sm
+           hover:bg-gold-400 active:scale-95
+           transition-all duration-150 disabled:opacity-40 disabled:cursor-not-allowed;
+  }
+
+  .btn-secondary {
+    @apply inline-flex items-center gap-2 px-4 py-2.5 rounded-lg
+           bg-ink-700 text-cream border border-ink-600 font-medium text-sm
+           hover:bg-ink-600 hover:border-ink-500 active:scale-95
+           transition-all duration-150 disabled:opacity-40 disabled:cursor-not-allowed;
+  }
+
+  .btn-ghost {
+    @apply inline-flex items-center gap-2 px-3 py-2 rounded-lg
+           text-cream-muted font-medium text-sm
+           hover:bg-ink-700 hover:text-cream active:scale-95
+           transition-all duration-150;
+  }
+
+  /* Input */
+  .input {
+    @apply w-full px-3 py-2.5 rounded-lg
+           bg-ink-800 border border-ink-600 text-cream placeholder-ink-400
+           focus:outline-none focus:border-gold-500 focus:ring-1 focus:ring-gold-500/30
+           text-sm transition-colors duration-150;
+  }
+
+  /* Word count indicator */
+  .word-count-ok      { @apply text-emerald-400; }
+  .word-count-warning { @apply text-amber-400; }
+  .word-count-error   { @apply text-red-400; }
+
+  /* Grain overlay */
+  .grain::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.035'/%3E%3C/svg%3E");
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  /* Editor */
+  .editor-content {
+    @apply w-full min-h-[400px] p-4 rounded-lg
+           bg-transparent border-0 resize-none outline-none
+           text-cream text-sm leading-7 font-body
+           placeholder-ink-400;
+  }
+
+  /* Animate in */
+  .animate-in {
+    animation: fadeUp 0.4s ease-out forwards;
+  }
+}
+
+/* Fraunces optical sizing */
+.font-display {
+  font-optical-sizing: auto;
+}
