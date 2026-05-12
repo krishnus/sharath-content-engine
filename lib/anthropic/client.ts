@@ -10,7 +10,7 @@ export function getAnthropicClient(): Anthropic {
   return _client
 }
 
-export const MODEL = 'claude-sonnet-4-20250514'
+export const MODEL = process.env.ANTHROPIC_MODEL ?? 'claude-sonnet-4-5-20250929'
 export const MAX_TOKENS = 2048
 
 /** Count words in a string reliably — never trust LLM self-reporting */
