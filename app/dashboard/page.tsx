@@ -6,9 +6,12 @@ import {
   Plus, CheckCircle2, Clock, AlertCircle,
   Loader2, CalendarDays, ChevronDown, ChevronUp,
 } from 'lucide-react'
-import { cn, PILLAR_LABELS, FORMAT_LABELS, DAY_ORDER, formatDay } from '@/lib/utils/helpers'
 import Link from 'next/link'
+import { cn, PILLAR_LABELS, FORMAT_LABELS, DAY_ORDER, formatDay } from '@/lib/utils/helpers'
 import SundaySessionModal from '@/components/SundaySessionModal'
+
+// Buffer warning threshold in days
+const BUFFER_WARNING_DAYS = 14
 
 type Post = {
   id: string
@@ -69,15 +72,50 @@ export default function DashboardPage() {
   const approvedCount = weeks.flatMap(w => w.data?.posts ?? []).filter(p => p.status === 'approved').length
   const totalNonSat   = weeks.flatMap(w => w.data?.posts ?? []).filter(p => p.day !== 'saturday').length
 
+  // Buffer warning: flag if latest planned week starts within 14 days
+  const latestWeekStart = weeks
+    .filter(w => w.data !== null)
+    .map(w => new Date(w.data!.week_start))
+    .sort((a, b) => b.getTime() - a.getTime())[0]
+
+  const daysAhead = latestWeekStart
+    ? Math.floor((latestWeekStart.getTime() - today.getTime()) / (1000 * 60 * 60 * 24))
+    : 0
+
+  const showBufferWarning = !loading && (
+    !hasAnyData || daysAhead < BUFFER_WARNING_DAYS
+  )
+
   return (
     <div className="px-6 py-8 max-w-5xl mx-auto space-y-8">
 
-      {/* Sunday Session Modal */}
+      {/* Planning Session Modal */}
       {showSession && (
         <SundaySessionModal
           onClose={() => setShowSession(false)}
           onComplete={() => { setShowSession(false); fetchPlan() }}
         />
+      )}
+
+      {/* Buffer warning banner */}
+      {showBufferWarning && (
+        <div className="card px-4 py-3 border-amber-700/30 bg-amber-900/10 flex items-center justify-between gap-4">
+          <div className="flex items-center gap-2">
+            <AlertCircle size={15} className="text-amber-400 shrink-0" />
+            <p className="text-sm text-amber-300">
+              {!hasAnyData
+                ? 'No content planned yet — start a planning session to build your buffer.'
+                : `Your content buffer is running low — only ${daysAhead} days ahead. Aim for 14+ days.`
+              }
+            </p>
+          </div>
+          <button
+            onClick={() => setShowSession(true)}
+            className="btn-primary text-xs px-3 py-2 shrink-0"
+          >
+            Plan now
+          </button>
+        </div>
       )}
 
       <div className="flex items-start justify-between">
@@ -94,7 +132,7 @@ export default function DashboardPage() {
         {hasAnyData && (
           <button className="btn-primary" onClick={() => setShowSession(true)}>
             <Plus size={15} />
-            New Sunday Session
+            Plan ahead
           </button>
         )}
       </div>
@@ -137,25 +175,25 @@ function EmptyState({ onStart }: { onStart: () => void }) {
         <CalendarDays size={24} className="text-gold-500" />
       </div>
       <div className="space-y-2">
-        <h2 className="font-display text-2xl text-cream">No plan yet</h2>
+        <h2 className="font-display text-2xl text-cream">No content planned yet</h2>
         <p className="text-sm text-ink-400 max-w-sm">
-          Every Sunday, plan the next 2 weeks of content here —
-          themes, posts, and drafts in one session.
+          Start a planning session whenever you have time —
+          themes, posts, and drafts across as many weeks as you like.
         </p>
       </div>
       <div className="card px-6 py-5 text-left max-w-sm w-full space-y-3">
-        <p className="section-label">Your first Sunday session</p>
+        <p className="section-label">How a planning session works</p>
         <ol className="space-y-2 text-sm text-cream-muted">
-          <li className="flex gap-2"><span className="text-gold-500 font-medium">1.</span> Choose a theme for each of the 2 forward weeks</li>
-          <li className="flex gap-2"><span className="text-gold-500 font-medium">2.</span> The engine maps out 6 posts per week</li>
-          <li className="flex gap-2"><span className="text-gold-500 font-medium">3.</span> Generate and approve all 10 Mon–Fri drafts</li>
+          <li className="flex gap-2"><span className="text-gold-500 font-medium">1.</span> Choose a theme for each forward week — one at a time</li>
+          <li className="flex gap-2"><span className="text-gold-500 font-medium">2.</span> The engine maps out 6 posts per week with narrative continuity</li>
+          <li className="flex gap-2"><span className="text-gold-500 font-medium">3.</span> Generate and approve Mon–Fri drafts at your own pace</li>
         </ol>
       </div>
       <button className="btn-primary" onClick={onStart}>
         <Plus size={15} />
-        Start Sunday Session
+        Start planning session
       </button>
-      <p className="text-xs text-ink-500">~60–90 minutes · Sets up 2 weeks of content</p>
+      <p className="text-xs text-ink-500">Plan ahead whenever you have time · Aim for 2+ weeks buffer</p>
     </div>
   )
 }

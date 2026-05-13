@@ -3,12 +3,12 @@
 import { useState, useCallback, useEffect } from 'react'
 import {
   X, ChevronRight, ChevronLeft, Loader2,
-  CheckCircle2, RotateCcw, Pencil,
+  CheckCircle2, RotateCcw, Pencil, AlertCircle,
 } from 'lucide-react'
 import { cn, PILLAR_LABELS, FORMAT_LABELS, formatDay } from '@/lib/utils/helpers'
 import { getForwardPlanWeeks, getQuarter } from '@/lib/utils/helpers'
 
-// ── Types ──────────────────────────────────────────────────────────────
+// ── Types ────────────────────────────────────────────────────────────
 type ThemeOption = {
   theme: string
   rationale: string
@@ -36,18 +36,19 @@ type WeekMeta = {
 type WeekState = {
   meta: WeekMeta
   weekId: string | null
-  proposedThemes: ThemeOption[]
+  // Each round is a fresh set of proposals — kept so user can compare
+  proposalRounds: ThemeOption[][]
+  activeRound: number
   selectedTheme: ThemeOption | null
   customTheme: string
   isCustom: boolean
   plan: PlanSlot[]
-  quarterTheme: string
   quarter: string
+  quarterTheme: string
 }
 
 type Step = 'proposing' | 'themes' | 'confirming' | 'plans' | 'done'
 
-// ── Quarter themes ─────────────────────────────────────────────────────
 const QUARTER_THEMES: Record<string, string> = {
   Q1: 'The Awakening — recognition, discomfort, honest questioning',
   Q2: 'The Turning — decision, courage, the moment of change',
@@ -55,8 +56,8 @@ const QUARTER_THEMES: Record<string, string> = {
   Q4: 'The Integration — wisdom, legacy, what the whole journey means',
 }
 
-// ── Main component ─────────────────────────────────────────────────────
-export default function SundaySessionModal({
+// ── Main component ───────────────────────────────────────────────────
+export default function PlanningSessionModal({
   onClose,
   onComplete,
 }: {
@@ -64,13 +65,18 @@ export default function SundaySessionModal({
   onComplete: () => void
 }) {
   const forwardWeeks = getForwardPlanWeeks(new Date())
-  const [step, setStep]   = useState<Step>('proposing')
-  const [error, setError] = useState<string | null>(null)
+
+  const [step, setStep]               = useState<Step>('proposing')
+  const [error, setError]             = useState<string | null>(null)
+  // currentWeekIndex tracks which week we're selecting themes for (0 or 1)
+  const [currentWeekIndex, setCurrentWeekIndex] = useState(0)
+
   const [weeks, setWeeks] = useState<WeekState[]>(
     forwardWeeks.map(fw => ({
       meta: fw,
       weekId: null,
-      proposedThemes: [],
+      proposalRounds: [],
+      activeRound: 0,
       selectedTheme: null,
       customTheme: '',
       isCustom: false,
@@ -80,37 +86,44 @@ export default function SundaySessionModal({
     }))
   )
 
-  // ── Step 1: Propose themes for both weeks ──────────────────────────
-  const proposeThemes = useCallback(async () => {
+  // ── Propose themes for ONE specific week ──────────────────────────
+  const proposeThemesForWeek = useCallback(async (weekIndex: number) => {
     setStep('proposing')
     setError(null)
 
-    try {
-      const results = await Promise.all(
-        weeks.map(async w => {
-          const res = await fetch('/api/plan', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              action: 'propose_themes',
-              weekNumber: w.meta.weekNumber,
-              year: w.meta.year,
-              quarter: w.quarter,
-              quarterTheme: w.quarterTheme,
-            }),
-          })
-          if (!res.ok) {
-            const text = await res.text()
-            throw new Error(`Theme proposal failed (${res.status}): ${text || 'No error details — check Vercel function logs'}`)
-          }
-          return res.json()
-        })
-      )
+    const w = weeks[weekIndex]
 
-      setWeeks(prev => prev.map((w, i) => ({
-        ...w,
-        proposedThemes: results[i]?.themes ?? [],
-      })))
+    try {
+      const res = await fetch('/api/plan', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'propose_themes',
+          weekNumber: w.meta.weekNumber,
+          year: w.meta.year,
+          quarter: w.quarter,
+          quarterTheme: w.quarterTheme,
+        }),
+      })
+
+      if (!res.ok) {
+        const text = await res.text()
+        throw new Error(`Theme proposal failed (${res.status}): ${text || 'Check Vercel function logs'}`)
+      }
+
+      const json = await res.json()
+      const newThemes: ThemeOption[] = json?.themes ?? []
+
+      // Add this as a new round — preserving all previous rounds
+      setWeeks(prev => prev.map((pw, i) =>
+        i === weekIndex
+          ? {
+              ...pw,
+              proposalRounds: [...pw.proposalRounds, newThemes],
+              activeRound: pw.proposalRounds.length, // select the new round
+            }
+          : pw
+      ))
       setStep('themes')
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to propose themes')
@@ -118,10 +131,31 @@ export default function SundaySessionModal({
     }
   }, [weeks])
 
-  // Auto-propose themes when modal opens
-  useEffect(() => { proposeThemes() }, [])
+  // Propose themes for week 0 on open
+  useEffect(() => { proposeThemesForWeek(0) }, [])
 
-  // ── Step 2: Generate plans for confirmed themes ────────────────────
+  // ── Navigate between weeks in theme selection ─────────────────────
+  const goToNextWeek = () => {
+    if (currentWeekIndex < weeks.length - 1) {
+      const nextIndex = currentWeekIndex + 1
+      setCurrentWeekIndex(nextIndex)
+      // Propose themes for next week if not yet done
+      if (weeks[nextIndex].proposalRounds.length === 0) {
+        proposeThemesForWeek(nextIndex)
+      } else {
+        setStep('themes')
+      }
+    }
+  }
+
+  const goToPrevWeek = () => {
+    if (currentWeekIndex > 0) {
+      setCurrentWeekIndex(currentWeekIndex - 1)
+      setStep('themes')
+    }
+  }
+
+  // ── Generate plans for all confirmed weeks ────────────────────────
   const generatePlans = useCallback(async () => {
     setStep('confirming')
     setError(null)
@@ -135,7 +169,6 @@ export default function SundaySessionModal({
 
           if (!theme) return { weekId: null, plan: [] }
 
-          // Create or fetch the week record in Supabase
           const createRes = await fetch('/api/weeks', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -148,23 +181,18 @@ export default function SundaySessionModal({
           })
           if (!createRes.ok) {
             const text = await createRes.text()
-            throw new Error(`Failed to create week (${createRes.status}): ${text || 'Check Vercel function logs'}`)
+            throw new Error(`Failed to create week (${createRes.status}): ${text || 'Check Vercel logs'}`)
           }
           const { weekId } = await createRes.json()
 
-          // Generate the 6-post plan
           const planRes = await fetch('/api/plan', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              action: 'generate_plan',
-              weekId,
-              theme,
-            }),
+            body: JSON.stringify({ action: 'generate_plan', weekId, theme }),
           })
           if (!planRes.ok) {
             const text = await planRes.text()
-            throw new Error(`Failed to generate plan (${planRes.status}): ${text || 'Check Vercel function logs'}`)
+            throw new Error(`Failed to generate plan (${planRes.status}): ${text || 'Check Vercel logs'}`)
           }
           const { plan } = await planRes.json()
           return { weekId, plan: plan ?? [] }
@@ -183,114 +211,198 @@ export default function SundaySessionModal({
     }
   }, [weeks])
 
-  const allThemesSelected = weeks.every(w =>
+  const currentWeek    = weeks[currentWeekIndex]
+  const isLastWeek     = currentWeekIndex === weeks.length - 1
+  const allConfirmed   = weeks.every(w =>
     (w.isCustom && w.customTheme.trim().length > 0) || w.selectedTheme !== null
   )
+  const currentConfirmed =
+    (currentWeek?.isCustom && currentWeek?.customTheme.trim().length > 0) ||
+    currentWeek?.selectedTheme !== null
 
-  // ── Render ────────────────────────────────────────────────────────
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      {/* Backdrop */}
-      <div
-        className="absolute inset-0 bg-ink-950/80 backdrop-blur-sm"
-        onClick={onClose}
-      />
+      <div className="absolute inset-0 bg-ink-950/80 backdrop-blur-sm" onClick={onClose} />
 
-      {/* Modal */}
-      <div className="relative w-full max-w-3xl max-h-[90vh] flex flex-col bg-ink-900 border border-ink-700 rounded-2xl shadow-2xl overflow-hidden animate-in">
+      <div className="relative w-full max-w-2xl max-h-[90vh] flex flex-col bg-ink-900 border border-ink-700 rounded-2xl shadow-2xl overflow-hidden animate-in">
 
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-ink-800 shrink-0">
           <div>
-            <p className="section-label mb-0.5">Sunday Session</p>
+            <p className="section-label mb-0.5">Planning Session</p>
             <h2 className="font-display text-xl text-cream">
-              {step === 'proposing' || step === 'themes'
-                ? 'Choose your themes'
-                : step === 'confirming'
-                  ? 'Generating your plans...'
-                  : step === 'plans'
-                    ? 'Review your 2-week plan'
-                    : 'Session complete'}
+              {step === 'proposing'  ? 'Finding theme ideas...' :
+               step === 'themes'    ? `Choose theme — Week ${currentWeekIndex + 1} of ${weeks.length}` :
+               step === 'confirming' ? 'Building your plan...' :
+               step === 'plans'     ? 'Review your plan' :
+               'Plan confirmed'}
             </h2>
           </div>
 
-          {/* Step indicator */}
           <div className="flex items-center gap-3">
-            <div className="flex items-center gap-1.5 mr-2">
-              {(['themes', 'plans', 'done'] as const).map((s, i) => (
+            {/* Step dots */}
+            <div className="flex items-center gap-1.5">
+              {weeks.map((_, i) => (
                 <div
-                  key={s}
+                  key={i}
                   className={cn(
                     'h-1.5 rounded-full transition-all duration-300',
-                    (step === s || (step === 'proposing' && s === 'themes') || (step === 'confirming' && s === 'plans'))
-                      ? 'w-6 bg-gold-500'
-                      : step === 'done' || (step === 'plans' && i < 2)
-                        ? 'w-4 bg-gold-500/40'
-                        : 'w-4 bg-ink-700'
+                    step === 'themes' && currentWeekIndex === i ? 'w-6 bg-gold-500' :
+                    (weeks[i].selectedTheme || weeks[i].isCustom) ? 'w-4 bg-gold-500/50' :
+                    'w-4 bg-ink-700'
                   )}
                 />
               ))}
+              <div className={cn(
+                'h-1.5 rounded-full transition-all duration-300 ml-1',
+                step === 'plans' || step === 'done' ? 'w-6 bg-gold-500' : 'w-4 bg-ink-700'
+              )} />
             </div>
-            <button onClick={onClose} className="btn-ghost p-2">
-              <X size={16} />
-            </button>
+            <button onClick={onClose} className="btn-ghost p-2"><X size={16} /></button>
           </div>
         </div>
 
         {/* Body */}
         <div className="flex-1 overflow-y-auto">
 
-          {/* ── Proposing themes (loading) ───────────────────── */}
+          {/* Loading */}
           {step === 'proposing' && (
             <div className="flex flex-col items-center justify-center py-16 space-y-4">
               <div className="w-12 h-12 rounded-xl bg-gold-500/10 border border-gold-500/20 flex items-center justify-center">
                 <Loader2 size={20} className="text-gold-500 animate-spin" />
               </div>
-              <p className="text-cream text-sm">Proposing themes for your next 2 weeks...</p>
+              <p className="text-cream text-sm">
+                Finding theme ideas for Week {currentWeekIndex + 1}...
+              </p>
               <p className="text-xs text-ink-500">Reading your narrative arc and recent posts</p>
             </div>
           )}
 
-          {/* ── Theme selection ──────────────────────────────── */}
-          {step === 'themes' && (
-            <div className="p-6 space-y-8">
+          {/* Theme selection — one week at a time */}
+          {step === 'themes' && currentWeek && (
+            <div className="p-6 space-y-5">
               {error && (
-                <div className="card px-4 py-3 border-red-800/30 bg-red-900/10">
+                <div className="card px-4 py-3 border-red-800/30 bg-red-900/10 flex items-start gap-2">
+                  <AlertCircle size={14} className="text-red-400 shrink-0 mt-0.5" />
                   <p className="text-sm text-red-400">{error}</p>
-                  <button onClick={proposeThemes} className="btn-secondary text-xs mt-2">
-                    <RotateCcw size={12} /> Retry
-                  </button>
                 </div>
               )}
 
-              {weeks.map((w, wi) => (
-                <WeekThemeSelector
-                  key={wi}
-                  week={w}
-                  weekIndex={wi}
-                  onSelectTheme={theme => setWeeks(prev => prev.map((pw, i) =>
-                    i === wi ? { ...pw, selectedTheme: theme, isCustom: false } : pw
+              {/* Week context */}
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="section-label">
+                    Week {currentWeek.meta.weekNumber} · {formatDay(new Date(currentWeek.meta.start))}
+                  </p>
+                  <p className="text-xs text-ink-400 mt-0.5">
+                    {currentWeek.quarter} · {currentWeek.quarterTheme.split(' — ')[0]}
+                  </p>
+                </div>
+                {currentConfirmed && (
+                  <span className="badge badge-approved">
+                    <CheckCircle2 size={10} /> Theme selected
+                  </span>
+                )}
+              </div>
+
+              {/* Round tabs — lets user compare proposal rounds */}
+              {currentWeek.proposalRounds.length > 1 && (
+                <div className="flex items-center gap-1">
+                  <span className="text-xs text-ink-500 mr-1">Proposals:</span>
+                  {currentWeek.proposalRounds.map((_, ri) => (
+                    <button
+                      key={ri}
+                      onClick={() => setWeeks(prev => prev.map((pw, i) =>
+                        i === currentWeekIndex ? { ...pw, activeRound: ri } : pw
+                      ))}
+                      className={cn(
+                        'px-2.5 py-1 rounded-md text-xs font-medium transition-colors',
+                        currentWeek.activeRound === ri
+                          ? 'bg-ink-700 text-cream'
+                          : 'text-ink-500 hover:text-cream'
+                      )}
+                    >
+                      Round {ri + 1}
+                    </button>
                   ))}
-                  onCustomTheme={val => setWeeks(prev => prev.map((pw, i) =>
-                    i === wi ? { ...pw, customTheme: val, isCustom: true, selectedTheme: null } : pw
+                </div>
+              )}
+
+              {/* Theme cards for active round */}
+              {(currentWeek.proposalRounds[currentWeek.activeRound] ?? []).length > 0 ? (
+                <div className="space-y-2">
+                  {(currentWeek.proposalRounds[currentWeek.activeRound] ?? []).map((theme, ti) => (
+                    <button
+                      key={ti}
+                      onClick={() => setWeeks(prev => prev.map((pw, i) =>
+                        i === currentWeekIndex
+                          ? { ...pw, selectedTheme: theme, isCustom: false }
+                          : pw
+                      ))}
+                      className={cn(
+                        'w-full text-left card px-4 py-3 transition-all border',
+                        currentWeek.selectedTheme?.theme === theme.theme && !currentWeek.isCustom
+                          ? 'border-gold-500 bg-gold-500/5'
+                          : 'hover:border-ink-500'
+                      )}
+                    >
+                      <div className="flex items-start gap-3">
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium text-cream">{theme.theme}</p>
+                          <p className="text-xs text-ink-400 mt-0.5">{theme.rationale}</p>
+                          <div className="flex items-center gap-3 mt-1.5">
+                            <span className="text-xs text-ink-500">
+                              {PILLAR_LABELS[theme.primary_pillar] ?? theme.primary_pillar}
+                            </span>
+                            <span className="text-ink-700">·</span>
+                            <span className="text-xs text-ink-500">{theme.primary_audience}</span>
+                          </div>
+                        </div>
+                        <div className={cn(
+                          'w-4 h-4 rounded-full border shrink-0 mt-0.5 flex items-center justify-center',
+                          currentWeek.selectedTheme?.theme === theme.theme && !currentWeek.isCustom
+                            ? 'border-gold-500 bg-gold-500'
+                            : 'border-ink-600'
+                        )}>
+                          {currentWeek.selectedTheme?.theme === theme.theme && !currentWeek.isCustom && (
+                            <div className="w-1.5 h-1.5 rounded-full bg-ink-900" />
+                          )}
+                        </div>
+                      </div>
+                    </button>
                   ))}
-                />
-              ))}
+                </div>
+              ) : (
+                <div className="card py-6 text-center">
+                  <p className="text-sm text-ink-500">No proposals yet. Use the custom theme option below.</p>
+                </div>
+              )}
+
+              {/* Custom theme input */}
+              <CustomThemeInput
+                value={currentWeek.customTheme}
+                isCustom={currentWeek.isCustom}
+                onChange={val => setWeeks(prev => prev.map((pw, i) =>
+                  i === currentWeekIndex
+                    ? { ...pw, customTheme: val, isCustom: val.trim().length > 0, selectedTheme: null }
+                    : pw
+                ))}
+              />
             </div>
           )}
 
-          {/* ── Generating plans (loading) ───────────────────── */}
+          {/* Generating plans */}
           {step === 'confirming' && (
             <div className="flex flex-col items-center justify-center py-16 space-y-4">
               <div className="w-12 h-12 rounded-xl bg-gold-500/10 border border-gold-500/20 flex items-center justify-center">
                 <Loader2 size={20} className="text-gold-500 animate-spin" />
               </div>
-              <p className="text-cream text-sm">Generating your 2-week plan...</p>
-              <p className="text-xs text-ink-500">Creating 6 posts per week with narrative continuity</p>
+              <p className="text-cream text-sm">Building your {weeks.length}-week plan...</p>
+              <p className="text-xs text-ink-500">Creating posts with narrative continuity</p>
             </div>
           )}
 
-          {/* ── Plan review ──────────────────────────────────── */}
+          {/* Plan review */}
           {step === 'plans' && (
             <div className="p-6 space-y-8">
               {error && (
@@ -298,28 +410,28 @@ export default function SundaySessionModal({
                   <p className="text-sm text-red-400">{error}</p>
                 </div>
               )}
-
               {weeks.map((w, wi) => (
                 <WeekPlanReview key={wi} week={w} weekIndex={wi} />
               ))}
             </div>
           )}
 
-          {/* ── Done ────────────────────────────────────────── */}
+          {/* Done */}
           {step === 'done' && (
             <div className="flex flex-col items-center justify-center py-16 space-y-4 text-center">
               <div className="w-12 h-12 rounded-xl bg-emerald-900/30 border border-emerald-700/30 flex items-center justify-center">
                 <CheckCircle2 size={20} className="text-emerald-400" />
               </div>
               <div>
-                <p className="text-cream font-medium">Your 2-week plan is ready</p>
+                <p className="text-cream font-medium">Your plan is confirmed</p>
                 <p className="text-sm text-ink-400 mt-1">
-                  {weeks.reduce((acc, w) => acc + w.plan.filter(p => p.day !== 'saturday').length, 0)} posts planned across 2 weeks
+                  {weeks.reduce((a, w) => a + w.plan.filter(p => p.day !== 'saturday').length, 0)} posts
+                  planned across {weeks.length} weeks
                 </p>
               </div>
               <p className="text-xs text-ink-500 max-w-xs">
                 Go to each post and click "Generate" to create the draft.
-                Saturday posts are generated on the day.
+                Saturday posts are generated on the day with real market data.
               </p>
             </div>
           )}
@@ -327,57 +439,72 @@ export default function SundaySessionModal({
 
         {/* Footer */}
         <div className="flex items-center justify-between px-6 py-4 border-t border-ink-800 shrink-0">
-          <button
-            onClick={onClose}
-            className="btn-ghost text-sm"
-          >
+          <button onClick={onClose} className="btn-ghost text-sm">
             {step === 'done' ? 'Close' : 'Cancel'}
           </button>
 
           <div className="flex items-center gap-3">
+
+            {/* Theme step — navigation */}
             {step === 'themes' && (
               <>
                 <button
-                  onClick={proposeThemes}
+                  onClick={() => proposeThemesForWeek(currentWeekIndex)}
                   className="btn-secondary text-sm"
                 >
                   <RotateCcw size={14} />
                   New proposals
                 </button>
-                <button
-                  onClick={generatePlans}
-                  disabled={!allThemesSelected}
-                  className="btn-primary"
-                >
-                  Generate plans
-                  <ChevronRight size={15} />
-                </button>
+
+                {currentWeekIndex > 0 && (
+                  <button onClick={goToPrevWeek} className="btn-secondary text-sm">
+                    <ChevronLeft size={14} /> Week {currentWeekIndex}
+                  </button>
+                )}
+
+                {!isLastWeek ? (
+                  <button
+                    onClick={goToNextWeek}
+                    disabled={!currentConfirmed}
+                    className="btn-primary"
+                  >
+                    Week {currentWeekIndex + 2}
+                    <ChevronRight size={15} />
+                  </button>
+                ) : (
+                  <button
+                    onClick={generatePlans}
+                    disabled={!allConfirmed}
+                    className="btn-primary"
+                  >
+                    Generate plans
+                    <ChevronRight size={15} />
+                  </button>
+                )}
               </>
             )}
 
+            {/* Plans step */}
             {step === 'plans' && (
               <>
                 <button
-                  onClick={() => setStep('themes')}
+                  onClick={() => { setCurrentWeekIndex(0); setStep('themes') }}
                   className="btn-secondary text-sm"
                 >
-                  <ChevronLeft size={14} />
-                  Back to themes
+                  <ChevronLeft size={14} /> Back to themes
                 </button>
                 <button
                   onClick={() => { setStep('done'); setTimeout(onComplete, 1500) }}
                   className="btn-primary"
                 >
-                  <CheckCircle2 size={15} />
-                  Confirm plan
+                  <CheckCircle2 size={15} /> Confirm plan
                 </button>
               </>
             )}
 
             {step === 'done' && (
               <button onClick={onComplete} className="btn-primary">
-                View my plan
-                <ChevronRight size={15} />
+                View my plan <ChevronRight size={15} />
               </button>
             )}
           </div>
@@ -387,115 +514,48 @@ export default function SundaySessionModal({
   )
 }
 
-// ── Week Theme Selector ────────────────────────────────────────────────
-function WeekThemeSelector({
-  week, weekIndex, onSelectTheme, onCustomTheme,
+// ── Custom Theme Input ─────────────────────────────────────────────────
+function CustomThemeInput({
+  value, isCustom, onChange,
 }: {
-  week: WeekState
-  weekIndex: number
-  onSelectTheme: (theme: ThemeOption) => void
-  onCustomTheme: (val: string) => void
+  value: string
+  isCustom: boolean
+  onChange: (val: string) => void
 }) {
-  const [showCustom, setShowCustom] = useState(false)
-  const weekStartDate = new Date(week.meta.start)
+  const [expanded, setExpanded] = useState(isCustom)
 
   return (
-    <div className="space-y-3">
-      <div className="flex items-center justify-between">
-        <div>
-          <p className="section-label">
-            Week {week.meta.weekNumber} · {formatDay(weekStartDate)}
-          </p>
-          <p className="text-xs text-ink-400 mt-0.5">
-            {week.quarter} · {week.quarterTheme.split(' — ')[0]}
-          </p>
-        </div>
-        {(week.selectedTheme || (week.isCustom && week.customTheme)) && (
-          <span className="badge badge-approved">
-            <CheckCircle2 size={10} /> Theme selected
-          </span>
-        )}
-      </div>
-
-      {/* Proposed themes */}
-      {week.proposedThemes.length > 0 ? (
-        <div className="space-y-2">
-          {week.proposedThemes.map((theme, ti) => (
-            <button
-              key={ti}
-              onClick={() => { onSelectTheme(theme); setShowCustom(false) }}
-              className={cn(
-                'w-full text-left card px-4 py-3 transition-all border',
-                week.selectedTheme?.theme === theme.theme && !week.isCustom
-                  ? 'border-gold-500 bg-gold-500/5'
-                  : 'hover:border-ink-500'
-              )}
-            >
-              <div className="flex items-start justify-between gap-3">
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-cream">{theme.theme}</p>
-                  <p className="text-xs text-ink-400 mt-0.5">{theme.rationale}</p>
-                  <div className="flex items-center gap-3 mt-1.5">
-                    <span className="text-xs text-ink-500">
-                      {PILLAR_LABELS[theme.primary_pillar] ?? theme.primary_pillar}
-                    </span>
-                    <span className="text-ink-700">·</span>
-                    <span className="text-xs text-ink-500">{theme.primary_audience}</span>
-                  </div>
-                </div>
-                <div className={cn(
-                  'w-4 h-4 rounded-full border shrink-0 mt-0.5 flex items-center justify-center',
-                  week.selectedTheme?.theme === theme.theme && !week.isCustom
-                    ? 'border-gold-500 bg-gold-500'
-                    : 'border-ink-600'
-                )}>
-                  {week.selectedTheme?.theme === theme.theme && !week.isCustom && (
-                    <div className="w-1.5 h-1.5 rounded-full bg-ink-900" />
-                  )}
-                </div>
-              </div>
-            </button>
-          ))}
-        </div>
+    <div>
+      {!expanded ? (
+        <button
+          onClick={() => setExpanded(true)}
+          className="btn-ghost text-xs w-full justify-center border border-ink-700 border-dashed"
+        >
+          <Pencil size={12} /> Write my own theme instead
+        </button>
       ) : (
-        <div className="card py-6 text-center">
-          <p className="text-sm text-ink-500">No theme proposals generated.</p>
-          <p className="text-xs text-ink-600 mt-1">Use the custom theme option below.</p>
-        </div>
-      )}
-
-      {/* Custom theme */}
-      <div className="space-y-2">
-        {!showCustom ? (
-          <button
-            onClick={() => setShowCustom(true)}
-            className="btn-ghost text-xs w-full justify-center border border-ink-700 border-dashed"
-          >
-            <Pencil size={12} />
-            Write my own theme instead
-          </button>
-        ) : (
-          <div className="space-y-2">
-            <input
-              type="text"
-              value={week.customTheme}
-              onChange={e => onCustomTheme(e.target.value)}
-              placeholder="e.g. The Weight of Unfinished Conversations"
-              className="input text-sm"
-              autoFocus
-            />
-            <p className="text-xs text-ink-500">
-              Be specific — the more evocative the theme, the better the posts.
-            </p>
+        <div className="space-y-2">
+          <input
+            type="text"
+            value={value}
+            onChange={e => onChange(e.target.value)}
+            placeholder="e.g. The Weight of Unfinished Conversations"
+            className="input text-sm"
+            autoFocus
+          />
+          <p className="text-xs text-ink-500">
+            Be specific — the more evocative the theme, the better the posts.
+          </p>
+          {!isCustom && (
             <button
-              onClick={() => { setShowCustom(false); onCustomTheme('') }}
+              onClick={() => { setExpanded(false); onChange('') }}
               className="text-xs text-ink-500 hover:text-cream-muted transition-colors"
             >
               Back to proposals
             </button>
-          </div>
-        )}
-      </div>
+          )}
+        </div>
+      )}
     </div>
   )
 }
@@ -503,12 +563,13 @@ function WeekThemeSelector({
 // ── Week Plan Review ───────────────────────────────────────────────────
 function WeekPlanReview({ week, weekIndex }: { week: WeekState; weekIndex: number }) {
   const theme = week.isCustom ? week.customTheme : week.selectedTheme?.theme
-  const weekStartDate = new Date(week.meta.start)
 
   return (
     <div className="space-y-3">
       <div>
-        <p className="section-label">Week {week.meta.weekNumber} · {formatDay(weekStartDate)}</p>
+        <p className="section-label">
+          Week {week.meta.weekNumber} · {formatDay(new Date(week.meta.start))}
+        </p>
         <h3 className="font-display text-lg text-cream mt-0.5">{theme}</h3>
       </div>
 
@@ -518,9 +579,11 @@ function WeekPlanReview({ week, weekIndex }: { week: WeekState; weekIndex: numbe
         </div>
       ) : (
         <div className="space-y-2">
-          {week.plan
+          {[...week.plan]
             .sort((a, b) => {
-              const order: Record<string, number> = { monday:0, tuesday:1, wednesday:2, thursday:3, friday:4, saturday:5 }
+              const order: Record<string, number> = {
+                monday:0, tuesday:1, wednesday:2, thursday:3, friday:4, saturday:5
+              }
               return (order[a.day] ?? 0) - (order[b.day] ?? 0)
             })
             .map((slot, si) => (
@@ -538,8 +601,7 @@ function WeekPlanReview({ week, weekIndex }: { week: WeekState; weekIndex: numbe
                   </p>
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className={cn(
-                    'text-xs font-medium mb-0.5',
+                  <p className={cn('text-xs font-medium mb-0.5',
                     slot.pillar === 'vedic_leadership'       && 'pillar-vedic',
                     slot.pillar === 'banker_coach'            && 'pillar-banker',
                     slot.pillar === 'coaching_transformation' && 'pillar-coaching',
@@ -553,9 +615,6 @@ function WeekPlanReview({ week, weekIndex }: { week: WeekState; weekIndex: numbe
                     {slot.target_audience} · {slot.target_word_count}w · {slot.narrative_position?.replace(/_/g, ' ')}
                   </p>
                 </div>
-                {slot.day === 'saturday' && (
-                  <span className="text-xs text-ink-500 shrink-0">Saturday AM</span>
-                )}
               </div>
             ))}
         </div>
