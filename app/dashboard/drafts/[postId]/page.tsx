@@ -3,12 +3,15 @@
 import { useState, useCallback, useEffect, useRef } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import {
-  ArrowLeft, Zap, Eye, EyeOff, CheckCheck,
-  Loader2, AlertTriangle,
+  ArrowLeft, Zap, GitCompare, CheckCheck,
+  Loader2, AlertTriangle, ChevronDown, ChevronUp,
+  Wand2, X, Hash,
 } from 'lucide-react'
 import Link from 'next/link'
 import { cn, countWords, PILLAR_LABELS, FORMAT_LABELS, getQuarter } from '@/lib/utils/helpers'
+import DiffView from '@/components/DiffView'
 
+// ── Types ─────────────────────────────────────────────────────────────
 type PostData = {
   id: string
   day: string
@@ -30,14 +33,19 @@ type PostData = {
   }
 }
 
-// Strip AI metadata lines from displayed content
-// WORD_COUNT:, CORE_INSIGHT: etc. are saved to story_log — never shown to user
+// Strip AI metadata from displayed content
 function stripMetadata(raw: string): string {
-  const metaKeys = ['WORD_COUNT:', 'CORE_INSIGHT:', 'CALLBACK_USED:', 'THREAD_PLANTED:', 'REFERENCES:']
+  const metaKeys = ['WORD_COUNT:', 'CORE_INSIGHT:', 'CALLBACK_USED:', 'THREAD_PLANTED:', 'REFERENCES:', 'HASHTAGS:']
   const lines = raw.split('\n')
   const firstMetaLine = lines.findIndex(l => metaKeys.some(k => l.trim().startsWith(k)))
-  const content = firstMetaLine > -1 ? lines.slice(0, firstMetaLine) : lines
-  return content.join('\n').trim()
+  return (firstMetaLine > -1 ? lines.slice(0, firstMetaLine) : lines).join('\n').trim()
+}
+
+// Extract hashtags from raw AI output
+function extractHashtags(raw: string): string[] {
+  const line = raw.split('\n').find(l => l.trim().startsWith('HASHTAGS:'))
+  if (!line) return []
+  return line.replace('HASHTAGS:', '').trim().split(/\s+/).filter(h => h.startsWith('#'))
 }
 
 function getWordCountRange(format: string): { min: number; max: number } {
@@ -50,6 +58,7 @@ function getWordCountRange(format: string): { min: number; max: number } {
   }
 }
 
+// ── Page ──────────────────────────────────────────────────────────────
 export default function DraftEditorPage() {
   const params = useParams()
   const router = useRouter()
@@ -60,9 +69,13 @@ export default function DraftEditorPage() {
   const [loadError, setLoadError]             = useState<string | null>(null)
   const [content, setContent]                 = useState('')
   const [originalContent, setOriginalContent] = useState('')
+  const [hashtags, setHashtags]               = useState<string[]>([])
   const [wordCount, setWordCount]             = useState(0)
-  const [showOriginal, setShowOriginal]       = useState(false)
+  const [showDiff, setShowDiff]               = useState(false)
+  const [showContext, setShowContext]          = useState(false)
+  const [showHookPreview, setShowHookPreview] = useState(false)
   const [isGenerating, setIsGenerating]       = useState(false)
+  const [isFixingHook, setIsFixingHook]       = useState(false)
   const [generateError, setGenerateError]     = useState<string | null>(null)
   const [isApproving, setIsApproving]         = useState(false)
   const [approved, setApproved]               = useState(false)
@@ -71,7 +84,7 @@ export default function DraftEditorPage() {
   const textareaRef  = useRef<HTMLTextAreaElement>(null)
   const saveTimerRef = useRef<ReturnType<typeof setTimeout>>()
 
-  // Load real post data from Supabase on mount
+  // Load real post data on mount
   useEffect(() => {
     async function load() {
       setLoadingPost(true)
@@ -84,6 +97,7 @@ export default function DraftEditorPage() {
         setContent(clean)
         setOriginalContent(stripMetadata(json.originalContent ?? ''))
         setWordCount(countWords(clean))
+        setHashtags(json.hashtags ?? [])
         setApproved(json.post?.status === 'approved')
       } catch (err) {
         setLoadError(err instanceof Error ? err.message : 'Failed to load post')
@@ -96,6 +110,7 @@ export default function DraftEditorPage() {
 
   useEffect(() => { setWordCount(countWords(content)) }, [content])
 
+  // Auto-save
   const handleContentChange = useCallback((value: string) => {
     setContent(value)
     setHasUnsavedChanges(true)
@@ -108,15 +123,17 @@ export default function DraftEditorPage() {
           body: JSON.stringify({ postId, content: value }),
         })
         setHasUnsavedChanges(false)
-      } catch { /* silent fail */ }
+      } catch { /* silent */ }
     }, 800)
   }, [postId])
 
+  // Generate draft
   const handleGenerate = useCallback(async () => {
     if (!post) return
     setIsGenerating(true)
     setGenerateError(null)
     setContent('')
+    setHashtags([])
 
     const quarter = post.weeks?.quarter ?? getQuarter(new Date())
 
@@ -162,8 +179,10 @@ export default function DraftEditorPage() {
       }
 
       const clean = stripMetadata(accumulated)
+      const tags  = extractHashtags(accumulated)
       setContent(clean)
       setOriginalContent(clean)
+      setHashtags(tags)
 
     } catch (err) {
       setGenerateError(err instanceof Error ? err.message : 'Generation failed')
@@ -172,6 +191,27 @@ export default function DraftEditorPage() {
     }
   }, [post, postId])
 
+  // Fix hook — rewrite just the opening paragraph to fit 210 chars
+  const handleFixHook = useCallback(async () => {
+    if (!content || !post) return
+    setIsFixingHook(true)
+    try {
+      const res = await fetch('/api/fix-hook', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ postId, content, pillar: post.pillar }),
+      })
+      if (!res.ok) throw new Error('Hook fix failed')
+      const { fixedContent } = await res.json()
+      handleContentChange(fixedContent)
+    } catch (err) {
+      setGenerateError(err instanceof Error ? err.message : 'Hook fix failed')
+    } finally {
+      setIsFixingHook(false)
+    }
+  }, [content, post, postId, handleContentChange])
+
+  // Approve
   const handleApprove = useCallback(async () => {
     if (!content.trim()) return
     setIsApproving(true)
@@ -197,15 +237,17 @@ export default function DraftEditorPage() {
     wordCount < min  ? 'short' :
     wordCount > max  ? 'over'  : 'ok'
 
-  const hookComplete = content.length > 0 && content.slice(0, 210).length < 210
+  const firstLine      = content.split('\n')[0] ?? ''
+  const hookCharCount  = firstLine.length
+  const hookOver       = hookCharCount > 210
+  const hasChanges     = content !== originalContent && originalContent.length > 0
 
+  // ── Loading / error states ────────────────────────────────────────
   if (loadingPost) {
     return (
       <div className="flex items-center justify-center h-screen">
-        <div className="flex items-center gap-3 text-ink-400">
-          <Loader2 size={18} className="animate-spin" />
-          <span className="text-sm">Loading post...</span>
-        </div>
+        <Loader2 size={18} className="animate-spin text-ink-400" />
+        <span className="text-sm text-ink-400 ml-3">Loading post...</span>
       </div>
     )
   }
@@ -215,7 +257,7 @@ export default function DraftEditorPage() {
       <div className="flex flex-col items-center justify-center h-screen gap-4">
         <p className="text-sm text-red-400">{loadError ?? 'Post not found'}</p>
         <Link href="/dashboard" className="btn-secondary text-sm">
-          <ArrowLeft size={14} /> Back to dashboard
+          <ArrowLeft size={14} /> Back
         </Link>
       </div>
     )
@@ -226,16 +268,15 @@ export default function DraftEditorPage() {
   return (
     <div className="flex flex-col h-screen overflow-hidden">
 
-      {/* Top bar */}
-      <header className="flex items-center justify-between px-6 py-3 border-b border-ink-800 bg-ink-900 shrink-0">
-        <div className="flex items-center gap-4">
-          <Link href="/dashboard" className="btn-ghost px-2 py-1.5">
+      {/* ── Top bar ─────────────────────────────────────────────── */}
+      <header className="flex items-center justify-between px-5 py-3 border-b border-ink-800 bg-ink-900 shrink-0">
+        <div className="flex items-center gap-3 min-w-0">
+          <Link href="/dashboard" className="btn-ghost px-2 py-1.5 shrink-0">
             <ArrowLeft size={15} />
           </Link>
-          <div>
+          <div className="min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
-              <span className={cn(
-                'text-xs font-medium',
+              <span className={cn('text-xs font-medium',
                 post.pillar === 'vedic_leadership'       && 'pillar-vedic',
                 post.pillar === 'banker_coach'            && 'pillar-banker',
                 post.pillar === 'coaching_transformation' && 'pillar-coaching',
@@ -251,44 +292,48 @@ export default function DraftEditorPage() {
               <span className="text-ink-600">·</span>
               <span className="text-xs text-ink-400">{post.target_audience}</span>
             </div>
-            {post.hook_idea && (
-              <p className="text-sm text-cream-muted truncate max-w-lg mt-0.5">{post.hook_idea}</p>
-            )}
           </div>
         </div>
 
-        <div className="flex items-center gap-3">
-          <div className="text-right hidden sm:block">
-            <p className={cn(
-              'text-sm font-mono font-medium',
+        <div className="flex items-center gap-2 shrink-0 ml-4">
+          {/* Word count */}
+          <div className="text-right hidden md:block mr-1">
+            <p className={cn('text-sm font-mono font-medium',
               wcStatus === 'ok'    && 'word-count-ok',
               wcStatus === 'short' && 'word-count-warning',
               wcStatus === 'over'  && 'word-count-error',
               wcStatus === 'empty' && 'text-ink-500',
             )}>
-              {wordCount} words
+              {wordCount}w
             </p>
-            <p className="text-xs text-ink-500">target {min}–{max}</p>
+            <p className="text-xs text-ink-500">{min}–{max}</p>
           </div>
 
-          {originalContent && originalContent !== content && (
-            <button onClick={() => setShowOriginal(v => !v)} className="btn-ghost">
-              {showOriginal ? <EyeOff size={15} /> : <Eye size={15} />}
-              <span className="text-xs hidden sm:inline">
-                {showOriginal ? 'Hide original' : 'Compare'}
-              </span>
+          {/* Compare toggle */}
+          {hasChanges && (
+            <button
+              onClick={() => setShowDiff(v => !v)}
+              className={cn('btn-ghost', showDiff && 'bg-ink-700 text-cream')}
+              title="Compare with original"
+            >
+              <GitCompare size={15} />
+              <span className="text-xs hidden sm:inline">Compare</span>
             </button>
           )}
 
+          {/* Generate */}
           <button
             onClick={handleGenerate}
             disabled={isGenerating || approved}
             className="btn-secondary"
           >
             {isGenerating ? <Loader2 size={15} className="animate-spin" /> : <Zap size={15} />}
-            {isGenerating ? 'Generating...' : content ? 'Regenerate' : 'Generate draft'}
+            <span className="hidden sm:inline">
+              {isGenerating ? 'Generating...' : content ? 'Regenerate' : 'Generate draft'}
+            </span>
           </button>
 
+          {/* Approve */}
           <button
             onClick={handleApprove}
             disabled={!content || isApproving || approved || wcStatus === 'empty'}
@@ -297,59 +342,158 @@ export default function DraftEditorPage() {
             {approved
               ? <><CheckCheck size={15} /> Approved</>
               : isApproving
-                ? <><Loader2 size={15} className="animate-spin" /> Approving...</>
+                ? <><Loader2 size={15} className="animate-spin" /></>
                 : <><CheckCheck size={15} /> Approve</>
             }
           </button>
         </div>
       </header>
 
-      {/* Context bar */}
-      <div className="px-6 py-2 border-b border-ink-800 bg-ink-950/50 shrink-0 flex items-center gap-4">
-        <p className="text-xs text-ink-400 truncate flex-1">
-          <span className="text-gold-500 font-medium">Theme:</span>{' '}
-          {week?.theme ?? 'No theme set'}
-          {week?.quarter && (
-            <>{' · '}<span className="text-gold-500 font-medium">Arc:</span>{' '}{week.quarter} · {post.narrative_position?.replace(/_/g, ' ')}</>
-          )}
-        </p>
-        {week?.open_thread && (
-          <p className="text-xs text-ink-500 truncate max-w-sm hidden lg:block">
-            <span className="text-amber-400">Open thread:</span> "{week.open_thread}"
-          </p>
+      {/* ── Context bar — expandable ─────────────────────────────── */}
+      <div className="border-b border-ink-800 bg-ink-950/50 shrink-0">
+        <button
+          onClick={() => setShowContext(v => !v)}
+          className="w-full flex items-start justify-between px-5 py-2 text-left hover:bg-ink-800/30 transition-colors"
+        >
+          <div className="flex-1 min-w-0 pr-4">
+            <p className="text-xs text-ink-400">
+              <span className="text-gold-500 font-medium">Theme:</span>{' '}
+              {week?.theme ?? 'No theme set'}
+              {week?.quarter && (
+                <span className="text-ink-500">
+                  {' · '}{week.quarter} · {post.narrative_position?.replace(/_/g, ' ')}
+                </span>
+              )}
+            </p>
+            {!showContext && post.hook_idea && (
+              <p className="text-xs text-ink-500 mt-0.5">
+                <span className="text-gold-500/70 font-medium">Hook:</span>{' '}
+                {post.hook_idea}
+              </p>
+            )}
+          </div>
+          <span className="text-ink-600 mt-0.5 shrink-0">
+            {showContext ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
+          </span>
+        </button>
+
+        {showContext && (
+          <div className="px-5 pb-3 space-y-2 border-t border-ink-800/50">
+            {post.hook_idea && (
+              <div>
+                <p className="text-xs text-gold-500/70 font-medium mb-0.5">Hook idea</p>
+                <p className="text-xs text-cream-muted">{post.hook_idea}</p>
+              </div>
+            )}
+            {week?.open_thread && (
+              <div>
+                <p className="text-xs text-amber-400 font-medium mb-0.5">Open thread to honour</p>
+                <p className="text-xs text-cream-muted">"{week.open_thread}"</p>
+              </div>
+            )}
+            <div className="flex items-center gap-4">
+              <div>
+                <p className="text-xs text-ink-500 font-medium">Audience</p>
+                <p className="text-xs text-cream-muted">{post.target_audience}</p>
+              </div>
+              <div>
+                <p className="text-xs text-ink-500 font-medium">Target length</p>
+                <p className="text-xs text-cream-muted">{post.target_word_count} words</p>
+              </div>
+              <div>
+                <p className="text-xs text-ink-500 font-medium">Position</p>
+                <p className="text-xs text-cream-muted">{post.narrative_position?.replace(/_/g, ' ')}</p>
+              </div>
+            </div>
+          </div>
         )}
       </div>
 
-      {/* Hook check */}
-      {content && (
-        <div className={cn(
-          'px-6 py-2 text-xs border-b shrink-0 flex items-center gap-2',
-          hookComplete
-            ? 'bg-emerald-900/20 border-emerald-800/30 text-emerald-400'
-            : 'bg-amber-900/20 border-amber-800/30 text-amber-400'
-        )}>
-          {hookComplete
-            ? <><CheckCheck size={12} /> Hook fits within 210 chars</>
-            : <><AlertTriangle size={12} /> Hook extends past 210 chars — LinkedIn will truncate</>
-          }
+      {/* ── Hook warning — actionable ────────────────────────────── */}
+      {content && hookOver && (
+        <div className="border-b border-amber-800/30 bg-amber-900/10 shrink-0">
+          <div className="flex items-center justify-between px-5 py-2 gap-3">
+            <div className="flex items-center gap-2">
+              <AlertTriangle size={13} className="text-amber-400 shrink-0" />
+              <p className="text-xs text-amber-300">
+                Opening line is <span className="font-medium">{hookCharCount} characters</span> —
+                LinkedIn shows only the first 210 before "...more".
+                The hook needs to be shorter.
+              </p>
+            </div>
+            <div className="flex items-center gap-2 shrink-0">
+              <button
+                onClick={() => setShowHookPreview(v => !v)}
+                className="text-xs text-amber-400 hover:text-amber-300 transition-colors underline underline-offset-2"
+              >
+                {showHookPreview ? 'Hide preview' : 'Show 210 chars'}
+              </button>
+              <button
+                onClick={handleFixHook}
+                disabled={isFixingHook}
+                className="btn-secondary text-xs px-2.5 py-1.5"
+              >
+                {isFixingHook
+                  ? <Loader2 size={12} className="animate-spin" />
+                  : <Wand2 size={12} />
+                }
+                Fix hook
+              </button>
+            </div>
+          </div>
+
+          {showHookPreview && (
+            <div className="px-5 pb-3 space-y-1">
+              <p className="text-xs text-ink-500">What LinkedIn shows:</p>
+              <div className="bg-ink-800 rounded-lg p-3 text-sm text-cream-muted">
+                <span className="text-cream">{firstLine.slice(0, 210)}</span>
+                <span className="text-ink-500">...more</span>
+              </div>
+              <div className="bg-ink-800 rounded-lg p-3 text-sm text-amber-400/70 border border-dashed border-amber-700/30">
+                <span className="line-through opacity-60">{firstLine.slice(210)}</span>
+                <span className="text-amber-400/50 ml-1 not-italic text-xs">(hidden by LinkedIn)</span>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
-      {/* Editor */}
-      <div className="flex-1 overflow-hidden flex">
-        <div className={cn(
-          'flex flex-col overflow-hidden transition-all duration-300',
-          showOriginal && originalContent ? 'w-1/2' : 'w-full'
-        )}>
+      {/* Hook OK banner */}
+      {content && !hookOver && (
+        <div className="px-5 py-1.5 border-b border-emerald-800/20 bg-emerald-900/10 shrink-0 flex items-center gap-2">
+          <CheckCheck size={11} className="text-emerald-400" />
+          <p className="text-xs text-emerald-400">
+            Hook is {hookCharCount} chars — fits the 210 char LinkedIn preview
+          </p>
+        </div>
+      )}
+
+      {/* ── Error ───────────────────────────────────────────────── */}
+      {generateError && (
+        <div className="px-5 py-2 border-b border-red-800/30 bg-red-900/10 shrink-0 flex items-center justify-between">
+          <p className="text-xs text-red-400">{generateError}</p>
+          <button onClick={() => setGenerateError(null)} className="text-ink-500 hover:text-cream ml-3">
+            <X size={13} />
+          </button>
+        </div>
+      )}
+
+      {/* ── Main area: editor or diff ────────────────────────────── */}
+      <div className="flex-1 overflow-hidden flex flex-col">
+
+        {showDiff ? (
+          /* Diff view */
+          <DiffView
+            original={originalContent}
+            edited={content}
+            className="flex-1 overflow-hidden"
+          />
+        ) : (
+          /* Editor */
           <div className="flex-1 overflow-y-auto px-8 py-6">
-            {generateError && (
-              <div className="mb-4 px-4 py-3 rounded-lg bg-red-900/20 border border-red-800/30 text-sm text-red-400">
-                {generateError}
-              </div>
-            )}
             {!content && !isGenerating && (
               <div className="flex flex-col items-center justify-center h-48 text-center">
-                <p className="text-ink-500 text-sm mb-3">No draft yet for this post.</p>
+                <p className="text-ink-500 text-sm mb-3">No draft yet.</p>
                 <button onClick={handleGenerate} className="btn-primary">
                   <Zap size={15} /> Generate draft
                 </button>
@@ -368,16 +512,39 @@ export default function DraftEditorPage() {
               <p className="text-xs text-ink-500 mt-2 text-right">Saving...</p>
             )}
           </div>
-        </div>
+        )}
 
-        {showOriginal && originalContent && (
-          <div className="w-1/2 border-l border-ink-800 flex flex-col overflow-hidden">
-            <div className="px-6 py-2 border-b border-ink-800 bg-ink-950/50 shrink-0">
-              <p className="text-xs text-ink-400">Original generated draft</p>
-            </div>
-            <div className="flex-1 overflow-y-auto px-8 py-6">
-              <div className="editor-content text-ink-400 whitespace-pre-wrap pointer-events-none">
-                {originalContent}
+        {/* ── Hashtags ─────────────────────────────────────────── */}
+        {content && (
+          <div className="border-t border-ink-800 px-6 py-3 shrink-0 bg-ink-900">
+            <div className="flex items-start gap-3">
+              <div className="flex items-center gap-1.5 text-ink-500 mt-0.5 shrink-0">
+                <Hash size={13} />
+                <span className="text-xs">Hashtags</span>
+              </div>
+              <div className="flex flex-wrap gap-1.5 flex-1">
+                {hashtags.length > 0 ? (
+                  hashtags.map((tag, i) => (
+                    <span
+                      key={i}
+                      className="badge badge-draft text-xs cursor-default"
+                    >
+                      {tag}
+                      {!approved && (
+                        <button
+                          onClick={() => setHashtags(prev => prev.filter((_, idx) => idx !== i))}
+                          className="ml-1 text-ink-500 hover:text-red-400 transition-colors"
+                        >
+                          <X size={9} />
+                        </button>
+                      )}
+                    </span>
+                  ))
+                ) : (
+                  <span className="text-xs text-ink-600 italic">
+                    Hashtags will appear after generating a draft
+                  </span>
+                )}
               </div>
             </div>
           </div>

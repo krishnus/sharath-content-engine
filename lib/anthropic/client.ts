@@ -26,6 +26,7 @@ export function parseGenerationMetadata(rawOutput: string): {
   callbackUsed: string | null
   threadPlanted: string | null
   referencesUsed: { vedic: string[]; banking: string[]; coaching: string[] }
+  hashtags: string[]
 } {
   const lines = rawOutput.split('\n')
   const metaStart = lines.findIndex(l =>
@@ -42,19 +43,25 @@ export function parseGenerationMetadata(rawOutput: string): {
   }
 
   const wordCountRaw = getMeta('WORD_COUNT')
-  const refsRaw = getMeta('REFERENCES')
+  const refsRaw      = getMeta('REFERENCES')
+  const hashtagsRaw  = getMeta('HASHTAGS')
 
   let referencesUsed = { vedic: [] as string[], banking: [] as string[], coaching: [] as string[] }
   if (refsRaw) {
     try { referencesUsed = JSON.parse(refsRaw) } catch {}
   }
 
+  const hashtags = hashtagsRaw
+    ? hashtagsRaw.split(/\s+/).filter(h => h.startsWith('#'))
+    : []
+
   return {
     content,
     wordCount: wordCountRaw ? parseInt(wordCountRaw, 10) : countWords(content),
-    coreInsight:   getMeta('CORE_INSIGHT'),
-    callbackUsed:  getMeta('CALLBACK_USED'),
-    threadPlanted: getMeta('THREAD_PLANTED'),
+    coreInsight:    getMeta('CORE_INSIGHT'),
+    callbackUsed:   getMeta('CALLBACK_USED'),
+    threadPlanted:  getMeta('THREAD_PLANTED'),
     referencesUsed,
+    hashtags,
   }
 }
