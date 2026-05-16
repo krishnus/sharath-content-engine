@@ -33,20 +33,31 @@ export async function GET(
     return NextResponse.json({ error: 'Post not found' }, { status: 404 })
   }
 
-  // Fetch existing drafts (original + current)
+  // Fetch all drafts ordered by version
   const { data: drafts } = await supabase
     .from('drafts')
     .select('*')
     .eq('post_id', postId)
     .order('version', { ascending: true })
 
-  const originalDraft = drafts?.find(d => d.is_original)
-  const currentDraft  = drafts?.find(d => !d.is_original) ?? originalDraft
+  const originalDraft = drafts?.find((d: { is_original: boolean }) => d.is_original)
+  // Latest non-original draft is the current working version
+  const nonOriginals  = drafts?.filter((d: { is_original: boolean }) => !d.is_original) ?? []
+  const currentDraft  = nonOriginals[nonOriginals.length - 1] ?? originalDraft
 
   return NextResponse.json({
     post,
     originalContent: originalDraft?.content ?? '',
     currentContent:  currentDraft?.content  ?? '',
     wordCount:       currentDraft?.word_count ?? 0,
+    hashtags:        currentDraft?.hashtags  ?? [],
+    // All non-original versions for the version picker
+    versions: nonOriginals.map((d: { id: string; version: number; word_count: number; created_at: string }) => ({
+      id:        d.id,
+      version:   d.version,
+      wordCount: d.word_count,
+      createdAt: d.created_at,
+    })),
+    currentVersionId: currentDraft?.id ?? null,
   })
 }

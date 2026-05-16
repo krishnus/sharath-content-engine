@@ -33,6 +33,13 @@ type PostData = {
   }
 }
 
+type DraftVersion = {
+  id: string
+  version: number
+  wordCount: number
+  createdAt: string
+}
+
 // Strip AI metadata from displayed content
 function stripMetadata(raw: string): string {
   const metaKeys = ['WORD_COUNT:', 'CORE_INSIGHT:', 'CALLBACK_USED:', 'THREAD_PLANTED:', 'REFERENCES:', 'HASHTAGS:']
@@ -70,6 +77,8 @@ export default function DraftEditorPage() {
   const [content, setContent]                 = useState('')
   const [originalContent, setOriginalContent] = useState('')
   const [hashtags, setHashtags]               = useState<string[]>([])
+  const [versions, setVersions]               = useState<DraftVersion[]>([])
+  const [activeVersionId, setActiveVersionId] = useState<string | null>(null)
   const [wordCount, setWordCount]             = useState(0)
   const [showDiff, setShowDiff]               = useState(false)
   const [showContext, setShowContext]          = useState(false)
@@ -97,7 +106,8 @@ export default function DraftEditorPage() {
         setContent(clean)
         setOriginalContent(stripMetadata(json.originalContent ?? ''))
         setWordCount(countWords(clean))
-        setHashtags(json.hashtags ?? [])
+        setVersions(json.versions ?? [])
+        setActiveVersionId(json.currentVersionId ?? null)
         setApproved(json.post?.status === 'approved')
       } catch (err) {
         setLoadError(err instanceof Error ? err.message : 'Failed to load post')
@@ -308,6 +318,35 @@ export default function DraftEditorPage() {
             </p>
             <p className="text-xs text-ink-500">{min}–{max}</p>
           </div>
+
+          {/* Version selector */}
+          {versions.length > 1 && (
+            <div className="hidden md:flex items-center gap-1 bg-ink-800 rounded-lg px-1.5 py-1">
+              {versions.map((v, i) => (
+                <button
+                  key={v.id}
+                  onClick={async () => {
+                    const res = await fetch(`/api/drafts/${v.id}`)
+                    if (res.ok) {
+                      const json = await res.json()
+                      const clean = stripMetadata(json.content ?? '')
+                      setContent(clean)
+                      setActiveVersionId(v.id)
+                    }
+                  }}
+                  title={`Version ${v.version} — ${v.wordCount}w`}
+                  className={cn(
+                    'px-2 py-0.5 rounded text-xs font-mono transition-colors',
+                    activeVersionId === v.id
+                      ? 'bg-ink-600 text-cream'
+                      : 'text-ink-500 hover:text-cream'
+                  )}
+                >
+                  v{i + 1}
+                </button>
+              ))}
+            </div>
+          )}
 
           {/* Compare toggle */}
           {hasChanges && (

@@ -33,10 +33,19 @@ type WeekMeta = {
   start: Date
 }
 
+type ExistingWeekStatus = {
+  weekId: string
+  theme: string
+  status: string
+  approvedCount: number
+  totalPosts: number
+}
+
 type WeekState = {
   meta: WeekMeta
   weekId: string | null
-  // Each round is a fresh set of proposals — kept so user can compare
+  existing: ExistingWeekStatus | null   // null = no existing plan
+  confirmChange: boolean                 // user confirmed they want to change existing theme
   proposalRounds: ThemeOption[][]
   activeRound: number
   selectedTheme: ThemeOption | null
@@ -47,7 +56,7 @@ type WeekState = {
   quarterTheme: string
 }
 
-type Step = 'proposing' | 'themes' | 'confirming' | 'plans' | 'done'
+type Step = 'checking' | 'proposing' | 'themes' | 'confirming' | 'plans' | 'done'
 
 const QUARTER_THEMES: Record<string, string> = {
   Q1: 'The Awakening — recognition, discomfort, honest questioning',
@@ -66,15 +75,16 @@ export default function PlanningSessionModal({
 }) {
   const forwardWeeks = getForwardPlanWeeks(new Date())
 
-  const [step, setStep]               = useState<Step>('proposing')
+  const [step, setStep]               = useState<Step>('checking')
   const [error, setError]             = useState<string | null>(null)
-  // currentWeekIndex tracks which week we're selecting themes for (0 or 1)
   const [currentWeekIndex, setCurrentWeekIndex] = useState(0)
 
   const [weeks, setWeeks] = useState<WeekState[]>(
     forwardWeeks.map(fw => ({
       meta: fw,
       weekId: null,
+      existing: null,
+      confirmChange: false,
       proposalRounds: [],
       activeRound: 0,
       selectedTheme: null,
@@ -131,8 +141,35 @@ export default function PlanningSessionModal({
     }
   }, [weeks])
 
-  // Propose themes for week 0 on open
-  useEffect(() => { proposeThemesForWeek(0) }, [])
+  // ── Check existing weeks on open, then propose for unplanned ones ──
+  useEffect(() => {
+    async function checkAndPropose() {
+      try {
+        const results = await Promise.all(
+          forwardWeeks.map(fw =>
+            fetch(`/api/weeks/status?weekNumber=${fw.weekNumber}&year=${fw.year}`)
+              .then(r => r.ok ? r.json() : { week: null })
+              .catch(() => ({ week: null }))
+          )
+        )
+        setWeeks(prev => prev.map((w, i) => ({
+          ...w,
+          existing: results[i]?.week ?? null,
+        })))
+        const firstNewIndex = results.findIndex(r => !r?.week || r.week.status !== 'confirmed')
+        if (firstNewIndex >= 0) {
+          setCurrentWeekIndex(firstNewIndex)
+          proposeThemesForWeek(firstNewIndex)
+        } else {
+          setStep('themes')
+        }
+      } catch {
+        proposeThemesForWeek(0)
+      }
+    }
+    checkAndPropose()
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   // ── Navigate between weeks in theme selection ─────────────────────
   const goToNextWeek = () => {
@@ -213,12 +250,16 @@ export default function PlanningSessionModal({
 
   const currentWeek    = weeks[currentWeekIndex]
   const isLastWeek     = currentWeekIndex === weeks.length - 1
-  const allConfirmed   = weeks.every(w =>
-    (w.isCustom && w.customTheme.trim().length > 0) || w.selectedTheme !== null
-  )
-  const currentConfirmed =
-    (currentWeek?.isCustom && currentWeek?.customTheme.trim().length > 0) ||
-    currentWeek?.selectedTheme !== null
+
+  // A week is confirmed if: user selected a theme OR it already has a confirmed plan
+  // and user hasn't asked to change it
+  const weekIsResolved = (w: WeekState) =>
+    (w.existing?.status === 'confirmed' && !w.confirmChange) ||
+    (w.isCustom && w.customTheme.trim().length > 0) ||
+    w.selectedTheme !== null
+
+  const allConfirmed   = weeks.every(weekIsResolved)
+  const currentConfirmed = weekIsResolved(currentWeek)
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
@@ -231,7 +272,8 @@ export default function PlanningSessionModal({
           <div>
             <p className="section-label mb-0.5">Planning Session</p>
             <h2 className="font-display text-xl text-cream">
-              {step === 'proposing'  ? 'Finding theme ideas...' :
+              {step === 'checking'  ? 'Checking your plan...' :
+               step === 'proposing'  ? 'Finding theme ideas...' :
                step === 'themes'    ? `Choose theme — Week ${currentWeekIndex + 1} of ${weeks.length}` :
                step === 'confirming' ? 'Building your plan...' :
                step === 'plans'     ? 'Review your plan' :
@@ -285,6 +327,46 @@ export default function PlanningSessionModal({
                 <div className="card px-4 py-3 border-red-800/30 bg-red-900/10 flex items-start gap-2">
                   <AlertCircle size={14} className="text-red-400 shrink-0 mt-0.5" />
                   <p className="text-sm text-red-400">{error}</p>
+                </div>
+              )}
+
+              {/* Existing week warning */}
+              {currentWeek.existing?.status === 'confirmed' && !currentWeek.confirmChange && (
+                <div className="card px-4 py-4 border-amber-700/30 bg-amber-900/10 space-y-3">
+                  <div className="flex items-start gap-2">
+                    <AlertCircle size={14} className="text-amber-400 mt-0.5 shrink-0" />
+                    <div>
+                      <p className="text-sm text-amber-300 font-medium">This week already has a plan</p>
+                      <p className="text-xs text-amber-400/70 mt-0.5">
+                        Theme: "{currentWeek.existing.theme}"
+                      </p>
+                      <p className="text-xs text-ink-400 mt-1">
+                        {currentWeek.existing.approvedCount}/{currentWeek.existing.totalPosts} posts approved
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => {
+                        if (!isLastWeek) goToNextWeek()
+                        else generatePlans()
+                      }}
+                      className="btn-primary text-xs px-3 py-2"
+                    >
+                      Keep this plan
+                    </button>
+                    <button
+                      onClick={() => {
+                        setWeeks(prev => prev.map((w, i) =>
+                          i === currentWeekIndex ? { ...w, confirmChange: true } : w
+                        ))
+                        proposeThemesForWeek(currentWeekIndex)
+                      }}
+                      className="btn-secondary text-xs px-3 py-2"
+                    >
+                      Change theme
+                    </button>
+                  </div>
                 </div>
               )}
 

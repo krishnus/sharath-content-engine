@@ -141,7 +141,7 @@ export async function POST(req: NextRequest) {
 }
 
 
-// ── Helper: save original + current draft ──────────────────────────
+// ── Helper: save drafts — keeps ALL versions for comparison ───────────
 async function saveDrafts(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   supabase: any,
@@ -150,40 +150,37 @@ async function saveDrafts(
 ): Promise<{ savedDraftId: string }> {
   const meta = parseGenerationMetadata(rawText)
 
-  // Delete any previous non-original drafts (regeneration)
-  await supabase
-    .from('drafts')
-    .delete()
-    .eq('post_id', postId)
-    .eq('is_original', false)
-
-  // Check if original already exists
+  // Get the highest version number for this post
   const { data: existing } = await supabase
     .from('drafts')
-    .select('id')
+    .select('version, is_original')
     .eq('post_id', postId)
-    .eq('is_original', true)
-    .maybeSingle()
+    .order('version', { ascending: false })
 
-  if (!existing) {
-    // Save original (immutable)
+  const maxVersion    = existing?.[0]?.version ?? 0
+  const hasOriginal   = existing?.some((d: { is_original: boolean }) => d.is_original) ?? false
+  const nextVersion   = maxVersion + 1
+
+  // Save original (version 1, immutable) only on first generation
+  if (!hasOriginal) {
     await supabase.from('drafts').insert({
-      post_id: postId,
-      version: 1,
-      content: meta.content,
+      post_id:    postId,
+      version:    1,
+      content:    meta.content,
       word_count: meta.wordCount,
       is_original: true,
     })
   }
 
-  // Save current (editable)
-  const { data: current } = await supabase
+  // Save new version — every regeneration gets its own version
+  const insertVersion = hasOriginal ? nextVersion : 2
+  const { data: newDraft } = await supabase
     .from('drafts')
     .insert({
-      post_id: postId,
-      version: 2,
-      content: meta.content,
-      word_count: meta.wordCount,
+      post_id:     postId,
+      version:     insertVersion,
+      content:     meta.content,
+      word_count:  meta.wordCount,
       is_original: false,
     })
     .select('id')
@@ -195,5 +192,5 @@ async function saveDrafts(
     .update({ status: 'draft' })
     .eq('id', postId)
 
-  return { savedDraftId: current?.id ?? '' }
+  return { savedDraftId: newDraft?.id ?? '' }
 }

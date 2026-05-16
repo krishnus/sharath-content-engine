@@ -247,7 +247,7 @@ export function buildGeneratePostPrompt(params: GeneratePostPromptParams): strin
     `After that, on a new line starting with "CALLBACK_USED:", output the exact callback line used in the opening.`,
     `After that, on a new line starting with "THREAD_PLANTED:", output the exact thread planted in the closing.`,
     `After that, on a new line starting with "REFERENCES:", output a JSON object: {"vedic":[],"banking":[],"coaching":[]} listing any specific references used.`,
-    `After that, on a new line starting with "HASHTAGS:", output 6–8 LinkedIn hashtags separated by spaces. Use the playbook hashtag strategy: always include #CoachSharath, then choose from pillar-specific and audience-specific tags. Format: #Tag1 #Tag2 #Tag3`,
+    `After that, on a new line starting with "HASHTAGS:", output 6–8 LinkedIn hashtags separated by spaces. Use the playbook hashtag strategy: always include #CoachSharath. For Financial Intelligence posts (wealth management, financial wellness, or market insights), always include #5Swans. Then add pillar-specific and audience-specific tags. Format: #Tag1 #Tag2 #Tag3`,
   ].filter(Boolean)
 
   return lines.join('\n')
