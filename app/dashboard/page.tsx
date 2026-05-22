@@ -8,7 +8,7 @@ import {
 } from 'lucide-react'
 import Link from 'next/link'
 import { cn, PILLAR_LABELS, FORMAT_LABELS, DAY_ORDER, formatDay } from '@/lib/utils/helpers'
-import SundaySessionModal from '@/components/SundaySessionModal'
+import PlanningSessionModal from '@/components/PlanningSessionModal'
 
 // Buffer warning threshold in days
 const BUFFER_WARNING_DAYS = 14
@@ -91,7 +91,7 @@ export default function DashboardPage() {
 
       {/* Planning Session Modal */}
       {showSession && (
-        <SundaySessionModal
+        <PlanningSessionModal
           onClose={() => setShowSession(false)}
           onComplete={() => { setShowSession(false); fetchPlan() }}
         />
