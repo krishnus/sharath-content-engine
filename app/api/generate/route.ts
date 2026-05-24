@@ -7,6 +7,7 @@ import {
   buildVoiceRulesBlock,
   buildGeneratePostPrompt,
 } from '@/lib/anthropic/prompts'
+import { buildSaturdayMarketInsightsPrompt } from '@/lib/anthropic/saturday-prompt'
 import type { PostDay, PostPillar, PostFormat, NarrativePosition } from '@/lib/supabase/types'
 
 export const runtime = 'nodejs'
@@ -15,7 +16,6 @@ export const maxDuration = 60
 export async function POST(req: NextRequest) {
   const supabase = createClient()
 
-  // Auth check
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorised' }, { status: 401 })
 
@@ -31,6 +31,7 @@ export async function POST(req: NextRequest) {
     hookIdea?: string | null
     narrativePosition: NarrativePosition
     quarter: string
+    marketContext?: string   // Saturday only — real market data from Sharath
     stream?: boolean
   }
 
@@ -41,8 +42,7 @@ export async function POST(req: NextRequest) {
     .eq('active', true)
     .order('approved_at', { ascending: true })
 
-  // ── 2. Fetch narrative context (previous post's story log) ───────
-  // Get the most recently approved post before this week/day
+  // ── 2. Fetch narrative context ───────────────────────────────────
   const { data: prevStoryLog } = await supabase
     .from('story_log')
     .select('core_insight, thread_planted, references_used')
@@ -56,34 +56,45 @@ export async function POST(req: NextRequest) {
     .eq('id', body.weekId)
     .single()
 
-  // ── 3. Build prompts ─────────────────────────────────────────────
-  const narrativeContext = buildNarrativeContext({
-    previousPostInsight: prevStoryLog?.core_insight ?? null,
-    openThread: week?.open_thread ?? null,
-    narrativePosition: body.narrativePosition,
-    quarter: body.quarter,
-    recentReferences: prevStoryLog?.references_used ?? undefined,
-  })
-
+  // ── 3. Build system prompt ───────────────────────────────────────
   const voiceRulesBlock = buildVoiceRulesBlock(voiceRules ?? [])
+  const systemPrompt = [MASTER_SYSTEM_PROMPT, voiceRulesBlock].filter(Boolean).join('\n\n')
 
-  const systemPrompt = [
-    MASTER_SYSTEM_PROMPT,
-    voiceRulesBlock,
-  ].filter(Boolean).join('\n\n')
+  // ── 4. Build user prompt — Saturday uses dedicated prompt ────────
+  let userPrompt: string
 
-  const userPrompt = buildGeneratePostPrompt({
-    day: body.day,
-    pillar: body.pillar,
-    format: body.format,
-    theme: body.theme,
-    targetAudience: body.targetAudience,
-    targetWordCount: body.targetWordCount,
-    hookIdea: body.hookIdea,
-    narrativeContext,
-  })
+  if (body.format === 'market_insights' && body.marketContext) {
+    // Saturday: use dedicated market insights prompt with real data
+    userPrompt = buildSaturdayMarketInsightsPrompt({
+      marketContext:    body.marketContext,
+      theme:            body.theme,
+      quarter:          body.quarter,
+      openThread:       week?.open_thread ?? null,
+      targetWordCount:  body.targetWordCount,
+    })
+  } else {
+    // All other posts: standard narrative generation
+    const narrativeContext = buildNarrativeContext({
+      previousPostInsight: prevStoryLog?.core_insight ?? null,
+      openThread:          week?.open_thread ?? null,
+      narrativePosition:   body.narrativePosition,
+      quarter:             body.quarter,
+      recentReferences:    prevStoryLog?.references_used ?? undefined,
+    })
 
-  // ── 4. Stream response from Anthropic ───────────────────────────
+    userPrompt = buildGeneratePostPrompt({
+      day:             body.day,
+      pillar:          body.pillar,
+      format:          body.format,
+      theme:           body.theme,
+      targetAudience:  body.targetAudience,
+      targetWordCount: body.targetWordCount,
+      hookIdea:        body.hookIdea,
+      narrativeContext,
+    })
+  }
+
+  // ── 5. Stream or non-stream ──────────────────────────────────────
   if (body.stream !== false) {
     const stream = await getAnthropicClient().messages.stream({
       model: MODEL,
@@ -92,7 +103,6 @@ export async function POST(req: NextRequest) {
       messages: [{ role: 'user', content: userPrompt }],
     })
 
-    // Collect full text to save to DB after streaming
     let fullText = ''
     const encoder = new TextEncoder()
     const readable = new ReadableStream({
@@ -103,7 +113,6 @@ export async function POST(req: NextRequest) {
             controller.enqueue(encoder.encode(chunk.delta.text))
           }
         }
-        // Save to DB after stream completes
         await saveDrafts(supabase, body.postId, fullText)
         controller.close()
       },
@@ -117,7 +126,7 @@ export async function POST(req: NextRequest) {
     })
   }
 
-  // ── 5. Non-streaming fallback ────────────────────────────────────
+  // Non-streaming
   const message = await getAnthropicClient().messages.create({
     model: MODEL,
     max_tokens: MAX_TOKENS,
@@ -133,15 +142,20 @@ export async function POST(req: NextRequest) {
   const { savedDraftId } = await saveDrafts(supabase, body.postId, rawText)
   const meta = parseGenerationMetadata(rawText)
 
+  // Update Saturday post status to 'draft'
+  await supabase
+    .from('posts')
+    .update({ status: 'draft' })
+    .eq('id', body.postId)
+
   return NextResponse.json({
-    draftId: savedDraftId,
-    content: meta.content,
+    draftId:   savedDraftId,
+    content:   meta.content,
     wordCount: meta.wordCount,
   })
 }
 
-
-// ── Helper: save drafts — keeps ALL versions for comparison ───────────
+// ── Save all draft versions (never delete old ones) ──────────────────
 async function saveDrafts(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   supabase: any,
@@ -150,47 +164,33 @@ async function saveDrafts(
 ): Promise<{ savedDraftId: string }> {
   const meta = parseGenerationMetadata(rawText)
 
-  // Get the highest version number for this post
   const { data: existing } = await supabase
     .from('drafts')
     .select('version, is_original')
     .eq('post_id', postId)
     .order('version', { ascending: false })
 
-  const maxVersion    = existing?.[0]?.version ?? 0
-  const hasOriginal   = existing?.some((d: { is_original: boolean }) => d.is_original) ?? false
-  const nextVersion   = maxVersion + 1
+  const maxVersion  = existing?.[0]?.version ?? 0
+  const hasOriginal = existing?.some((d: { is_original: boolean }) => d.is_original) ?? false
 
-  // Save original (version 1, immutable) only on first generation
   if (!hasOriginal) {
     await supabase.from('drafts').insert({
-      post_id:    postId,
-      version:    1,
-      content:    meta.content,
-      word_count: meta.wordCount,
-      is_original: true,
+      post_id: postId, version: 1,
+      content: meta.content, word_count: meta.wordCount, is_original: true,
     })
   }
 
-  // Save new version — every regeneration gets its own version
-  const insertVersion = hasOriginal ? nextVersion : 2
+  const insertVersion = hasOriginal ? maxVersion + 1 : 2
   const { data: newDraft } = await supabase
     .from('drafts')
     .insert({
-      post_id:     postId,
-      version:     insertVersion,
-      content:     meta.content,
-      word_count:  meta.wordCount,
-      is_original: false,
+      post_id: postId, version: insertVersion,
+      content: meta.content, word_count: meta.wordCount, is_original: false,
     })
     .select('id')
     .single()
 
-  // Update post status to 'draft'
-  await supabase
-    .from('posts')
-    .update({ status: 'draft' })
-    .eq('id', postId)
+  await supabase.from('posts').update({ status: 'draft' }).eq('id', postId)
 
   return { savedDraftId: newDraft?.id ?? '' }
 }
