@@ -23,9 +23,29 @@ A senior leader who has sat in trading floors in Tokyo and Singapore, managed gl
 - STRONG: "I was in a session with a senior executive last week. On paper, he was exceptional..."
 - WEAK: "In today's fast-paced world, many of us face challenges..."
 
-**Sanskrit usage:** Uses Sanskrit with confidence, not decoration. Every Sanskrit reference must be explained, contextualised, and applied.
-- STRONG: "The Bhagavad Gita speaks of Swikruti (स्वीकृती) — acceptance as an act of liberation, not defeat."
-- WEAK: Dropping Sanskrit words without depth.
+**Sanskrit and scriptural citations:** Uses Sanskrit with confidence, not decoration.
+Every scriptural reference must follow this exact format:
+1. Quote the original Sanskrit in Devanagari script
+2. Provide the IAST transliteration
+3. Give the source reference in parentheses — e.g. (BG 3.21), (AS 1.6), (YS 1.2), (AG 1.4)
+4. Provide an English translation
+5. Apply it specifically to the post context
+
+Reference codes:
+- Bhagavad Gita: BG [chapter].[verse] — e.g. BG 2.47, BG 3.21, BG 18.66
+- Arthashastra: AS [book].[chapter] — e.g. AS 1.6
+- Yoga Sutras: YS [pada].[sutra] — e.g. YS 1.2
+- Ashtavakra Gita: AG [chapter].[verse] — e.g. AG 1.4
+
+Example of correct format:
+"कर्मण्येवाधिकारस्ते मा फलेषु कदाचन।
+मा कर्मफलहेतुर्भूर्मा ते सङ्गोऽस्त्वकर्मणि॥"
+(karmaṇy-evādhikāras te mā phaleṣu kadācana)
+(BG 2.47)
+"You have a right to perform your duty, but never to the fruits of action."
+
+If the exact Sanskrit is uncertain, reference the concept and chapter only — never fabricate.
+WEAK: Dropping Sanskrit words without the verse, reference, or depth.
 
 **Mythological characters:** References as living teachers with specific lessons.
 - STRONG: "Ranchhordas — the name most people don't know for Lord Krishna — means the one who walked away from the battlefield. Not out of fear. Out of discernment."
@@ -98,6 +118,21 @@ Every post must contain:
    Example: "Last Monday I wrote about the moment a client chose to walk away. Today I want to go one level deeper — what happens the morning after that decision."
 2. **A THREAD:** Closing paragraph plants a subtle forward seed. Not a teaser. Not a promotion.
    Example: "There's a dimension of this I haven't addressed yet. It involves Bhishma. I'll come to it."
+
+## CROSS-REFERENCING PREVIOUS POSTS
+
+When a Vedic reference, mythological character, or coaching concept appears in the NARRATIVE CONTEXT PACKET under "references used recently", acknowledge it explicitly rather than presenting it as new.
+
+Use phrasings like:
+- "As we explored in a recent post, [concept]..."
+- "Building on last week's reflection on [character/concept]..."
+- "Those who read my recent piece on Ranchhordas will recognise this pattern..."
+
+Do NOT repeat the full story or shloka citation if used within the last 4 weeks.
+Instead, reference it briefly and build deeper — this creates the serialised book effect.
+
+Note: When LinkedIn publishing is live, replace "a recent post" with the actual LinkedIn post URL.
+The story log stores post_id linking to linkedin_posts.linkedin_url for this purpose.
 
 ## QUARTERLY ARC TONES
 - Q1 (Jan–Mar): The Awakening — recognition, discomfort, honest questioning
@@ -247,7 +282,7 @@ export function buildGeneratePostPrompt(params: GeneratePostPromptParams): strin
     `After that, on a new line starting with "CALLBACK_USED:", output the exact callback line used in the opening.`,
     `After that, on a new line starting with "THREAD_PLANTED:", output the exact thread planted in the closing.`,
     `After that, on a new line starting with "REFERENCES:", output a JSON object: {"vedic":[],"banking":[],"coaching":[]} listing any specific references used.`,
-    `After that, on a new line starting with "HASHTAGS:", output 6–8 LinkedIn hashtags separated by spaces. Use the playbook hashtag strategy: always include #CoachSharath. For Financial Intelligence posts (wealth management, financial wellness, or market insights), always include #5Swans. Then add pillar-specific and audience-specific tags. Format: #Tag1 #Tag2 #Tag3`,
+    `After that, on a new line starting with "HASHTAGS:", output 6–8 LinkedIn hashtags separated by spaces. These three are MANDATORY in every post regardless of pillar or audience: #CoachSharath #5Swans #BradfordInternationalAlliance. Then add 3–5 pillar-specific and audience-specific tags from the playbook hashtag strategy. Format: #CoachSharath #5Swans #BradfordInternationalAlliance #Tag4 #Tag5 #Tag6`,
   ].filter(Boolean)
 
   return lines.join('\n')
