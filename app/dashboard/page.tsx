@@ -109,7 +109,6 @@ export default function DashboardPage() {
         <div>
           <p className="section-label mb-2">Forward Plan</p>
           <h1 className="display-heading text-3xl">{format(today, 'EEEE, d MMMM yyyy')}</h1>
-          <p className="text-sm text-ink-400 mt-1">Planning weeks of {formatDay(addDays(today, 7))} and {formatDay(addDays(today, 14))}</p>
         </div>
         {hasAnyData && <button className="btn-primary" onClick={() => setShowSession(true)}><Plus size={15} /> Plan ahead</button>}
       </div>
