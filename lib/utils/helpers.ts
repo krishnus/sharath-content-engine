@@ -25,15 +25,31 @@ export function weekStart(year: number, weekNumber: number): Date {
   return addWeeks(startOfWeek1, weekNumber - 1)
 }
 
-/** Get the 2 forward planning week numbers from a given Sunday */
-export function getForwardPlanWeeks(fromDate: Date = new Date()): Array<{ weekNumber: number; year: number; start: Date }> {
-  return [1, 2].map(n => {
-    const start = addWeeks(fromDate, n)
+/**
+ * FIX 2: Get forward planning weeks dynamically.
+ *
+ * Previously hardcoded to always return exactly 2 weeks ([1, 2]).
+ * Now: always show week+1 and week+2. Once week+1's Mon–Fri posts
+ * are all approved, also show week+3 (so planning is always 2 weeks
+ * ahead of the last fully-approved week).
+ *
+ * The `approvedMonFriWeek1` flag is passed in from the dashboard
+ * after it fetches the DB state. When true, a 3rd week is appended.
+ */
+export function getForwardPlanWeeks(
+  fromDate: Date = new Date(),
+  approvedMonFriWeek1 = false,
+): Array<{ weekNumber: number; year: number; start: Date }> {
+  // Always show the next 2 weeks
+  const offsets = approvedMonFriWeek1 ? [1, 2, 3] : [1, 2]
+
+  return offsets.map(n => {
+    const start  = addWeeks(fromDate, n)
     const monday = startOfISOWeek(start)
     return {
       weekNumber: getISOWeek(monday),
-      year: getYear(monday),
-      start: monday,
+      year:       getYear(monday),
+      start:      monday,
     }
   })
 }
@@ -55,11 +71,11 @@ export function getQuarter(date: Date): 'Q1' | 'Q2' | 'Q3' | 'Q4' {
 /** Human-readable label for post status */
 export const STATUS_LABELS: Record<string, string> = {
   awaiting_market_data: 'Awaiting Market Data',
-  draft:     'Draft',
-  edited:    'Edited',
-  approved:  'Approved',
-  scheduled: 'Scheduled',
-  published: 'Published',
+  draft:          'Draft',
+  edited:         'Edited',
+  approved:       'Approved',
+  scheduled:      'Scheduled',
+  published:      'Published',
   publish_failed: 'Publish Failed',
 }
 

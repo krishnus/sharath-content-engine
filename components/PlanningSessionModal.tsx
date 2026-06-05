@@ -44,8 +44,8 @@ type ExistingWeekStatus = {
 type WeekState = {
   meta: WeekMeta
   weekId: string | null
-  existing: ExistingWeekStatus | null   // null = no existing plan
-  confirmChange: boolean                 // user confirmed they want to change existing theme
+  existing: ExistingWeekStatus | null
+  confirmChange: boolean
   proposalRounds: ThemeOption[][]
   activeRound: number
   selectedTheme: ThemeOption | null
@@ -69,11 +69,16 @@ const QUARTER_THEMES: Record<string, string> = {
 export default function PlanningSessionModal({
   onClose,
   onComplete,
+  // FIX 2: accept the flag from DashboardPage — when week 1's Mon–Fri
+  // are all approved, we show 3 forward weeks instead of 2
+  week1MonFriApproved = false,
 }: {
   onClose: () => void
   onComplete: () => void
+  week1MonFriApproved?: boolean
 }) {
-  const forwardWeeks = getForwardPlanWeeks(new Date())
+  // FIX 2: pass flag into getForwardPlanWeeks so it returns 2 or 3 weeks
+  const forwardWeeks = getForwardPlanWeeks(new Date(), week1MonFriApproved)
 
   const [step, setStep]               = useState<Step>('checking')
   const [error, setError]             = useState<string | null>(null)
@@ -124,13 +129,12 @@ export default function PlanningSessionModal({
       const json = await res.json()
       const newThemes: ThemeOption[] = json?.themes ?? []
 
-      // Add this as a new round — preserving all previous rounds
       setWeeks(prev => prev.map((pw, i) =>
         i === weekIndex
           ? {
               ...pw,
               proposalRounds: [...pw.proposalRounds, newThemes],
-              activeRound: pw.proposalRounds.length, // select the new round
+              activeRound: pw.proposalRounds.length,
             }
           : pw
       ))
@@ -171,12 +175,10 @@ export default function PlanningSessionModal({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  // ── Navigate between weeks in theme selection ─────────────────────
   const goToNextWeek = () => {
     if (currentWeekIndex < weeks.length - 1) {
       const nextIndex = currentWeekIndex + 1
       setCurrentWeekIndex(nextIndex)
-      // Propose themes for next week if not yet done
       if (weeks[nextIndex].proposalRounds.length === 0) {
         proposeThemesForWeek(nextIndex)
       } else {
@@ -192,7 +194,6 @@ export default function PlanningSessionModal({
     }
   }
 
-  // ── Generate plans for all confirmed weeks ────────────────────────
   const generatePlans = useCallback(async () => {
     setStep('confirming')
     setError(null)
@@ -200,10 +201,7 @@ export default function PlanningSessionModal({
     try {
       const results = await Promise.all(
         weeks.map(async w => {
-          const theme = w.isCustom
-            ? w.customTheme
-            : w.selectedTheme?.theme ?? ''
-
+          const theme = w.isCustom ? w.customTheme : w.selectedTheme?.theme ?? ''
           if (!theme) return { weekId: null, plan: [] }
 
           const createRes = await fetch('/api/weeks', {
@@ -251,8 +249,6 @@ export default function PlanningSessionModal({
   const currentWeek    = weeks[currentWeekIndex]
   const isLastWeek     = currentWeekIndex === weeks.length - 1
 
-  // A week is confirmed if: user selected a theme OR it already has a confirmed plan
-  // and user hasn't asked to change it
   const weekIsResolved = (w: WeekState) =>
     (w.existing?.status === 'confirmed' && !w.confirmChange) ||
     (w.isCustom && w.customTheme.trim().length > 0) ||
@@ -272,17 +268,16 @@ export default function PlanningSessionModal({
           <div>
             <p className="section-label mb-0.5">Planning Session</p>
             <h2 className="font-display text-xl text-cream">
-              {step === 'checking'  ? 'Checking your plan...' :
+              {step === 'checking'   ? 'Checking your plan...' :
                step === 'proposing'  ? 'Finding theme ideas...' :
-               step === 'themes'    ? `Choose theme — Week ${currentWeekIndex + 1} of ${weeks.length}` :
+               step === 'themes'     ? `Choose theme — Week ${currentWeekIndex + 1} of ${weeks.length}` :
                step === 'confirming' ? 'Building your plan...' :
-               step === 'plans'     ? 'Review your plan' :
+               step === 'plans'      ? 'Review your plan' :
                'Plan confirmed'}
             </h2>
           </div>
 
           <div className="flex items-center gap-3">
-            {/* Step dots */}
             <div className="flex items-center gap-1.5">
               {weeks.map((_, i) => (
                 <div
@@ -307,20 +302,16 @@ export default function PlanningSessionModal({
         {/* Body */}
         <div className="flex-1 overflow-y-auto">
 
-          {/* Loading */}
           {step === 'proposing' && (
             <div className="flex flex-col items-center justify-center py-16 space-y-4">
               <div className="w-12 h-12 rounded-xl bg-gold-500/10 border border-gold-500/20 flex items-center justify-center">
                 <Loader2 size={20} className="text-gold-500 animate-spin" />
               </div>
-              <p className="text-cream text-sm">
-                Finding theme ideas for Week {currentWeekIndex + 1}...
-              </p>
+              <p className="text-cream text-sm">Finding theme ideas for Week {currentWeekIndex + 1}...</p>
               <p className="text-xs text-ink-500">Reading your narrative arc and recent posts</p>
             </div>
           )}
 
-          {/* Theme selection — one week at a time */}
           {step === 'themes' && currentWeek && (
             <div className="p-6 space-y-5">
               {error && (
@@ -330,16 +321,13 @@ export default function PlanningSessionModal({
                 </div>
               )}
 
-              {/* Existing week warning */}
               {currentWeek.existing?.status === 'confirmed' && !currentWeek.confirmChange && (
                 <div className="card px-4 py-4 border-amber-700/30 bg-amber-900/10 space-y-3">
                   <div className="flex items-start gap-2">
                     <AlertCircle size={14} className="text-amber-400 mt-0.5 shrink-0" />
                     <div>
                       <p className="text-sm text-amber-300 font-medium">This week already has a plan</p>
-                      <p className="text-xs text-amber-400/70 mt-0.5">
-                        Theme: "{currentWeek.existing.theme}"
-                      </p>
+                      <p className="text-xs text-amber-400/70 mt-0.5">Theme: "{currentWeek.existing.theme}"</p>
                       <p className="text-xs text-ink-400 mt-1">
                         {currentWeek.existing.approvedCount}/{currentWeek.existing.totalPosts} posts approved
                       </p>
@@ -347,10 +335,7 @@ export default function PlanningSessionModal({
                   </div>
                   <div className="flex gap-2">
                     <button
-                      onClick={() => {
-                        if (!isLastWeek) goToNextWeek()
-                        else generatePlans()
-                      }}
+                      onClick={() => { if (!isLastWeek) goToNextWeek(); else generatePlans() }}
                       className="btn-primary text-xs px-3 py-2"
                     >
                       Keep this plan
@@ -370,7 +355,6 @@ export default function PlanningSessionModal({
                 </div>
               )}
 
-              {/* Week context */}
               <div className="flex items-center justify-between">
                 <div>
                   <p className="section-label">
@@ -387,7 +371,6 @@ export default function PlanningSessionModal({
                 )}
               </div>
 
-              {/* Round tabs — lets user compare proposal rounds */}
               {currentWeek.proposalRounds.length > 1 && (
                 <div className="flex items-center gap-1">
                   <span className="text-xs text-ink-500 mr-1">Proposals:</span>
@@ -399,9 +382,7 @@ export default function PlanningSessionModal({
                       ))}
                       className={cn(
                         'px-2.5 py-1 rounded-md text-xs font-medium transition-colors',
-                        currentWeek.activeRound === ri
-                          ? 'bg-ink-700 text-cream'
-                          : 'text-ink-500 hover:text-cream'
+                        currentWeek.activeRound === ri ? 'bg-ink-700 text-cream' : 'text-ink-500 hover:text-cream'
                       )}
                     >
                       Round {ri + 1}
@@ -410,7 +391,6 @@ export default function PlanningSessionModal({
                 </div>
               )}
 
-              {/* Theme cards for active round */}
               {(currentWeek.proposalRounds[currentWeek.activeRound] ?? []).length > 0 ? (
                 <div className="space-y-2">
                   {(currentWeek.proposalRounds[currentWeek.activeRound] ?? []).map((theme, ti) => (
@@ -433,9 +413,7 @@ export default function PlanningSessionModal({
                           <p className="text-sm font-medium text-cream">{theme.theme}</p>
                           <p className="text-xs text-ink-400 mt-0.5">{theme.rationale}</p>
                           <div className="flex items-center gap-3 mt-1.5">
-                            <span className="text-xs text-ink-500">
-                              {PILLAR_LABELS[theme.primary_pillar] ?? theme.primary_pillar}
-                            </span>
+                            <span className="text-xs text-ink-500">{PILLAR_LABELS[theme.primary_pillar] ?? theme.primary_pillar}</span>
                             <span className="text-ink-700">·</span>
                             <span className="text-xs text-ink-500">{theme.primary_audience}</span>
                           </div>
@@ -460,7 +438,6 @@ export default function PlanningSessionModal({
                 </div>
               )}
 
-              {/* Custom theme input */}
               <CustomThemeInput
                 value={currentWeek.customTheme}
                 isCustom={currentWeek.isCustom}
@@ -473,7 +450,6 @@ export default function PlanningSessionModal({
             </div>
           )}
 
-          {/* Generating plans */}
           {step === 'confirming' && (
             <div className="flex flex-col items-center justify-center py-16 space-y-4">
               <div className="w-12 h-12 rounded-xl bg-gold-500/10 border border-gold-500/20 flex items-center justify-center">
@@ -484,7 +460,6 @@ export default function PlanningSessionModal({
             </div>
           )}
 
-          {/* Plan review */}
           {step === 'plans' && (
             <div className="p-6 space-y-8">
               {error && (
@@ -498,7 +473,6 @@ export default function PlanningSessionModal({
             </div>
           )}
 
-          {/* Done */}
           {step === 'done' && (
             <div className="flex flex-col items-center justify-center py-16 space-y-4 text-center">
               <div className="w-12 h-12 rounded-xl bg-emerald-900/30 border border-emerald-700/30 flex items-center justify-center">
@@ -526,64 +500,37 @@ export default function PlanningSessionModal({
           </button>
 
           <div className="flex items-center gap-3">
-
-            {/* Theme step — navigation */}
             {step === 'themes' && (
               <>
-                <button
-                  onClick={() => proposeThemesForWeek(currentWeekIndex)}
-                  className="btn-secondary text-sm"
-                >
-                  <RotateCcw size={14} />
-                  New proposals
+                <button onClick={() => proposeThemesForWeek(currentWeekIndex)} className="btn-secondary text-sm">
+                  <RotateCcw size={14} /> New proposals
                 </button>
-
                 {currentWeekIndex > 0 && (
                   <button onClick={goToPrevWeek} className="btn-secondary text-sm">
                     <ChevronLeft size={14} /> Week {currentWeekIndex}
                   </button>
                 )}
-
                 {!isLastWeek ? (
-                  <button
-                    onClick={goToNextWeek}
-                    disabled={!currentConfirmed}
-                    className="btn-primary"
-                  >
-                    Week {currentWeekIndex + 2}
-                    <ChevronRight size={15} />
+                  <button onClick={goToNextWeek} disabled={!currentConfirmed} className="btn-primary">
+                    Week {currentWeekIndex + 2} <ChevronRight size={15} />
                   </button>
                 ) : (
-                  <button
-                    onClick={generatePlans}
-                    disabled={!allConfirmed}
-                    className="btn-primary"
-                  >
-                    Generate plans
-                    <ChevronRight size={15} />
+                  <button onClick={generatePlans} disabled={!allConfirmed} className="btn-primary">
+                    Generate plans <ChevronRight size={15} />
                   </button>
                 )}
               </>
             )}
-
-            {/* Plans step */}
             {step === 'plans' && (
               <>
-                <button
-                  onClick={() => { setCurrentWeekIndex(0); setStep('themes') }}
-                  className="btn-secondary text-sm"
-                >
+                <button onClick={() => { setCurrentWeekIndex(0); setStep('themes') }} className="btn-secondary text-sm">
                   <ChevronLeft size={14} /> Back to themes
                 </button>
-                <button
-                  onClick={() => { setStep('done'); setTimeout(onComplete, 1500) }}
-                  className="btn-primary"
-                >
+                <button onClick={() => { setStep('done'); setTimeout(onComplete, 1500) }} className="btn-primary">
                   <CheckCircle2 size={15} /> Confirm plan
                 </button>
               </>
             )}
-
             {step === 'done' && (
               <button onClick={onComplete} className="btn-primary">
                 View my plan <ChevronRight size={15} />
@@ -596,23 +543,12 @@ export default function PlanningSessionModal({
   )
 }
 
-// ── Custom Theme Input ─────────────────────────────────────────────────
-function CustomThemeInput({
-  value, isCustom, onChange,
-}: {
-  value: string
-  isCustom: boolean
-  onChange: (val: string) => void
-}) {
+function CustomThemeInput({ value, isCustom, onChange }: { value: string; isCustom: boolean; onChange: (val: string) => void }) {
   const [expanded, setExpanded] = useState(isCustom)
-
   return (
     <div>
       {!expanded ? (
-        <button
-          onClick={() => setExpanded(true)}
-          className="btn-ghost text-xs w-full justify-center border border-ink-700 border-dashed"
-        >
+        <button onClick={() => setExpanded(true)} className="btn-ghost text-xs w-full justify-center border border-ink-700 border-dashed">
           <Pencil size={12} /> Write my own theme instead
         </button>
       ) : (
@@ -625,14 +561,9 @@ function CustomThemeInput({
             className="input text-sm"
             autoFocus
           />
-          <p className="text-xs text-ink-500">
-            Be specific — the more evocative the theme, the better the posts.
-          </p>
+          <p className="text-xs text-ink-500">Be specific — the more evocative the theme, the better the posts.</p>
           {!isCustom && (
-            <button
-              onClick={() => { setExpanded(false); onChange('') }}
-              className="text-xs text-ink-500 hover:text-cream-muted transition-colors"
-            >
+            <button onClick={() => { setExpanded(false); onChange('') }} className="text-xs text-ink-500 hover:text-cream-muted transition-colors">
               Back to proposals
             </button>
           )}
@@ -642,45 +573,28 @@ function CustomThemeInput({
   )
 }
 
-// ── Week Plan Review ───────────────────────────────────────────────────
 function WeekPlanReview({ week, weekIndex }: { week: WeekState; weekIndex: number }) {
   const theme = week.isCustom ? week.customTheme : week.selectedTheme?.theme
-
   return (
     <div className="space-y-3">
       <div>
-        <p className="section-label">
-          Week {week.meta.weekNumber} · {formatDay(new Date(week.meta.start))}
-        </p>
+        <p className="section-label">Week {week.meta.weekNumber} · {formatDay(new Date(week.meta.start))}</p>
         <h3 className="font-display text-lg text-cream mt-0.5">{theme}</h3>
       </div>
-
       {week.plan.length === 0 ? (
-        <div className="card py-6 text-center">
-          <p className="text-sm text-ink-500">Plan not generated. Please go back and try again.</p>
-        </div>
+        <div className="card py-6 text-center"><p className="text-sm text-ink-500">Plan not generated. Please go back and try again.</p></div>
       ) : (
         <div className="space-y-2">
           {[...week.plan]
             .sort((a, b) => {
-              const order: Record<string, number> = {
-                monday:0, tuesday:1, wednesday:2, thursday:3, friday:4, saturday:5
-              }
+              const order: Record<string, number> = { monday:0, tuesday:1, wednesday:2, thursday:3, friday:4, saturday:5 }
               return (order[a.day] ?? 0) - (order[b.day] ?? 0)
             })
             .map((slot, si) => (
-              <div
-                key={si}
-                className={cn(
-                  'card px-4 py-3 flex items-start gap-4',
-                  slot.day === 'saturday' && 'opacity-60 border-dashed'
-                )}
-              >
+              <div key={si} className={cn('card px-4 py-3 flex items-start gap-4', slot.day === 'saturday' && 'opacity-60 border-dashed')}>
                 <div className="w-20 shrink-0">
                   <p className="text-xs font-medium text-cream capitalize">{slot.day}</p>
-                  <p className="text-xs text-ink-400 mt-0.5">
-                    {FORMAT_LABELS[slot.format] ?? slot.format}
-                  </p>
+                  <p className="text-xs text-ink-400 mt-0.5">{FORMAT_LABELS[slot.format] ?? slot.format}</p>
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className={cn('text-xs font-medium mb-0.5',

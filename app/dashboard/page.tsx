@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
-import { format, addDays, isSaturday } from 'date-fns'
+import { format, addDays, isSaturday, addWeeks, startOfISOWeek } from 'date-fns'
 import {
   Plus, CheckCircle2, Clock, AlertCircle,
   Loader2, CalendarDays, ChevronDown, ChevronUp, TrendingUp,
@@ -30,6 +30,49 @@ type SaturdayModalData = {
   quarter: string; openThread: string | null; targetWordCount: number
 }
 
+// ── FIX 3 helper ────────────────────────────────────────────────────
+/**
+ * Calculate buffer days as the number of calendar days from today
+ * through the last day that has an approved/published post.
+ *
+ * Previously used `daysAhead` = days to `week_start` of the latest
+ * planned week, which showed ~7 when week 2 started in 7 days — even
+ * though posts ran through Saturday of week 2 (~14 days out).
+ */
+function calcBufferDays(weeks: ForwardWeek[], today: Date): number {
+  const approvedDates: Date[] = []
+
+  for (const fw of weeks) {
+    if (!fw.data) continue
+    for (const post of fw.data.posts) {
+      if (post.status !== 'approved' && post.status !== 'published') continue
+      // Derive the post's calendar date from week_start + day offset
+      const weekMon = startOfISOWeek(new Date(fw.data.week_start))
+      const dayOffset = DAY_ORDER[post.day] ?? 0
+      const postDate  = addDays(weekMon, dayOffset)
+      if (postDate >= today) approvedDates.push(postDate)
+    }
+  }
+
+  if (!approvedDates.length) return 0
+
+  const latest = approvedDates.reduce((a, b) => (a > b ? a : b))
+  return Math.floor((latest.getTime() - today.getTime()) / (1000 * 60 * 60 * 24)) + 1
+}
+
+// ── FIX 2 helper ────────────────────────────────────────────────────
+/**
+ * Returns true when all Mon–Fri posts (days 0–4) of the FIRST
+ * forward week are approved/published.
+ * When true, the planning modal and API will expose a 3rd forward week.
+ */
+function isWeek1MonFriApproved(weeks: ForwardWeek[]): boolean {
+  const week1 = weeks[0]
+  if (!week1?.data) return false
+  const monFri = week1.data.posts.filter(p => p.day !== 'saturday')
+  return monFri.length >= 5 && monFri.every(p => p.status === 'approved' || p.status === 'published')
+}
+
 export default function DashboardPage() {
   const [weeks, setWeeks]             = useState<ForwardWeek[]>([])
   const [loading, setLoading]         = useState(true)
@@ -51,12 +94,14 @@ export default function DashboardPage() {
 
   useEffect(() => { fetchPlan() }, [fetchPlan])
 
-  const hasAnyData    = weeks.some(w => w.data !== null)
-  const approvedCount = weeks.flatMap(w => w.data?.posts ?? []).filter(p => p.status === 'approved').length
-  const totalNonSat   = weeks.flatMap(w => w.data?.posts ?? []).filter(p => p.day !== 'saturday').length
-  const latestWeekStart = weeks.filter(w => w.data).map(w => new Date(w.data!.week_start)).sort((a,b) => b.getTime()-a.getTime())[0]
-  const daysAhead = latestWeekStart ? Math.floor((latestWeekStart.getTime()-today.getTime())/(1000*60*60*24)) : 0
-  const showBufferWarning = !loading && (!hasAnyData || daysAhead < BUFFER_WARNING_DAYS)
+  const hasAnyData = weeks.some(w => w.data !== null)
+
+  // FIX 3: buffer = days to last approved post date, not days to week_start
+  const bufferDays = calcBufferDays(weeks, today)
+  const showBufferWarning = !loading && (!hasAnyData || bufferDays < BUFFER_WARNING_DAYS)
+
+  // FIX 2: expose to PlanningSessionModal so it can unlock week 3
+  const week1MonFriApproved = isWeek1MonFriApproved(weeks)
 
   const pendingSaturdayPost = todayIsSaturday
     ? weeks.flatMap(w => (w.data?.posts ?? []).map(p => ({ ...p, week: w.data! }))).find(p => p.day === 'saturday' && p.status === 'awaiting_market_data')
@@ -70,7 +115,13 @@ export default function DashboardPage() {
 
   return (
     <div className="px-6 py-8 max-w-5xl mx-auto space-y-6">
-      {showSession && <PlanningSessionModal onClose={() => setShowSession(false)} onComplete={() => { setShowSession(false); fetchPlan() }} />}
+      {showSession && (
+        <PlanningSessionModal
+          week1MonFriApproved={week1MonFriApproved}
+          onClose={() => setShowSession(false)}
+          onComplete={() => { setShowSession(false); fetchPlan() }}
+        />
+      )}
       {saturdayModal && <SaturdayInsightsModal {...saturdayModal} onClose={() => setSaturdayModal(null)} />}
 
       {/* Saturday due-today banner */}
@@ -91,13 +142,15 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {/* Buffer warning */}
+      {/* Buffer warning — FIX 3: now uses real calendar-day buffer */}
       {showBufferWarning && !pendingSaturdayPost && (
         <div className="card px-4 py-3 border-amber-700/30 bg-amber-900/10 flex items-center justify-between gap-4">
           <div className="flex items-center gap-2">
             <AlertCircle size={15} className="text-amber-400 shrink-0" />
             <p className="text-sm text-amber-300">
-              {!hasAnyData ? 'No content planned yet — start a planning session.' : `Buffer low — ${daysAhead} days ahead. Aim for 14+.`}
+              {!hasAnyData
+                ? 'No content planned yet — start a planning session.'
+                : `Buffer low — ${bufferDays} days ahead. Aim for 14+.`}
             </p>
           </div>
           <button onClick={() => setShowSession(true)} className="btn-primary text-xs px-3 py-2 shrink-0">Plan now</button>
@@ -144,9 +197,13 @@ function WeekPanel({ forwardWeek, weekIndex, onRefresh, onStartSession, onOpenSa
   const { meta, data: week } = forwardWeek
   const weekStartDate = new Date(meta.start)
   const posts = week?.posts ?? []
-  const approvedCount = posts.filter(p => p.status === 'approved').length
-  const totalNonSat   = posts.filter(p => p.day !== 'saturday').length
-  const sortedPosts   = [...posts].sort((a,b) => (DAY_ORDER[a.day]??0)-(DAY_ORDER[b.day]??0))
+
+  // FIX 1: count ALL posts (including Saturday) for both numerator and denominator.
+  // Previously totalNonSat excluded Saturday, making a 6-post week show "6/5".
+  const approvedCount = posts.filter(p => p.status === 'approved' || p.status === 'published').length
+  const totalPosts    = posts.length  // ← was: posts.filter(p => p.day !== 'saturday').length
+
+  const sortedPosts = [...posts].sort((a,b) => (DAY_ORDER[a.day]??0)-(DAY_ORDER[b.day]??0))
 
   return (
     <section className="space-y-3 animate-in" style={{ animationDelay: `${weekIndex*60}ms` }}>
@@ -159,11 +216,12 @@ function WeekPanel({ forwardWeek, weekIndex, onRefresh, onStartSession, onOpenSa
           {week?.theme ? <h2 className="font-display text-xl text-cream">{week.theme}</h2> : <h2 className="font-display text-xl text-ink-500 italic">Theme not yet set</h2>}
         </div>
         <div className="flex items-center gap-4">
-          {totalNonSat > 0 && (
+          {/* FIX 1: use totalPosts (all days) not totalNonSat */}
+          {totalPosts > 0 && (
             <div className="text-right hidden sm:block">
-              <p className="text-xs text-ink-400">{approvedCount}/{totalNonSat} approved</p>
+              <p className="text-xs text-ink-400">{approvedCount}/{totalPosts} approved</p>
               <div className="mt-1 h-1 w-20 bg-ink-700 rounded-full overflow-hidden">
-                <div className={cn('h-full rounded-full', approvedCount===totalNonSat?'bg-emerald-400':approvedCount>0?'bg-amber-400':'bg-ink-600')} style={{width:`${(approvedCount/totalNonSat)*100}%`}} />
+                <div className={cn('h-full rounded-full', approvedCount===totalPosts?'bg-emerald-400':approvedCount>0?'bg-amber-400':'bg-ink-600')} style={{width:`${(approvedCount/totalPosts)*100}%`}} />
               </div>
             </div>
           )}
