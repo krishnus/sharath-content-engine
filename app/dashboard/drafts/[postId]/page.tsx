@@ -10,6 +10,7 @@ import {
 import Link from 'next/link'
 import { cn, countWords, PILLAR_LABELS, FORMAT_LABELS, getQuarter } from '@/lib/utils/helpers'
 import DiffView from '@/components/DiffView'
+import CandidateRulesModal, { type CandidateRule } from '@/components/CandidateRulesModal'
 
 // ── Types ─────────────────────────────────────────────────────────────
 type PostData = {
@@ -89,6 +90,9 @@ export default function DraftEditorPage() {
   const [isApproving, setIsApproving]         = useState(false)
   const [approved, setApproved]               = useState(false)
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false)
+  const [candidateRules, setCandidateRules]         = useState<CandidateRule[]>([])
+  const [showCandidates, setShowCandidates]         = useState(false)
+  const [rulesSavedCount, setRulesSavedCount]       = useState<number | null>(null)
 
   const textareaRef  = useRef<HTMLTextAreaElement>(null)
   const saveTimerRef = useRef<ReturnType<typeof setTimeout>>()
@@ -232,8 +236,18 @@ export default function DraftEditorPage() {
         body: JSON.stringify({ postId }),
       })
       if (!res.ok) throw new Error('Approval failed')
+      const json = await res.json()
       setApproved(true)
-      setTimeout(() => router.push('/dashboard'), 1200)
+      // If the engine detected candidate rules from the edit, show the review modal.
+      // If no edits were made (content unchanged), candidateRules will be empty —
+      // in that case just navigate back to the plan.
+      const candidates: CandidateRule[] = json.candidateRules ?? []
+      if (candidates.length > 0) {
+        setCandidateRules(candidates)
+        setShowCandidates(true)
+      } else {
+        setTimeout(() => router.push('/dashboard'), 1000)
+      }
     } catch (err) {
       setGenerateError(err instanceof Error ? err.message : 'Approval failed')
     } finally {
@@ -277,6 +291,23 @@ export default function DraftEditorPage() {
 
   return (
     <div className="flex flex-col h-screen overflow-hidden">
+
+      {/* ── Candidate Rules Modal ────────────────────────────────── */}
+      {showCandidates && (
+        <CandidateRulesModal
+          candidates={candidateRules}
+          sourcePostId={postId}
+          onClose={() => {
+            setShowCandidates(false)
+            router.push('/dashboard')
+          }}
+          onSaved={(count) => {
+            setRulesSavedCount(count)
+            setShowCandidates(false)
+            router.push('/dashboard')
+          }}
+        />
+      )}
 
       {/* ── Top bar ─────────────────────────────────────────────── */}
       <header className="flex items-center justify-between px-5 py-3 border-b border-ink-800 bg-ink-900 shrink-0">
