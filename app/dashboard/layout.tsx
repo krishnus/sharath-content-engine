@@ -4,12 +4,14 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import {
   CalendarDays, BookOpen, Sparkles, BarChart2,
-  Settings, ChevronRight, Flame,
+  Settings, ChevronRight, Flame, Calendar,
 } from 'lucide-react'
 import { cn } from '@/lib/utils/helpers'
+import { useState, useEffect } from 'react'
 
 const NAV = [
   { href: '/dashboard',           label: 'Forward Plan',   icon: CalendarDays, exact: true },
+  { href: '/dashboard/calendar',  label: 'Calendar',       icon: Calendar },
   { href: '/dashboard/arc',       label: 'Story Arc',      icon: BookOpen },
   { href: '/dashboard/rules',     label: 'Voice Rules',    icon: Sparkles },
   { href: '/dashboard/analytics', label: 'Analytics',      icon: BarChart2 },
@@ -77,12 +79,31 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   )
 }
 
-// ── Buffer health pill (sidebar footer) ─────────────────────────────
+// ── Buffer health pill — now fetches real approved post count ────────
 function BufferHealthPill() {
-  // TODO: fetch real count from Supabase
-  const approved = 7
-  const total = 10
-  const pct = Math.round((approved / total) * 100)
+  const [approved, setApproved] = useState(0)
+  const [total, setTotal]       = useState(0)
+
+  useEffect(() => {
+    fetch('/api/plan')
+      .then(r => r.ok ? r.json() : null)
+      .then(data => {
+        if (!data?.weeks) return
+        let app = 0, tot = 0
+        for (const fw of data.weeks) {
+          if (!fw.data) continue
+          for (const post of fw.data.posts ?? []) {
+            tot++
+            if (post.status === 'approved' || post.status === 'published') app++
+          }
+        }
+        setApproved(app)
+        setTotal(tot)
+      })
+      .catch(() => {})
+  }, [])
+
+  const pct    = total > 0 ? Math.round((approved / total) * 100) : 0
   const colour = pct >= 80 ? 'bg-emerald-400' : pct >= 50 ? 'bg-amber-400' : 'bg-red-400'
 
   return (
@@ -92,10 +113,7 @@ function BufferHealthPill() {
         <span className="text-xs font-mono text-cream-muted">{approved}/{total}</span>
       </div>
       <div className="h-1.5 bg-ink-700 rounded-full overflow-hidden">
-        <div
-          className={cn('h-full rounded-full transition-all duration-500', colour)}
-          style={{ width: `${pct}%` }}
-        />
+        <div className={cn('h-full rounded-full transition-all duration-500', colour)} style={{ width: `${pct}%` }} />
       </div>
       <p className="text-xs text-ink-500">{approved} posts approved</p>
     </div>
