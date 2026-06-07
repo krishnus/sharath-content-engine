@@ -3,16 +3,8 @@ import { createClient, createServiceClient } from '@/lib/supabase/server'
 
 export const runtime = 'nodejs'
 
-// POST /api/publish
-// Body: { postId, publishNow, scheduledAt? }
-//
-// Two callers:
-//   1. Draft editor UI  — authenticated user session present
-//   2. Cron job         — passes x-cron-secret header, uses service client
 export async function POST(req: NextRequest) {
   const isCron = req.headers.get('x-cron-secret') === process.env.CRON_SECRET
-
-  // Use service client for cron (bypasses RLS), user client otherwise
   const supabase = isCron ? createServiceClient() : createClient()
 
   if (!isCron) {
@@ -20,22 +12,29 @@ export async function POST(req: NextRequest) {
     if (!user) return NextResponse.json({ error: 'Unauthorised' }, { status: 401 })
   }
 
-  const { postId, publishNow, scheduledAt } = await req.json() as {
-    postId: string
-    publishNow: boolean
-    scheduledAt?: string
-  }
+  const { postId, publishNow, scheduledAt, preview, promotePreview, linkedinPostId } =
+    await req.json() as {
+      postId: string
+      publishNow: boolean
+      scheduledAt?: string
+      preview?: boolean          // publish as LOGGED_IN_MEMBERS for look & feel check
+      promotePreview?: boolean   // update existing preview post to PUBLIC
+      linkedinPostId?: string    // needed for promotePreview
+    }
 
-  // ── Fetch post + current draft ───────────────────────────────────
+  // ── Fetch post + draft ────────────────────────────────────────────
   const { data: post } = await supabase
     .from('posts')
-    .select('*, drafts(*), weeks(user_id)')
+    .select('*, drafts(*), weeks(user_id, week_start)')
     .eq('id', postId)
     .single()
 
   if (!post) return NextResponse.json({ error: 'Post not found' }, { status: 404 })
-  if (post.status !== 'approved' && post.status !== 'scheduled') {
-    return NextResponse.json({ error: 'Post must be approved before publishing' }, { status: 400 })
+
+  if (!preview && !promotePreview) {
+    if (post.status !== 'approved' && post.status !== 'scheduled') {
+      return NextResponse.json({ error: 'Post must be approved before publishing' }, { status: 400 })
+    }
   }
 
   const currentDraft = (post.drafts as Array<{ is_original: boolean; content: string }>)
@@ -46,18 +45,15 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'No draft content found' }, { status: 400 })
   }
 
-  // ── Schedule only ────────────────────────────────────────────────
-  if (!publishNow && scheduledAt) {
-    await supabase
-      .from('posts')
+  // ── Schedule only (no LinkedIn call) ─────────────────────────────
+  if (!publishNow && scheduledAt && !preview) {
+    await supabase.from('posts')
       .update({ status: 'scheduled', scheduled_at: scheduledAt })
       .eq('id', postId)
     return NextResponse.json({ scheduled: true, scheduledAt })
   }
 
-  // ── Get LinkedIn access token from stored tokens table ───────────
-  // Works for both user-initiated and cron publishing since the token
-  // is stored in the DB after OAuth, not tied to session lifetime.
+  // ── Get stored LinkedIn token ─────────────────────────────────────
   const userId = (post.weeks as Array<{ user_id: string }>)?.[0]?.user_id
   const tokenQuery = userId
     ? supabase.from('linkedin_tokens').select('*').eq('user_id', userId).single()
@@ -72,7 +68,6 @@ export async function POST(req: NextRequest) {
     )
   }
 
-  // Check token expiry
   if (new Date(tokenRow.expires_at) < new Date()) {
     return NextResponse.json(
       { error: 'LinkedIn token expired. Please reconnect LinkedIn in Settings.' },
@@ -80,36 +75,74 @@ export async function POST(req: NextRequest) {
     )
   }
 
-  // ── Publish to LinkedIn ──────────────────────────────────────────
-  const result = await callLinkedInAPI(currentDraft.content, tokenRow.access_token, tokenRow.linkedin_id)
+  // ── Promote preview → PUBLIC ──────────────────────────────────────
+  // LinkedIn doesn't support updating visibility after publish,
+  // so we delete the preview post and re-publish as PUBLIC.
+  if (promotePreview && linkedinPostId) {
+    // Delete the preview post
+    await deleteLinkedInPost(linkedinPostId, tokenRow.access_token)
+
+    // Re-publish as PUBLIC
+    const result = await callLinkedInAPI(
+      currentDraft.content, tokenRow.access_token, tokenRow.linkedin_id, 'PUBLIC'
+    )
+    if (!result.success) {
+      await supabase.from('posts').update({ status: 'publish_failed' }).eq('id', postId)
+      return NextResponse.json({ error: result.error }, { status: 502 })
+    }
+
+    await supabase.from('linkedin_posts').upsert({
+      post_id:          postId,
+      linkedin_post_id: result.postId!,
+      linkedin_url:     result.url ?? null,
+      published_at:     new Date().toISOString(),
+    }, { onConflict: 'post_id' })
+
+    await supabase.from('posts').update({ status: 'published' }).eq('id', postId)
+    return NextResponse.json({ published: true, url: result.url })
+  }
+
+  // ── Preview (LOGGED_IN_MEMBERS) or full publish (PUBLIC) ──────────
+  const visibility = preview ? 'LOGGED_IN_MEMBERS' : 'PUBLIC'
+  const result = await callLinkedInAPI(
+    currentDraft.content, tokenRow.access_token, tokenRow.linkedin_id, visibility
+  )
 
   if (!result.success) {
-    await supabase.from('posts').update({ status: 'publish_failed' }).eq('id', postId)
+    if (!preview) {
+      await supabase.from('posts').update({ status: 'publish_failed' }).eq('id', postId)
+    }
     return NextResponse.json({ error: result.error }, { status: 502 })
   }
 
-  // ── Record success ───────────────────────────────────────────────
-  await supabase.from('linkedin_posts').insert({
-    post_id:          postId,
-    linkedin_post_id: result.postId!,
-    linkedin_url:     result.url ?? null,
-    published_at:     new Date().toISOString(),
+  if (!preview) {
+    // Full public publish — record and mark published
+    await supabase.from('linkedin_posts').insert({
+      post_id:          postId,
+      linkedin_post_id: result.postId!,
+      linkedin_url:     result.url ?? null,
+      published_at:     new Date().toISOString(),
+    })
+    await supabase.from('posts').update({ status: 'published' }).eq('id', postId)
+  }
+
+  return NextResponse.json({
+    published:      !preview,
+    preview:        preview ?? false,
+    url:            result.url,
+    linkedinPostId: result.postId,
   })
-
-  await supabase.from('posts').update({ status: 'published' }).eq('id', postId)
-
-  return NextResponse.json({ published: true, url: result.url })
 }
 
 
-// ── LinkedIn UGC Post API ────────────────────────────────────────────
+// ── LinkedIn UGC Post API ─────────────────────────────────────────────
 async function callLinkedInAPI(
   content: string,
   accessToken: string,
   linkedinId: string | null,
+  visibility: 'PUBLIC' | 'LOGGED_IN_MEMBERS' | 'CONNECTIONS',
 ): Promise<{ success: boolean; postId?: string; url?: string; error?: string }> {
   try {
-    // Get author URN — use stored linkedin_id if available, else fetch from userinfo
     let authorUrn: string
 
     if (linkedinId) {
@@ -135,7 +168,7 @@ async function callLinkedInAPI(
         },
       },
       visibility: {
-        'com.linkedin.ugc.MemberNetworkVisibility': 'PUBLIC',
+        'com.linkedin.ugc.MemberNetworkVisibility': visibility,
       },
     }
 
@@ -162,5 +195,20 @@ async function callLinkedInAPI(
     }
   } catch (err) {
     return { success: false, error: err instanceof Error ? err.message : 'Unknown error' }
+  }
+}
+
+// ── Delete a LinkedIn post ────────────────────────────────────────────
+async function deleteLinkedInPost(linkedinPostId: string, accessToken: string): Promise<void> {
+  try {
+    await fetch(`https://api.linkedin.com/v2/ugcPosts/${encodeURIComponent(linkedinPostId)}`, {
+      method: 'DELETE',
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        'X-Restli-Protocol-Version': '2.0.0',
+      },
+    })
+  } catch (err) {
+    console.warn('[publish] Delete preview post failed (non-fatal):', err)
   }
 }
