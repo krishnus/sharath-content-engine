@@ -10,6 +10,7 @@ import {
 import Link from 'next/link'
 import { cn, countWords, PILLAR_LABELS, FORMAT_LABELS, getQuarter } from '@/lib/utils/helpers'
 import DiffView from '@/components/DiffView'
+import PublishPanel from '@/components/PublishPanel'
 import CandidateRulesModal, { type CandidateRule } from '@/components/CandidateRulesModal'
 
 // ── Types ─────────────────────────────────────────────────────────────
@@ -89,6 +90,8 @@ export default function DraftEditorPage() {
   const [generateError, setGenerateError]     = useState<string | null>(null)
   const [isApproving, setIsApproving]         = useState(false)
   const [approved, setApproved]               = useState(false)
+  const [publishedUrl, setPublishedUrl]         = useState<string | null>(null)
+  const [scheduledAt, setScheduledAt]           = useState<string | null>(null)
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false)
   const [candidateRules, setCandidateRules]         = useState<CandidateRule[]>([])
   const [showCandidates, setShowCandidates]         = useState(false)
@@ -112,7 +115,10 @@ export default function DraftEditorPage() {
         setWordCount(countWords(clean))
         setVersions(json.versions ?? [])
         setActiveVersionId(json.currentVersionId ?? null)
-        setApproved(json.post?.status === 'approved')
+        setApproved(json.post?.status === 'approved' || json.post?.status === 'published' || json.post?.status === 'scheduled')
+      if (json.post?.status === 'published' && json.post?.linkedin_url) {
+        setPublishedUrl(json.post.linkedin_url)
+      }
       } catch (err) {
         setLoadError(err instanceof Error ? err.message : 'Failed to load post')
       } finally {
@@ -616,6 +622,31 @@ export default function DraftEditorPage() {
                   </span>
                 )}
               </div>
+            </div>
+          </div>
+        )}
+
+        {/* ── Publish Panel — shown after approval ─────────────── */}
+        {approved && !publishedUrl && (
+          <div className="border-t border-ink-800 p-4 shrink-0">
+            <PublishPanel
+              postId={postId}
+              day={post?.day ?? 'monday'}
+              weekStart={post?.weeks?.week_start ?? new Date().toISOString().slice(0, 10)}
+              onPublished={(url) => setPublishedUrl(url)}
+              onScheduled={(at) => setScheduledAt(at)}
+            />
+          </div>
+        )}
+
+        {/* ── Published confirmation ───────────────────────────── */}
+        {publishedUrl && (
+          <div className="border-t border-ink-800 p-4 shrink-0">
+            <div className="card px-4 py-3 border-emerald-700/30 bg-emerald-900/10 flex items-center justify-between gap-3">
+              <p className="text-sm text-emerald-300 font-medium">Published to LinkedIn</p>
+              <a href={publishedUrl} target="_blank" rel="noopener noreferrer" className="btn-secondary text-xs shrink-0">
+                View post
+              </a>
             </div>
           </div>
         )}

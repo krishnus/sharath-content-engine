@@ -1,6 +1,7 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
+import { useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { Linkedin, CheckCircle2, LogOut, ExternalLink, AlertTriangle, Settings2, Calendar } from 'lucide-react'
 import { cn } from '@/lib/utils/helpers'
@@ -134,25 +135,7 @@ export default function SettingsPage() {
       )}
 
       {/* LinkedIn */}
-      <section className="card p-6 space-y-5">
-        <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-lg bg-[#0A66C2]/20 border border-[#0A66C2]/30 flex items-center justify-center"><Linkedin size={16} className="text-[#0A66C2]" /></div>
-          <div><p className="text-sm font-medium text-cream">LinkedIn</p><p className="text-xs text-ink-400">Required for direct publishing</p></div>
-        </div>
-        <div className="space-y-3">
-          <div className="flex items-start gap-2 px-3 py-2.5 rounded-lg bg-amber-900/15 border border-amber-700/25">
-            <AlertTriangle size={15} className="text-amber-400 mt-0.5 shrink-0" />
-            <p className="text-sm text-amber-300">LinkedIn not connected — direct publishing requires connection.</p>
-          </div>
-          <button onClick={handleLinkedInConnect} disabled={liLoading} className="btn-primary w-full justify-center">
-            <Linkedin size={15} />{liLoading ? 'Connecting...' : 'Connect LinkedIn'}
-          </button>
-          <p className="text-xs text-ink-500 text-center">
-            Requires <code className="text-ink-400 bg-ink-800 px-1 py-0.5 rounded">w_member_social</code> scope.{' '}
-            <a href="https://developer.linkedin.com/docs/guide/v2/sign-in-with-linkedin" target="_blank" rel="noopener noreferrer" className="text-gold-500 hover:underline inline-flex items-center gap-1">Setup guide <ExternalLink size={10} /></a>
-          </p>
-        </div>
-      </section>
+      <LinkedInSection />
 
       {/* Publish times */}
       <section className="card p-6 space-y-4">
@@ -176,5 +159,140 @@ export default function SettingsPage() {
         </button>
       </section>
     </div>
+  )
+}
+
+// ── LinkedIn connection section ──────────────────────────────────────
+function LinkedInSection() {
+  const searchParams = useSearchParams()
+  const [status, setStatus]       = useState<'loading' | 'connected' | 'disconnected'>('loading')
+  const [tokenInfo, setTokenInfo] = useState<{ display_name: string | null; expires_at: string; connected_at: string } | null>(null)
+  const [connecting, setConnecting]   = useState(false)
+  const [disconnecting, setDisconnecting] = useState(false)
+  const [toast, setToast]         = useState<string | null>(null)
+
+  const fetchStatus = useCallback(async () => {
+    try {
+      const res = await fetch('/api/linkedin/status')
+      if (!res.ok) { setStatus('disconnected'); return }
+      const json = await res.json()
+      if (json.connected) {
+        setStatus('connected')
+        setTokenInfo(json.tokenInfo)
+      } else {
+        setStatus('disconnected')
+      }
+    } catch {
+      setStatus('disconnected')
+    }
+  }, [])
+
+  useEffect(() => {
+    fetchStatus()
+    const param = searchParams.get('linkedin')
+    if (param === 'connected') setToast('LinkedIn connected successfully')
+    if (param === 'error' || param === 'no_token') setToast('LinkedIn connection failed — please try again')
+    if (param === 'save_error') setToast('Connected but failed to save token — please try again')
+  }, [fetchStatus, searchParams])
+
+  const handleConnect = async () => {
+    setConnecting(true)
+    const { createClient } = await import('@/lib/supabase/client')
+    const supabase = createClient()
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: 'linkedin_oidc',
+      options: {
+        scopes: 'openid profile email w_member_social r_basicprofile',
+        redirectTo: `${window.location.origin}/api/linkedin/callback`,
+      },
+    })
+    if (error) { setConnecting(false); setToast('Connection failed: ' + error.message) }
+  }
+
+  const handleDisconnect = async () => {
+    setDisconnecting(true)
+    try {
+      await fetch('/api/linkedin/disconnect', { method: 'DELETE' })
+      setStatus('disconnected')
+      setTokenInfo(null)
+      setToast('LinkedIn disconnected')
+    } catch {
+      setToast('Failed to disconnect')
+    } finally {
+      setDisconnecting(false)
+    }
+  }
+
+  return (
+    <section className="card p-6 space-y-5">
+      <div className="flex items-center gap-3">
+        <div className="w-8 h-8 rounded-lg bg-[#0A66C2]/20 border border-[#0A66C2]/30 flex items-center justify-center">
+          <Linkedin size={16} className="text-[#0A66C2]" />
+        </div>
+        <div>
+          <p className="text-sm font-medium text-cream">LinkedIn</p>
+          <p className="text-xs text-ink-400">Required for direct publishing</p>
+        </div>
+        {status === 'connected' && (
+          <span className="ml-auto badge badge-approved">
+            <CheckCircle2 size={10} /> Connected
+          </span>
+        )}
+      </div>
+
+      {toast && (
+        <div className={cn(
+          'px-3 py-2 rounded-lg text-sm flex items-center justify-between gap-2',
+          toast.includes('success') || toast.includes('disconnect')
+            ? 'bg-emerald-900/15 border border-emerald-700/25 text-emerald-300'
+            : 'bg-amber-900/15 border border-amber-700/25 text-amber-300'
+        )}>
+          <span>{toast}</span>
+          <button onClick={() => setToast(null)} className="text-ink-500 hover:text-cream shrink-0">×</button>
+        </div>
+      )}
+
+      {status === 'loading' && (
+        <div className="h-10 bg-ink-800 rounded-lg animate-pulse" />
+      )}
+
+      {status === 'disconnected' && (
+        <div className="space-y-3">
+          <div className="flex items-start gap-2 px-3 py-2.5 rounded-lg bg-amber-900/15 border border-amber-700/25">
+            <AlertTriangle size={15} className="text-amber-400 mt-0.5 shrink-0" />
+            <p className="text-sm text-amber-300">LinkedIn not connected — direct publishing requires connection.</p>
+          </div>
+          <button onClick={handleConnect} disabled={connecting} className="btn-primary w-full justify-center">
+            <Linkedin size={15} />{connecting ? 'Connecting...' : 'Connect LinkedIn'}
+          </button>
+          <p className="text-xs text-ink-500 text-center">
+            Requires <code className="text-ink-400 bg-ink-800 px-1 py-0.5 rounded">w_member_social</code> scope.{' '}
+            <a href="https://developer.linkedin.com/docs/guide/v2/sign-in-with-linkedin" target="_blank" rel="noopener noreferrer" className="text-gold-500 hover:underline inline-flex items-center gap-1">
+              Setup guide <ExternalLink size={10} />
+            </a>
+          </p>
+        </div>
+      )}
+
+      {status === 'connected' && tokenInfo && (
+        <div className="space-y-3">
+          <div className="grid grid-cols-2 gap-3">
+            <div className="card px-3 py-3">
+              <p className="text-xs text-ink-500">Account</p>
+              <p className="text-sm text-cream mt-0.5">{tokenInfo.display_name ?? 'LinkedIn account'}</p>
+            </div>
+            <div className="card px-3 py-3">
+              <p className="text-xs text-ink-500">Token expires</p>
+              <p className="text-sm text-cream mt-0.5">
+                {new Date(tokenInfo.expires_at).toLocaleDateString('en-GB', { day:'numeric', month:'short', year:'numeric' })}
+              </p>
+            </div>
+          </div>
+          <button onClick={handleDisconnect} disabled={disconnecting} className="btn-secondary w-full justify-center text-sm text-red-400 hover:text-red-300">
+            {disconnecting ? 'Disconnecting...' : 'Disconnect LinkedIn'}
+          </button>
+        </div>
+      )}
+    </section>
   )
 }
