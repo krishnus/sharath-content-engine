@@ -21,12 +21,14 @@ export default function PublishPanel({
   weekStart,
   onPublished,
   onScheduled,
+  onPreviewActive,
 }: {
   postId: string
   day: string
   weekStart: string
   onPublished: (url: string) => void
   onScheduled: (scheduledAt: string) => void
+  onPreviewActive?: () => void
 }) {
   const [mode, setMode]                   = useState<Mode>('schedule')
   const [loading, setLoading]             = useState(false)
@@ -85,7 +87,7 @@ export default function PublishPanel({
       if (mode === 'preview') {
         setPreviewUrl(json.url)
         setPreviewPostId(json.linkedinPostId ?? null)
-        // Don't set done — stay in panel so user can promote or delete
+        onPreviewActive?.()  // tell parent not to hide PublishPanel
       } else if (mode === 'now') {
         setPublishedUrl(json.url)
         setDone(true)

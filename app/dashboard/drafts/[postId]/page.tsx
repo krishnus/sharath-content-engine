@@ -92,6 +92,7 @@ export default function DraftEditorPage() {
   const [approved, setApproved]               = useState(false)
   const [publishedUrl, setPublishedUrl]         = useState<string | null>(null)
   const [scheduledAt, setScheduledAt]           = useState<string | null>(null)
+  const [previewActive, setPreviewActive]       = useState(false)
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false)
   const [candidateRules, setCandidateRules]         = useState<CandidateRule[]>([])
   const [showCandidates, setShowCandidates]         = useState(false)
@@ -627,20 +628,21 @@ export default function DraftEditorPage() {
         )}
 
         {/* ── Publish Panel — shown after approval ─────────────── */}
-        {approved && !publishedUrl && (
+        {approved && (!publishedUrl || previewActive) && (
           <div className="border-t border-ink-800 p-4 shrink-0">
             <PublishPanel
               postId={postId}
               day={post?.day ?? 'monday'}
               weekStart={post?.weeks?.week_start ?? new Date().toISOString().slice(0, 10)}
-              onPublished={(url) => setPublishedUrl(url)}
+              onPublished={(url) => { setPublishedUrl(url); setPreviewActive(false) }}
               onScheduled={(at) => setScheduledAt(at)}
+              onPreviewActive={() => setPreviewActive(true)}
             />
           </div>
         )}
 
         {/* ── Published confirmation ───────────────────────────── */}
-        {publishedUrl && (
+        {publishedUrl && !previewActive && (
           <div className="border-t border-ink-800 p-4 shrink-0">
             <div className="card px-4 py-3 border-emerald-700/30 bg-emerald-900/10 flex items-center justify-between gap-3">
               <p className="text-sm text-emerald-300 font-medium">Published to LinkedIn</p>
