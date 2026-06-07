@@ -203,7 +203,7 @@ function LinkedInSection() {
       provider: 'linkedin_oidc',
       options: {
 //        scopes: 'openid profile email w_member_social r_basicprofile',
-        scopes: 'openid profile email',
+        scopes: 'profile email',
         redirectTo: `${window.location.origin}/api/linkedin/callback`,
       },
     })
