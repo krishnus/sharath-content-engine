@@ -2,7 +2,7 @@
   "crons": [
     {
       "path": "/api/cron/publish",
-      "schedule": "0,30 2,3,4 * * *"
+      "schedule": "30 2 * * *"
     },
     {
       "path": "/api/cron/analytics",
