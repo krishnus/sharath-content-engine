@@ -82,7 +82,7 @@ export default function SettingsPage() {
 
   const handleLinkedInConnect = async () => {
     setLiLoading(true)
-    const { error } = await supabase.auth.signInWithOAuth({ provider: 'linkedin_oidc', options: { scopes: 'profile email', redirectTo: `${window.location.origin}/auth/callback?next=/dashboard/settings` } })
+    const { error } = await supabase.auth.signInWithOAuth({ provider: 'linkedin_oidc', options: { scopes: 'profile email w_member_social', redirectTo: `${window.location.origin}/auth/callback?next=/dashboard/settings` } })
     if (error) setLiLoading(false)
   }
 
@@ -202,7 +202,7 @@ function LinkedInSection() {
     const { error } = await supabase.auth.signInWithOAuth({
       provider: 'linkedin_oidc',
       options: {
-        scopes: 'profile email',
+        scopes: 'profile email w_member_social',
         redirectTo: `${window.location.origin}/api/linkedin/callback`,
       },
     })
