@@ -643,12 +643,21 @@ export default function DraftEditorPage() {
 
         {/* ── Published confirmation ───────────────────────────── */}
         {publishedUrl && !previewActive && (
-          <div className="border-t border-ink-800 p-4 shrink-0">
+          <div className="border-t border-ink-800 p-4 shrink-0 space-y-3">
             <div className="card px-4 py-3 border-emerald-700/30 bg-emerald-900/10 flex items-center justify-between gap-3">
               <p className="text-sm text-emerald-300 font-medium">Published to LinkedIn</p>
-              <a href={publishedUrl} target="_blank" rel="noopener noreferrer" className="btn-secondary text-xs shrink-0">
-                View post
-              </a>
+              <div className="flex items-center gap-2 shrink-0">
+                <a href={publishedUrl} target="_blank" rel="noopener noreferrer" className="btn-secondary text-xs">
+                  View post
+                </a>
+                <button
+                  onClick={() => setPublishedUrl(null)}
+                  className="btn-ghost text-xs text-ink-400"
+                  title="Publish again or preview"
+                >
+                  Publish again
+                </button>
+              </div>
             </div>
           </div>
         )}
