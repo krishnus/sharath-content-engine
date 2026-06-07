@@ -1,41 +1,41 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 
-// GET /auth/linkedin/callback
+// GET /api/linkedin/callback
 //
-// Supabase handles the OAuth code exchange and sets the session cookie.
-// This route runs AFTER Supabase's own /auth/callback — we redirect
-// Supabase's callback to here so we can persist the provider_token.
-//
-// In Supabase dashboard → Auth → URL Configuration, set:
-//   Redirect URL: https://your-domain.com/auth/callback
-//   And in your OAuth call: redirectTo = `${origin}/auth/linkedin/callback`
-//
-// Flow:
-//   LinkedIn → Supabase OAuth → /auth/linkedin/callback
-//   This route reads session.provider_token and stores it in linkedin_tokens.
+// LinkedIn → Supabase OAuth → lands here with ?code=...
+// We exchange the code ourselves so we have access to provider_token
+// at the moment of exchange (before it's stripped from SSR cookies).
 
 export async function GET(req: NextRequest) {
-  const supabase = createClient()
+  const { searchParams, origin } = new URL(req.url)
+  const code = searchParams.get('code')
 
-  // By the time this route is called, Supabase SSR has already set the
-  // session cookie (via its own /auth/callback handler).
-  const { data: { session }, error } = await supabase.auth.getSession()
-
-  if (error || !session) {
-    console.error('[linkedin/callback] No session after OAuth:', error)
-    return NextResponse.redirect(new URL('/dashboard/settings?linkedin=error', req.url))
+  if (!code) {
+    console.error('[linkedin/callback] No code in request')
+    return NextResponse.redirect(`${origin}/dashboard/settings?linkedin=error`)
   }
 
+  const supabase = createClient()
+
+  // Exchange code for session — provider_token is available right here
+  const { data, error } = await supabase.auth.exchangeCodeForSession(code)
+
+  if (error || !data.session) {
+    console.error('[linkedin/callback] Code exchange failed:', error)
+    return NextResponse.redirect(`${origin}/dashboard/settings?linkedin=error`)
+  }
+
+  const { session } = data
   const providerToken   = session.provider_token
   const providerRefresh = session.provider_refresh_token
 
   if (!providerToken) {
-    console.error('[linkedin/callback] No provider_token in session')
-    return NextResponse.redirect(new URL('/dashboard/settings?linkedin=no_token', req.url))
+    console.error('[linkedin/callback] No provider_token after exchange')
+    return NextResponse.redirect(`${origin}/dashboard/settings?linkedin=no_token`)
   }
 
-  // Fetch LinkedIn profile to get the member URN and display name
+  // Fetch LinkedIn profile for member URN and display name
   let linkedinId: string | null = null
   let displayName: string | null = null
 
@@ -45,17 +45,16 @@ export async function GET(req: NextRequest) {
     })
     if (profileRes.ok) {
       const profile = await profileRes.json()
-      linkedinId  = profile.sub        ?? null
-      displayName = profile.name       ?? profile.given_name ?? null
+      linkedinId  = profile.sub  ?? null
+      displayName = profile.name ?? profile.given_name ?? null
     }
   } catch (err) {
-    console.warn('[linkedin/callback] Profile fetch failed:', err)
+    console.warn('[linkedin/callback] Profile fetch failed (non-fatal):', err)
   }
 
-  // Token typically expires in 60 days for LinkedIn
+  // LinkedIn access tokens expire in 60 days
   const expiresAt = new Date(Date.now() + 60 * 24 * 60 * 60 * 1000).toISOString()
 
-  // Upsert into linkedin_tokens
   const { error: upsertError } = await supabase
     .from('linkedin_tokens')
     .upsert({
@@ -67,14 +66,12 @@ export async function GET(req: NextRequest) {
       display_name:  displayName,
       connected_at:  new Date().toISOString(),
       updated_at:    new Date().toISOString(),
-    }, {
-      onConflict: 'user_id',
-    })
+    }, { onConflict: 'user_id' })
 
   if (upsertError) {
     console.error('[linkedin/callback] Token upsert failed:', upsertError)
-    return NextResponse.redirect(new URL('/dashboard/settings?linkedin=save_error', req.url))
+    return NextResponse.redirect(`${origin}/dashboard/settings?linkedin=save_error`)
   }
 
-  return NextResponse.redirect(new URL('/dashboard/settings?linkedin=connected', req.url))
+  return NextResponse.redirect(`${origin}/dashboard/settings?linkedin=connected`)
 }
