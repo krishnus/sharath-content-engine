@@ -7,9 +7,14 @@ export async function POST(req: NextRequest) {
   const isCron = req.headers.get('x-cron-secret') === process.env.CRON_SECRET
   const supabase = isCron ? createServiceClient() : createClient()
 
+  // Get authenticated user — for both user-initiated and cron calls
+  // (cron uses service client which bypasses RLS but we still need
+  //  the user id to look up their LinkedIn token)
+  let userId: string | null = null
   if (!isCron) {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return NextResponse.json({ error: 'Unauthorised' }, { status: 401 })
+    userId = user.id
   }
 
   const { postId, publishNow, scheduledAt, preview, promotePreview, linkedinPostId } =
@@ -17,44 +22,59 @@ export async function POST(req: NextRequest) {
       postId: string
       publishNow: boolean
       scheduledAt?: string
-      preview?: boolean          // publish as LOGGED_IN_MEMBERS for look & feel check
-      promotePreview?: boolean   // update existing preview post to PUBLIC
-      linkedinPostId?: string    // needed for promotePreview
+      preview?: boolean
+      promotePreview?: boolean
+      linkedinPostId?: string
     }
 
-  // ── Fetch post + draft ────────────────────────────────────────────
-  const { data: post } = await supabase
+  // ── Fetch post + draft ──────────────────────────────────────────
+  // No user_id join needed — single-user app, token looked up by auth user
+  const { data: post, error: postError } = await supabase
     .from('posts')
-    .select('*, drafts(*), weeks(user_id, week_start)')
+    .select(`
+      id, day, status, week_id,
+      drafts ( id, content, is_original, version ),
+      weeks ( id, week_start )
+    `)
     .eq('id', postId)
     .single()
 
-  if (!post) return NextResponse.json({ error: 'Post not found' }, { status: 404 })
+  if (postError || !post) {
+    console.error('[publish] Post fetch error:', postError)
+    return NextResponse.json({ error: 'Post not found' }, { status: 404 })
+  }
 
   if (!preview && !promotePreview) {
     if (post.status !== 'approved' && post.status !== 'scheduled') {
-      return NextResponse.json({ error: 'Post must be approved before publishing' }, { status: 400 })
+      return NextResponse.json(
+        { error: `Post must be approved before publishing (current status: ${post.status})` },
+        { status: 400 }
+      )
     }
   }
 
-  const currentDraft = (post.drafts as Array<{ is_original: boolean; content: string }>)
-    ?.find(d => !d.is_original) ??
-    (post.drafts as Array<{ is_original: boolean; content: string }>)?.[0]
+  // Pick the most recent edited draft; fall back to original
+  const drafts = (post.drafts as Array<{ id: string; content: string; is_original: boolean; version: number }>)
+  const currentDraft = drafts
+    ?.filter(d => !d.is_original)
+    ?.sort((a, b) => b.version - a.version)[0]
+    ?? drafts?.[0]
 
-  if (!currentDraft?.content) {
+  if (!currentDraft?.content?.trim()) {
     return NextResponse.json({ error: 'No draft content found' }, { status: 400 })
   }
 
-  // ── Schedule only (no LinkedIn call) ─────────────────────────────
-  if (!publishNow && scheduledAt && !preview) {
+  // ── Schedule only ────────────────────────────────────────────────
+  if (!publishNow && !preview && scheduledAt) {
     await supabase.from('posts')
       .update({ status: 'scheduled', scheduled_at: scheduledAt })
       .eq('id', postId)
     return NextResponse.json({ scheduled: true, scheduledAt })
   }
 
-  // ── Get stored LinkedIn token ─────────────────────────────────────
-  const userId = (post.weeks as Array<{ user_id: string }>)?.[0]?.user_id
+  // ── Get LinkedIn token ───────────────────────────────────────────
+  // For cron: take the first (only) token row — single user app
+  // For user calls: match by user id
   const tokenQuery = userId
     ? supabase.from('linkedin_tokens').select('*').eq('user_id', userId).single()
     : supabase.from('linkedin_tokens').select('*').limit(1).single()
@@ -75,14 +95,10 @@ export async function POST(req: NextRequest) {
     )
   }
 
-  // ── Promote preview → PUBLIC ──────────────────────────────────────
-  // LinkedIn doesn't support updating visibility after publish,
-  // so we delete the preview post and re-publish as PUBLIC.
+  // ── Promote preview → PUBLIC ─────────────────────────────────────
   if (promotePreview && linkedinPostId) {
-    // Delete the preview post
     await deleteLinkedInPost(linkedinPostId, tokenRow.access_token)
 
-    // Re-publish as PUBLIC
     const result = await callLinkedInAPI(
       currentDraft.content, tokenRow.access_token, tokenRow.linkedin_id, 'PUBLIC'
     )
@@ -102,7 +118,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ published: true, url: result.url })
   }
 
-  // ── Preview (LOGGED_IN_MEMBERS) or full publish (PUBLIC) ──────────
+  // ── Preview or full publish ──────────────────────────────────────
   const visibility = preview ? 'LOGGED_IN_MEMBERS' : 'PUBLIC'
   const result = await callLinkedInAPI(
     currentDraft.content, tokenRow.access_token, tokenRow.linkedin_id, visibility
@@ -116,7 +132,6 @@ export async function POST(req: NextRequest) {
   }
 
   if (!preview) {
-    // Full public publish — record and mark published
     await supabase.from('linkedin_posts').insert({
       post_id:          postId,
       linkedin_post_id: result.postId!,
@@ -135,7 +150,7 @@ export async function POST(req: NextRequest) {
 }
 
 
-// ── LinkedIn UGC Post API ─────────────────────────────────────────────
+// ── LinkedIn UGC Post API ────────────────────────────────────────────
 async function callLinkedInAPI(
   content: string,
   accessToken: string,
@@ -198,7 +213,7 @@ async function callLinkedInAPI(
   }
 }
 
-// ── Delete a LinkedIn post ────────────────────────────────────────────
+// ── Delete a LinkedIn post ───────────────────────────────────────────
 async function deleteLinkedInPost(linkedinPostId: string, accessToken: string): Promise<void> {
   try {
     await fetch(`https://api.linkedin.com/v2/ugcPosts/${encodeURIComponent(linkedinPostId)}`, {
