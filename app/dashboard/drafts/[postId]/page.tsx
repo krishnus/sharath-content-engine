@@ -651,7 +651,16 @@ export default function DraftEditorPage() {
                   View post
                 </a>
                 <button
-                  onClick={() => setPublishedUrl(null)}
+                  onClick={async () => {
+                    // Reset post status to approved in DB so preview flow works cleanly
+                    await fetch(`/api/posts/${postId}`, {
+                      method: 'PATCH',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ status: 'approved' }),
+                    })
+                    setPublishedUrl(null)
+                    setApproved(true)
+                  }}
                   className="btn-ghost text-xs text-ink-400"
                   title="Publish again or preview"
                 >

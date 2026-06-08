@@ -12,7 +12,6 @@ export async function GET(
 
   const { postId } = params
 
-  // Fetch the post with its week data
   const { data: post, error: postError } = await supabase
     .from('posts')
     .select(`
@@ -33,7 +32,6 @@ export async function GET(
     return NextResponse.json({ error: 'Post not found' }, { status: 404 })
   }
 
-  // Fetch all drafts ordered by version
   const { data: drafts } = await supabase
     .from('drafts')
     .select('*')
@@ -41,7 +39,6 @@ export async function GET(
     .order('version', { ascending: true })
 
   const originalDraft = drafts?.find((d: { is_original: boolean }) => d.is_original)
-  // Latest non-original draft is the current working version
   const nonOriginals  = drafts?.filter((d: { is_original: boolean }) => !d.is_original) ?? []
   const currentDraft  = nonOriginals[nonOriginals.length - 1] ?? originalDraft
 
@@ -51,7 +48,6 @@ export async function GET(
     currentContent:  currentDraft?.content  ?? '',
     wordCount:       currentDraft?.word_count ?? 0,
     hashtags:        currentDraft?.hashtags  ?? [],
-    // All non-original versions for the version picker
     versions: nonOriginals.map((d: { id: string; version: number; word_count: number; created_at: string }) => ({
       id:        d.id,
       version:   d.version,
@@ -60,4 +56,41 @@ export async function GET(
     })),
     currentVersionId: currentDraft?.id ?? null,
   })
+}
+
+// ── PATCH /api/posts/[postId] ─────────────────────────────────────────
+// Allows resetting post status (e.g. published → approved for re-publishing).
+export async function PATCH(
+  req: NextRequest,
+  { params }: { params: { postId: string } }
+) {
+  const supabase = createClient()
+
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return NextResponse.json({ error: 'Unauthorised' }, { status: 401 })
+
+  const { postId } = params
+  const body = await req.json() as { status?: string }
+
+  // Only allow specific safe status transitions
+  const ALLOWED_STATUSES = ['approved', 'draft', 'edited']
+  if (body.status && !ALLOWED_STATUSES.includes(body.status)) {
+    return NextResponse.json(
+      { error: `Status '${body.status}' cannot be set via this endpoint` },
+      { status: 400 }
+    )
+  }
+
+  const updates: Record<string, string> = {}
+  if (body.status) updates.status = body.status
+
+  const { data, error } = await supabase
+    .from('posts')
+    .update(updates)
+    .eq('id', postId)
+    .select('id, status')
+    .single()
+
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  return NextResponse.json({ post: data })
 }
