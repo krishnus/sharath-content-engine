@@ -272,7 +272,7 @@ export default function PublishPanel({
         <div className="px-3 py-2.5 rounded-lg bg-violet-900/15 border border-violet-700/25 space-y-1">
           <p className="text-xs text-violet-300 font-medium">How preview works</p>
           <p className="text-xs text-ink-400">
-            Publishes with <code className="text-ink-300 bg-ink-800 px-1 rounded">LOGGED_IN_MEMBERS</code> visibility —
+            Publishes with <code className="text-ink-300 bg-ink-800 px-1 rounded">DARK</code> visibility —
             only reachable via the direct link, never distributed in anyone's feed.
             You review it on LinkedIn, then either publish publicly or delete it.
           </p>
