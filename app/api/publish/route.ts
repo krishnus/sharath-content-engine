@@ -119,7 +119,7 @@ export async function POST(req: NextRequest) {
   }
 
   // ── Preview or full publish ──────────────────────────────────────
-  const visibility = preview ? 'DARK' : 'PUBLIC'
+  const visibility = preview ? 'LOGGED_IN' : 'PUBLIC'
   const result = await callLinkedInAPI(
     currentDraft.content, tokenRow.access_token, tokenRow.linkedin_id, visibility
   )
@@ -155,7 +155,7 @@ async function callLinkedInAPI(
   content: string,
   accessToken: string,
   linkedinId: string | null,
-  visibility: 'PUBLIC' | 'DARK' | 'CONNECTIONS',
+  visibility: 'PUBLIC' | 'LOGGED_IN' | 'CONNECTIONS',
 ): Promise<{ success: boolean; postId?: string; url?: string; error?: string }> {
   try {
     let authorUrn: string
