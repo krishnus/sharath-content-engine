@@ -3,13 +3,14 @@ import { createClient, createServiceClient } from '@/lib/supabase/server'
 
 export const runtime = 'nodejs'
 
+// LinkedIn /rest/posts hard limit. We target 2900 to leave room for the suffix.
+const LI_MAX_CHARS = 3000
+const LI_SAFE_CHARS = 2900
+
 export async function POST(req: NextRequest) {
   const isCron = req.headers.get('x-cron-secret') === process.env.CRON_SECRET
   const supabase = isCron ? createServiceClient() : createClient()
 
-  // Get authenticated user — for both user-initiated and cron calls
-  // (cron uses service client which bypasses RLS but we still need
-  //  the user id to look up their LinkedIn token)
   let userId: string | null = null
   if (!isCron) {
     const { data: { user } } = await supabase.auth.getUser()
@@ -28,12 +29,11 @@ export async function POST(req: NextRequest) {
     }
 
   // ── Fetch post + draft ──────────────────────────────────────────
-  // No user_id join needed — single-user app, token looked up by auth user
   const { data: post, error: postError } = await supabase
     .from('posts')
     .select(`
       id, day, status, week_id,
-      drafts ( id, content, is_original, version ),
+      drafts ( id, content, linkedin_excerpt, is_original, version ),
       weeks ( id, week_start )
     `)
     .eq('id', postId)
@@ -54,7 +54,14 @@ export async function POST(req: NextRequest) {
   }
 
   // Pick the most recent edited draft; fall back to original
-  const drafts = (post.drafts as Array<{ id: string; content: string; is_original: boolean; version: number }>)
+  const drafts = (post.drafts as Array<{
+    id: string
+    content: string
+    linkedin_excerpt: string | null
+    is_original: boolean
+    version: number
+  }>)
+
   const currentDraft = drafts
     ?.filter(d => !d.is_original)
     ?.sort((a, b) => b.version - a.version)[0]
@@ -63,6 +70,16 @@ export async function POST(req: NextRequest) {
   if (!currentDraft?.content?.trim()) {
     return NextResponse.json({ error: 'No draft content found' }, { status: 400 })
   }
+
+  // ── Resolve what text to publish ────────────────────────────────
+  // Long-form posts (Mon/Wed) have a linkedin_excerpt saved at generation time.
+  // If present, use it. Otherwise, smart-truncate the full content.
+  const isLongForm = post.day === 'monday' || post.day === 'wednesday'
+  const publishText = resolvePublishText(
+    currentDraft.content,
+    currentDraft.linkedin_excerpt ?? null,
+    isLongForm
+  )
 
   // ── Schedule only ────────────────────────────────────────────────
   if (!publishNow && !preview && scheduledAt) {
@@ -73,8 +90,6 @@ export async function POST(req: NextRequest) {
   }
 
   // ── Get LinkedIn token ───────────────────────────────────────────
-  // For cron: take the first (only) token row — single user app
-  // For user calls: match by user id
   const tokenQuery = userId
     ? supabase.from('linkedin_tokens').select('*').eq('user_id', userId).single()
     : supabase.from('linkedin_tokens').select('*').limit(1).single()
@@ -100,7 +115,7 @@ export async function POST(req: NextRequest) {
     await deleteLinkedInPost(linkedinPostId, tokenRow.access_token)
 
     const result = await callLinkedInAPI(
-      currentDraft.content, tokenRow.access_token, tokenRow.linkedin_id, 'PUBLIC'
+      publishText, tokenRow.access_token, tokenRow.linkedin_id, 'PUBLIC'
     )
     if (!result.success) {
       await supabase.from('posts').update({ status: 'publish_failed' }).eq('id', postId)
@@ -121,7 +136,7 @@ export async function POST(req: NextRequest) {
   // ── Preview or full publish ──────────────────────────────────────
   const visibility = preview ? 'LOGGED_IN' : 'PUBLIC'
   const result = await callLinkedInAPI(
-    currentDraft.content, tokenRow.access_token, tokenRow.linkedin_id, visibility
+    publishText, tokenRow.access_token, tokenRow.linkedin_id, visibility
   )
 
   if (!result.success) {
@@ -146,11 +161,57 @@ export async function POST(req: NextRequest) {
     preview:        preview ?? false,
     url:            result.url,
     linkedinPostId: result.postId,
+    // Let the UI know if the published text was a truncated excerpt
+    wasExcerpt:     publishText !== currentDraft.content,
   })
 }
 
 
-// ── LinkedIn UGC Post API ────────────────────────────────────────────
+// ── Resolve what to publish ──────────────────────────────────────────
+// Priority order:
+//   1. linkedin_excerpt saved at generation time (AI-crafted, best quality)
+//   2. Smart truncation at the last paragraph break before LI_SAFE_CHARS
+//   3. Hard truncation with ellipsis as last resort
+function resolvePublishText(
+  fullContent: string,
+  linkedinExcerpt: string | null,
+  isLongForm: boolean,
+): string {
+  // Short content — no action needed
+  if (fullContent.length <= LI_MAX_CHARS) return fullContent
+
+  // Long-form: prefer the AI-crafted excerpt if it exists and fits
+  if (isLongForm && linkedinExcerpt?.trim()) {
+    const excerpt = linkedinExcerpt.trim()
+    if (excerpt.length <= LI_MAX_CHARS) return excerpt
+  }
+
+  // Fall back: smart truncation — cut at the last double-newline before LI_SAFE_CHARS
+  const candidate = fullContent.slice(0, LI_SAFE_CHARS)
+  const lastBreak = candidate.lastIndexOf('\n\n')
+
+  let truncated: string
+  if (lastBreak > LI_SAFE_CHARS * 0.6) {
+    // Good paragraph break found — use it
+    truncated = candidate.slice(0, lastBreak).trimEnd()
+  } else {
+    // No good break — fall back to last sentence end
+    const lastPeriod = candidate.lastIndexOf('.')
+    truncated = lastPeriod > LI_SAFE_CHARS * 0.6
+      ? candidate.slice(0, lastPeriod + 1).trimEnd()
+      : candidate.trimEnd() + '...'
+  }
+
+  // Append the full-article pointer
+  truncated += '\n\n[Full article on coachsharath.com — link in bio]'
+
+  return truncated
+}
+
+
+// ── LinkedIn REST Posts API (/rest/posts) ────────────────────────────
+// Replaces the deprecated /v2/ugcPosts endpoint.
+// The /rest/posts limit is 3,000 characters for personal profiles.
 async function callLinkedInAPI(
   content: string,
   accessToken: string,
@@ -173,25 +234,32 @@ async function callLinkedInAPI(
       authorUrn = `urn:li:person:${profile.sub}`
     }
 
-    const postBody = {
-      author: authorUrn,
-      lifecycleState: 'PUBLISHED',
-      specificContent: {
-        'com.linkedin.ugc.ShareContent': {
-          shareCommentary: { text: content },
-          shareMediaCategory: 'NONE',
-        },
-      },
-      visibility: {
-        'com.linkedin.ugc.MemberNetworkVisibility': visibility,
-      },
+    // Map old visibility values to the /rest/posts enum
+    const visibilityMap: Record<string, string> = {
+      PUBLIC:       'PUBLIC',
+      LOGGED_IN:    'LOGGED_IN',  // preview — visible to logged-in LinkedIn members
+      CONNECTIONS:  'CONNECTIONS',
     }
 
-    const postRes = await fetch('https://api.linkedin.com/v2/ugcPosts', {
+    const postBody = {
+      author:     authorUrn,
+      commentary: content,
+      visibility: visibilityMap[visibility] ?? 'PUBLIC',
+      distribution: {
+        feedDistribution:               'MAIN_FEED',
+        targetEntities:                 [],
+        thirdPartyDistributionChannels: [],
+      },
+      lifecycleState:         'PUBLISHED',
+      isReshareDisabledByAuthor: false,
+    }
+
+    const postRes = await fetch('https://api.linkedin.com/rest/posts', {
       method: 'POST',
       headers: {
-        Authorization: `Bearer ${accessToken}`,
-        'Content-Type': 'application/json',
+        Authorization:              `Bearer ${accessToken}`,
+        'Content-Type':             'application/json',
+        'LinkedIn-Version':         '202501',   // pin to a stable monthly version
         'X-Restli-Protocol-Version': '2.0.0',
       },
       body: JSON.stringify(postBody),
@@ -202,27 +270,46 @@ async function callLinkedInAPI(
       return { success: false, error: `LinkedIn API error (${postRes.status}): ${errBody}` }
     }
 
-    const liPostId = postRes.headers.get('x-restli-id') ?? ''
+    // /rest/posts returns the post URN in the Location header: urn:li:share:123456789
+    const location = postRes.headers.get('location') ?? ''
+    const liPostId = location.split('/').pop() ?? location
+
     return {
       success: true,
       postId:  liPostId,
-      url:     `https://www.linkedin.com/feed/update/${liPostId}/`,
+      url:     liPostId ? `https://www.linkedin.com/feed/update/${liPostId}/` : undefined,
     }
   } catch (err) {
     return { success: false, error: err instanceof Error ? err.message : 'Unknown error' }
   }
 }
 
+
 // ── Delete a LinkedIn post ───────────────────────────────────────────
+// Uses /rest/posts for consistency with the new API.
 async function deleteLinkedInPost(linkedinPostId: string, accessToken: string): Promise<void> {
   try {
-    await fetch(`https://api.linkedin.com/v2/ugcPosts/${encodeURIComponent(linkedinPostId)}`, {
+    // Try /rest/posts first; fall back to /v2/ugcPosts for legacy post IDs
+    const restUrl = `https://api.linkedin.com/rest/posts/${encodeURIComponent(linkedinPostId)}`
+    const res = await fetch(restUrl, {
       method: 'DELETE',
       headers: {
-        Authorization: `Bearer ${accessToken}`,
+        Authorization:      `Bearer ${accessToken}`,
+        'LinkedIn-Version': '202501',
         'X-Restli-Protocol-Version': '2.0.0',
       },
     })
+
+    if (!res.ok && res.status !== 404) {
+      // Fall back to legacy endpoint for any old ugcPost IDs still in the DB
+      await fetch(`https://api.linkedin.com/v2/ugcPosts/${encodeURIComponent(linkedinPostId)}`, {
+        method: 'DELETE',
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          'X-Restli-Protocol-Version': '2.0.0',
+        },
+      })
+    }
   } catch (err) {
     console.warn('[publish] Delete preview post failed (non-fatal):', err)
   }

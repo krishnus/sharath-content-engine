@@ -288,6 +288,35 @@ export function buildGeneratePostPrompt(params: GeneratePostPromptParams): strin
   return lines.join('\n')
 }
 
+export function buildLinkedInExcerptPrompt(fullArticle: string): string {
+  return `You are creating a LinkedIn feed post excerpt from a long-form article written in Sharath Kumar R N's voice.
+
+The excerpt will be published as a standalone LinkedIn post. It must:
+1. Stand alone — make complete sense without the full article
+2. Preserve Sharath's exact voice, sentence rhythm, and philosophical depth
+3. Open with the same hook or an equally strong opening (first 210 characters are critical — LinkedIn cuts here)
+4. Include the core insight of the article — the one idea the reader will carry away
+5. End with the same reflection question or a closely adapted version of it
+6. NOT include phrases like "read the full article", "link in bio", or any external reference — those are added automatically
+7. Be between 1,800 and 2,700 characters (NOT words — characters)
+
+WHAT TO KEEP from the original:
+- The opening hook (first paragraph or the most gripping version of it)
+- The central wisdom — the Vedic reference, banking insight, or coaching story at the heart of the piece
+- The most specific application paragraph (where it lands for the reader)
+- The closing reflection question
+
+WHAT TO CUT:
+- Setup paragraphs that precede the real tension (trim the runway)
+- Supporting examples if the main example is already strong
+- Transitional paragraphs that only serve the long-form structure
+- The callback to previous posts (not needed in the feed excerpt)
+
+CRITICAL: Do not add any preamble, explanation, or commentary. Output ONLY the excerpt text — exactly as it should appear on LinkedIn. No "EXCERPT:" label. No markdown. Just the post.
+
+FULL ARTICLE:
+${fullArticle}`
+}
 
 // ============================================================
 // STORY LOG EXTRACTION PROMPT
