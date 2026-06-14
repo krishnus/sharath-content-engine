@@ -259,7 +259,7 @@ async function callLinkedInAPI(
       headers: {
         Authorization:              `Bearer ${accessToken}`,
         'Content-Type':             'application/json',
-        'LinkedIn-Version':         '202501',   // pin to a stable monthly version
+        'LinkedIn-Version':         '202604',   // pin to a stable monthly version
         'X-Restli-Protocol-Version': '2.0.0',
       },
       body: JSON.stringify(postBody),
@@ -295,7 +295,7 @@ async function deleteLinkedInPost(linkedinPostId: string, accessToken: string): 
       method: 'DELETE',
       headers: {
         Authorization:      `Bearer ${accessToken}`,
-        'LinkedIn-Version': '202501',
+        'LinkedIn-Version': '202504',
         'X-Restli-Protocol-Version': '2.0.0',
       },
     })
