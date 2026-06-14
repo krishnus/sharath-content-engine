@@ -26,13 +26,15 @@ export async function DELETE(req: NextRequest) {
     return NextResponse.json({ error: 'LinkedIn not connected' }, { status: 402 })
   }
 
-  // Delete from LinkedIn
+  // Delete from LinkedIn — normalize the ID first (Location header may already be URL-encoded)
+  const normalizedId = encodeURIComponent(decodeURIComponent(linkedinPostId))
   const delRes = await fetch(
-    `https://api.linkedin.com/v2/ugcPosts/${encodeURIComponent(linkedinPostId)}`,
+    `https://api.linkedin.com/rest/posts/${normalizedId}`,
     {
       method: 'DELETE',
       headers: {
-        Authorization: `Bearer ${tokenRow.access_token}`,
+        Authorization:               `Bearer ${tokenRow.access_token}`,
+        'LinkedIn-Version':          '202604',
         'X-Restli-Protocol-Version': '2.0.0',
       },
     }

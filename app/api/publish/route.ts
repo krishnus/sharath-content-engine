@@ -271,8 +271,9 @@ async function callLinkedInAPI(
     }
 
     // /rest/posts returns the post URN in the Location header: urn:li:share:123456789
+    // The URN may be URL-encoded in the header — decode to a clean canonical form
     const location = postRes.headers.get('location') ?? ''
-    const liPostId = location.split('/').pop() ?? location
+    const liPostId = decodeURIComponent(location.split('/').pop() ?? location)
 
     return {
       success: true,
@@ -290,7 +291,8 @@ async function callLinkedInAPI(
 async function deleteLinkedInPost(linkedinPostId: string, accessToken: string): Promise<void> {
   try {
     // Try /rest/posts first; fall back to /v2/ugcPosts for legacy post IDs
-    const restUrl = `https://api.linkedin.com/rest/posts/${encodeURIComponent(linkedinPostId)}`
+    const normalizedId = encodeURIComponent(decodeURIComponent(linkedinPostId))
+    const restUrl = `https://api.linkedin.com/rest/posts/${normalizedId}`
     const res = await fetch(restUrl, {
       method: 'DELETE',
       headers: {
