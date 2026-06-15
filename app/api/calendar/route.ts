@@ -1,86 +1,90 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
-import { startOfMonth, endOfMonth, format } from 'date-fns'
+import { addWeeks, format, getISOWeek, getYear, startOfISOWeek, parseISO } from 'date-fns'
 
-// GET /api/calendar?year=2026&month=6
+export const runtime = 'nodejs'
+
+// GET /api/calendar?windowStart=YYYY-MM-DD
+// windowStart = the Monday of the "context" week (one before the 5-week display window).
+// Returns 6 ordered week slots (index 0 = context, indices 1-5 = display).
+// Unplanned weeks are returned as stubs with id: null.
 export async function GET(req: NextRequest) {
   const supabase = createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorised' }, { status: 401 })
 
   const { searchParams } = new URL(req.url)
-  const year  = parseInt(searchParams.get('year')  ?? String(new Date().getFullYear()))
-  const month = parseInt(searchParams.get('month') ?? String(new Date().getMonth() + 1))
+  const rawWindowStart = searchParams.get('windowStart')
 
-  const monthStart = startOfMonth(new Date(year, month - 1, 1))
-  const monthEnd   = endOfMonth(monthStart)
+  // Default: context week = 3 weeks before current ISO week
+  // so display weeks = currentWeek-2 … currentWeek+2
+  const defaultContextMonday = startOfISOWeek(addWeeks(new Date(), -3))
+  // Append T00:00:00 to avoid UTC→local shift on date-only strings
+  const contextMonday = rawWindowStart
+    ? parseISO(rawWindowStart.includes('T') ? rawWindowStart : `${rawWindowStart}T00:00:00`)
+    : defaultContextMonday
 
-  // Fetch all weeks whose week_start falls within the month OR overlaps it
-  // (a week starting in late prev month may have days in this month)
+  // 6 week slots: index 0 is the context week (for threading), 1-5 are displayed
+  const slots = Array.from({ length: 6 }, (_, i) => {
+    const monday = addWeeks(contextMonday, i)
+    return {
+      week_start:  format(monday, 'yyyy-MM-dd'),
+      week_number: getISOWeek(monday),
+      year:        getYear(monday),
+    }
+  })
+
+  // Fetch existing weeks in this range
   const { data: weeks, error } = await supabase
     .from('weeks')
     .select(`
-      id, week_number, week_start, theme, quarter, status,
+      id, week_number, year, week_start, theme, quarter, status, open_thread,
       posts (
-        id, day, pillar, format, status, hook_idea, target_word_count
+        id, day, pillar, format, status, hook_idea, target_word_count,
+        drafts ( id ),
+        story_log ( thread_planted )
       )
     `)
-    .gte('week_start', format(new Date(year, month - 1, -6), 'yyyy-MM-dd'))
-    .lte('week_start', format(monthEnd, 'yyyy-MM-dd'))
+    .gte('week_start', slots[0].week_start)
+    .lte('week_start', slots[5].week_start)
     .order('week_start', { ascending: true })
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
-  // Build a flat list of { date, post } pairs the calendar can consume
-  const DAY_OFFSET: Record<string, number> = {
-    monday:    0,
-    tuesday:   1,
-    wednesday: 2,
-    thursday:  3,
-    friday:    4,
-    saturday:  5,
-  }
+  const weeksByStart: Record<string, typeof weeks[0]> = {}
+  for (const w of weeks ?? []) weeksByStart[w.week_start] = w
 
-  type CalendarEntry = {
-    date: string   // YYYY-MM-DD
-    weekId: string
-    weekTheme: string | null
-    weekNumber: number
-    post: {
-      id: string; day: string; pillar: string; format: string
-      status: string; hook_idea: string | null; target_word_count: number | null
+  // Merge DB weeks into ordered slot stubs
+  const result = slots.map(slot => {
+    const w = weeksByStart[slot.week_start]
+    if (w) return w
+    return {
+      id:          null as string | null,
+      week_number: slot.week_number,
+      year:        slot.year,
+      week_start:  slot.week_start,
+      theme:       null as string | null,
+      quarter:     null as string | null,
+      status:      'draft',
+      open_thread: null as string | null,
+      posts:       [] as typeof weeks[0]['posts'],
     }
+  })
+
+  // Arc themes for the centre week's year (for theme proposal calls)
+  const centreYear = slots[3].year
+  const { data: arc } = await supabase
+    .from('annual_arcs')
+    .select('q1_theme, q2_theme, q3_theme, q4_theme')
+    .eq('year', centreYear)
+    .maybeSingle()
+
+  const arcThemes: Record<string, string> = {
+    Q1: arc?.q1_theme ?? 'The Awakening',
+    Q2: arc?.q2_theme ?? 'The Turning',
+    Q3: arc?.q3_theme ?? 'The Becoming',
+    Q4: arc?.q4_theme ?? 'The Integration',
   }
 
-  const entries: CalendarEntry[] = []
-
-  for (const week of weeks ?? []) {
-    const monday = new Date(week.week_start)
-    for (const post of (week.posts ?? [])) {
-      const offset = DAY_OFFSET[post.day] ?? 0
-      const postDate = new Date(monday)
-      postDate.setDate(monday.getDate() + offset)
-
-      // Only include dates within the requested month
-      if (postDate.getMonth() + 1 !== month || postDate.getFullYear() !== year) continue
-
-      entries.push({
-        date:       format(postDate, 'yyyy-MM-dd'),
-        weekId:     week.id,
-        weekTheme:  week.theme,
-        weekNumber: week.week_number,
-        post: {
-          id:               post.id,
-          day:              post.day,
-          pillar:           post.pillar,
-          format:           post.format,
-          status:           post.status,
-          hook_idea:        post.hook_idea,
-          target_word_count: post.target_word_count,
-        },
-      })
-    }
-  }
-
-  return NextResponse.json({ year, month, entries })
+  return NextResponse.json({ weeks: result, arcThemes })
 }

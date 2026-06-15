@@ -1,0 +1,674 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Content Calendar — Hybrid: Spreadsheet + Thread Continuity</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.0.0/tabler-icons.min.css">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --navy: #0C2340;
+    --navy-mid: #1a3a5c;
+    --gold-mid: #f0c040;
+    --bg: #f5f6f8;
+    --surface: #ffffff;
+    --border: #e2e5ea;
+    --border-strong: #c8cdd6;
+    --text-primary: #0d1117;
+    --text-secondary: #5a6270;
+    --text-tertiary: #8892a0;
+    --green-bg: #e8f5ec; --green-text: #1a6b34;
+    --blue-bg: #e6f1fb;  --blue-text: #0c447c;
+    --amber-bg: #faeeda; --amber-text: #633806;
+    --purple-bg: #eeedfe;--purple-text: #3c3489;
+    --red-bg: #fcebeb;   --red-text: #791f1f;
+    --gray-bg: #f1efe8;  --gray-text: #444441;
+    --teal-bg: #e1f5ee;  --teal-text: #085041;
+    --radius-sm: 4px; --radius-md: 8px; --radius-lg: 12px;
+  }
+
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif; font-size: 14px; background: var(--bg); color: var(--text-primary); min-height: 100vh; }
+
+  /* ── Shell ── */
+  .app { display: flex; min-height: 100vh; }
+
+  .sidebar { width: 220px; min-height: 100vh; background: var(--navy); padding: 20px 0; flex-shrink: 0; }
+  .sidebar-logo { padding: 0 18px 20px; font-size: 15px; font-weight: 500; color: #fff; display: flex; align-items: center; gap: 8px; border-bottom: 0.5px solid rgba(255,255,255,0.1); margin-bottom: 8px; }
+  .sidebar-logo i { font-size: 18px; color: var(--gold-mid); }
+  .nav-item { display: flex; align-items: center; gap: 10px; padding: 9px 18px; font-size: 13px; color: rgba(255,255,255,0.6); cursor: pointer; text-decoration: none; transition: background 0.15s; }
+  .nav-item:hover { background: rgba(255,255,255,0.07); color: #fff; }
+  .nav-item.active { background: rgba(255,255,255,0.12); color: #fff; }
+  .nav-item i { font-size: 16px; }
+  .nav-section { font-size: 10px; font-weight: 500; letter-spacing: .07em; color: rgba(255,255,255,0.3); padding: 16px 18px 6px; text-transform: uppercase; }
+
+  .main { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+
+  /* ── Top bar ── */
+  .topbar { background: var(--surface); border-bottom: 0.5px solid var(--border); padding: 14px 24px; display: flex; align-items: center; gap: 16px; }
+  .topbar-title { font-size: 16px; font-weight: 500; }
+  .topbar-sub { font-size: 12px; color: var(--text-tertiary); margin-left: 4px; }
+  .topbar-right { margin-left: auto; display: flex; align-items: center; gap: 10px; }
+
+  .btn { display: inline-flex; align-items: center; gap: 6px; padding: 7px 14px; border-radius: var(--radius-md); font-size: 13px; font-weight: 500; cursor: pointer; border: 0.5px solid var(--border-strong); background: var(--surface); color: var(--text-primary); transition: background 0.15s; }
+  .btn:hover { background: var(--bg); }
+  .btn-primary { background: var(--navy); color: #fff; border-color: var(--navy); }
+  .btn-primary:hover { background: var(--navy-mid); }
+  .btn i { font-size: 15px; }
+
+  /* ── Stats bar ── */
+  .stats-bar { display: flex; gap: 1px; background: var(--border); border-bottom: 0.5px solid var(--border); }
+  .stat-cell { flex: 1; background: var(--surface); padding: 10px 16px; display: flex; align-items: center; gap: 8px; }
+  .stat-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+  .stat-num { font-size: 18px; font-weight: 500; }
+  .stat-lbl { font-size: 11px; color: var(--text-tertiary); }
+
+  /* ── Calendar grid ── */
+  .cal-wrap { flex: 1; overflow-y: auto; }
+
+  .cal-header { display: grid; grid-template-columns: 80px repeat(6, 1fr); background: var(--surface); border-bottom: 1px solid var(--border-strong); position: sticky; top: 0; z-index: 10; }
+  .cal-header-cell { padding: 9px 10px; font-size: 11px; font-weight: 500; color: var(--text-tertiary); letter-spacing: .05em; text-transform: uppercase; border-right: 0.5px solid var(--border); text-align: center; }
+  .cal-header-cell:first-child { text-align: left; }
+  .cal-header-cell:last-child { border-right: none; }
+  .dh-mon { color: #185FA5; }
+  .dh-wed { color: #185FA5; }
+  .dh-sat { color: #854F0B; }
+
+  /* ── Week block ── */
+  .week-block { border-bottom: 1px solid var(--border); }
+  .week-block:last-child { border-bottom: none; }
+
+  /* Each week has up to 3 sub-rows: theme-row, thread-row, posts-row */
+  /* All use the same 80px + 6-col grid base */
+
+  /* ── ROW 1: Theme banner ── */
+  .theme-row { display: grid; grid-template-columns: 80px 1fr; border-bottom: 0.5px solid var(--border); min-height: 38px; }
+
+  .week-meta { border-right: 0.5px solid var(--border); padding: 8px 10px; display: flex; flex-direction: column; justify-content: center; gap: 2px; }
+  .week-num { font-size: 12px; font-weight: 500; }
+  .week-dates { font-size: 10px; color: var(--text-tertiary); }
+  .week-current-badge { font-size: 9px; font-weight: 500; background: var(--blue-bg); color: var(--blue-text); padding: 1px 5px; border-radius: 3px; width: fit-content; margin-top: 2px; }
+
+  /* Theme set */
+  .theme-banner { display: flex; align-items: center; gap: 8px; padding: 0 14px; background: var(--blue-bg); border-left: 3px solid #378ADD; }
+  .theme-banner i { font-size: 13px; color: #378ADD; flex-shrink: 0; }
+  .theme-banner-text { font-size: 12px; font-weight: 500; color: var(--blue-text); flex: 1; }
+  .theme-banner-count { font-size: 10px; color: #185FA5; white-space: nowrap; }
+
+  /* Theme set — muted (theme chosen, plan not yet generated) */
+  .theme-banner.muted { background: var(--gray-bg); border-left-color: #888780; }
+  .theme-banner.muted i { color: #888780; }
+  .theme-banner.muted .theme-banner-text { color: var(--gray-text); }
+  .theme-banner.muted .theme-banner-count { color: var(--text-tertiary); }
+
+  /* Theme complete */
+  .theme-banner.complete { background: var(--green-bg); border-left-color: #1D9E75; }
+  .theme-banner.complete i { color: #1D9E75; }
+  .theme-banner.complete .theme-banner-text { color: var(--green-text); }
+  .theme-banner.complete .theme-banner-count { color: #1a6b34; }
+
+  /* Theme empty */
+  .theme-empty { display: flex; align-items: center; padding: 0 14px; background: var(--surface); }
+  .theme-pick-btn { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; color: var(--text-tertiary); border: 0.5px dashed var(--border-strong); padding: 4px 10px; border-radius: 20px; cursor: pointer; background: var(--bg); transition: all 0.15s; }
+  .theme-pick-btn:hover { border-color: #378ADD; color: var(--blue-text); background: var(--blue-bg); }
+  .theme-pick-btn i { font-size: 11px; }
+
+  /* ── ROW 2: Thread continuity sub-row ── */
+  .thread-row { display: grid; grid-template-columns: 80px 1fr; min-height: 26px; border-bottom: 0.5px solid var(--border); }
+  .thread-gutter { border-right: 0.5px solid var(--border); }
+
+  .thread-content { display: flex; align-items: center; gap: 0; overflow: hidden; }
+
+  /* individual thread segments — can chain incoming + outgoing */
+  .thread-seg { display: flex; align-items: center; gap: 5px; padding: 4px 10px; font-size: 10px; flex-shrink: 0; }
+  .thread-seg + .thread-seg { border-left: 0.5px solid var(--border); }
+
+  .thread-seg.incoming { background: #EAF3FB; }
+  .thread-seg.outgoing { background: #EAF5F0; }
+  .thread-seg.pending  { background: var(--bg); }
+  .thread-seg.none     { background: var(--bg); }
+
+  .thread-seg i { font-size: 11px; flex-shrink: 0; }
+  .thread-seg.incoming i { color: #378ADD; }
+  .thread-seg.outgoing i { color: #1D9E75; }
+  .thread-seg.pending  i { color: var(--border-strong); }
+
+  .thread-label { font-weight: 500; white-space: nowrap; }
+  .thread-seg.incoming .thread-label { color: #185FA5; }
+  .thread-seg.outgoing .thread-label { color: #085041; }
+  .thread-seg.pending  .thread-label { color: var(--text-tertiary); }
+  .thread-seg.none     .thread-label { color: var(--text-tertiary); }
+
+  .thread-text { font-style: italic; color: var(--text-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .thread-seg.pending .thread-text { color: var(--text-tertiary); }
+
+  /* ── ROW 3: Day posts ── */
+  .posts-row { display: grid; grid-template-columns: 80px repeat(6, 1fr); min-height: 76px; }
+  .posts-row-meta { border-right: 0.5px solid var(--border); background: var(--surface); }
+
+  .day-cell { border-right: 0.5px solid var(--border); padding: 8px 8px; background: var(--surface); display: flex; flex-direction: column; gap: 5px; cursor: pointer; transition: background 0.12s; }
+  .day-cell:last-child { border-right: none; }
+  .day-cell:hover { background: #f8f9fb; }
+  .day-cell.locked { background: var(--bg); opacity: 0.5; cursor: default; }
+  .day-cell.locked:hover { background: var(--bg); }
+  .day-cell.today { background: #f0f6ff; }
+
+  .pillar-tag { font-size: 9px; font-weight: 500; letter-spacing: .04em; padding: 2px 5px; border-radius: 3px; text-transform: uppercase; display: inline-block; width: fit-content; }
+  .tag-vedic    { background: var(--purple-bg); color: var(--purple-text); }
+  .tag-banker   { background: var(--blue-bg);   color: var(--blue-text); }
+  .tag-coaching { background: var(--teal-bg);   color: var(--teal-text); }
+  .tag-finance  { background: var(--amber-bg);  color: var(--amber-text); }
+  .tag-inner    { background: var(--gray-bg);   color: var(--gray-text); }
+
+  .post-title { font-size: 11px; color: var(--text-primary); line-height: 1.3; }
+
+  .status-chip { display: inline-flex; align-items: center; gap: 3px; font-size: 10px; padding: 2px 7px; border-radius: 20px; width: fit-content; }
+  .s-published { background: var(--green-bg); color: var(--green-text); }
+  .s-approved  { background: var(--teal-bg);  color: var(--teal-text); }
+  .s-draft     { background: var(--amber-bg); color: var(--amber-text); }
+  .s-planned   { background: var(--gray-bg);  color: var(--gray-text); }
+  .s-waiting   { background: var(--red-bg);   color: var(--red-text); }
+
+  .action-link { font-size: 10px; color: #185FA5; cursor: pointer; display: inline-flex; align-items: center; gap: 2px; }
+  .action-link:hover { text-decoration: underline; }
+  .action-link i { font-size: 10px; }
+
+  /* ── Legend ── */
+  .legend { display: flex; gap: 14px; flex-wrap: wrap; padding: 10px 24px; border-top: 0.5px solid var(--border); background: var(--surface); }
+  .legend-item { display: flex; align-items: center; gap: 5px; font-size: 11px; color: var(--text-secondary); }
+  .legend-dot { width: 7px; height: 7px; border-radius: 50%; }
+
+  /* legend thread key */
+  .legend-thread { display: flex; align-items: center; gap: 5px; font-size: 11px; color: var(--text-secondary); }
+  .legend-thread-bar { width: 18px; height: 4px; border-radius: 2px; }
+
+  /* ── Modal ── */
+  .modal-backdrop { display: none; min-height: 380px; background: rgba(0,0,0,0.35); align-items: center; justify-content: center; }
+  .modal-backdrop.open { display: flex; }
+  .modal { background: var(--surface); border-radius: var(--radius-lg); border: 0.5px solid var(--border); width: 540px; max-width: 95vw; overflow: hidden; }
+  .modal-header { display: flex; align-items: flex-start; padding: 16px 20px; border-bottom: 0.5px solid var(--border); gap: 10px; }
+  .modal-title { font-size: 15px; font-weight: 500; }
+  .modal-sub { font-size: 12px; color: var(--text-secondary); margin-top: 3px; }
+  .modal-close { margin-left: auto; cursor: pointer; color: var(--text-tertiary); font-size: 18px; background: none; border: none; }
+  .modal-close:hover { color: var(--text-primary); }
+  .modal-thread-note { margin: 12px 20px 0; padding: 8px 12px; background: var(--teal-bg); border-left: 3px solid #1D9E75; border-radius: var(--radius-sm); font-size: 11px; color: var(--teal-text); font-style: italic; display: flex; gap: 7px; align-items: flex-start; }
+  .modal-thread-note i { font-size: 13px; color: #1D9E75; flex-shrink: 0; margin-top: 1px; }
+  .modal-body { padding: 12px 20px 20px; display: flex; flex-direction: column; gap: 8px; }
+  .modal-footer { padding: 12px 20px; border-top: 0.5px solid var(--border); display: flex; gap: 8px; justify-content: flex-end; }
+
+  .theme-option { border: 0.5px solid var(--border); border-radius: var(--radius-md); padding: 11px 14px; cursor: pointer; transition: all 0.15s; display: flex; align-items: flex-start; gap: 10px; }
+  .theme-option:hover { border-color: #378ADD; background: var(--blue-bg); }
+  .theme-option.selected { border-color: #185FA5; background: var(--blue-bg); }
+  .theme-option.selected .to-check { display: flex; }
+  .to-check { display: none; width: 18px; height: 18px; border-radius: 50%; background: #185FA5; color: #fff; align-items: center; justify-content: center; flex-shrink: 0; margin-top: 1px; }
+  .to-check i { font-size: 11px; }
+  .to-radio { width: 18px; height: 18px; border-radius: 50%; border: 1.5px solid var(--border-strong); flex-shrink: 0; margin-top: 1px; }
+  .theme-option.selected .to-radio { display: none; }
+  .to-name { font-size: 13px; font-weight: 500; }
+  .to-rationale { font-size: 11px; color: var(--text-secondary); margin-top: 2px; line-height: 1.4; }
+  .to-meta { display: flex; gap: 6px; margin-top: 5px; flex-wrap: wrap; }
+  .to-badge { font-size: 10px; padding: 1px 6px; border-radius: 3px; background: var(--gray-bg); color: var(--gray-text); }
+  .to-badge.teal { background: var(--teal-bg); color: var(--teal-text); }
+</style>
+</head>
+<body>
+
+<div class="app">
+
+  <!-- ── Sidebar ── -->
+  <nav class="sidebar" aria-label="Main navigation">
+    <div class="sidebar-logo">
+      <i class="ti ti-feather" aria-hidden="true"></i> Content Engine
+    </div>
+    <span class="nav-section">Plan</span>
+    <a class="nav-item active" href="#"><i class="ti ti-calendar" aria-hidden="true"></i>Content Calendar</a>
+    <a class="nav-item" href="#"><i class="ti ti-timeline" aria-hidden="true"></i>Story Arc</a>
+    <span class="nav-section">Create</span>
+    <a class="nav-item" href="#"><i class="ti ti-edit" aria-hidden="true"></i>Draft Editor</a>
+    <a class="nav-item" href="#"><i class="ti ti-sparkles" aria-hidden="true"></i>Voice Rules</a>
+    <span class="nav-section">Publish</span>
+    <a class="nav-item" href="#"><i class="ti ti-send" aria-hidden="true"></i>Publishing Queue</a>
+    <a class="nav-item" href="#"><i class="ti ti-chart-bar" aria-hidden="true"></i>Analytics</a>
+    <span class="nav-section">Settings</span>
+    <a class="nav-item" href="#"><i class="ti ti-settings" aria-hidden="true"></i>Settings</a>
+  </nav>
+
+  <!-- ── Main ── -->
+  <div class="main">
+
+    <!-- Top bar -->
+    <div class="topbar">
+      <div>
+        <span class="topbar-title">Content Calendar</span>
+      </div>
+      <div class="topbar-right">
+        <button class="btn" onclick="openModal('w25')">
+          <i class="ti ti-wand" aria-hidden="true"></i> Plan next week
+        </button>
+        <button class="btn btn-primary">
+          <i class="ti ti-calendar-plus" aria-hidden="true"></i> Add week
+        </button>
+      </div>
+    </div>
+
+    <!-- Stats -->
+    <div class="stats-bar" aria-label="Quarter progress">
+      <div class="stat-cell"><div class="stat-dot" style="background:#1a6b34"></div><div><div class="stat-num">14</div><div class="stat-lbl">Published</div></div></div>
+      <div class="stat-cell"><div class="stat-dot" style="background:#085041"></div><div><div class="stat-num">3</div><div class="stat-lbl">Approved</div></div></div>
+      <div class="stat-cell"><div class="stat-dot" style="background:#BA7517"></div><div><div class="stat-num">2</div><div class="stat-lbl">In draft</div></div></div>
+      <div class="stat-cell"><div class="stat-dot" style="background:#444441"></div><div><div class="stat-num">4</div><div class="stat-lbl">Planned</div></div></div>
+      <div class="stat-cell"><div class="stat-dot" style="background:#c8cdd6"></div><div><div class="stat-num">13</div><div class="stat-lbl">Unplanned</div></div></div>
+    </div>
+
+    <!-- Calendar -->
+    <div class="cal-wrap">
+
+      <!-- Sticky column header -->
+      <div class="cal-header" role="row">
+        <div class="cal-header-cell">Week</div>
+        <div class="cal-header-cell dh-mon">Monday<br><span style="font-weight:400;text-transform:none;letter-spacing:0;font-size:9px">Coaching story</span></div>
+        <div class="cal-header-cell">Tuesday<br><span style="font-weight:400;text-transform:none;letter-spacing:0;font-size:9px">Wealth mgmt</span></div>
+        <div class="cal-header-cell dh-wed">Wednesday<br><span style="font-weight:400;text-transform:none;letter-spacing:0;font-size:9px">Vedic / Banker</span></div>
+        <div class="cal-header-cell">Thursday<br><span style="font-weight:400;text-transform:none;letter-spacing:0;font-size:9px">Carousel</span></div>
+        <div class="cal-header-cell">Friday<br><span style="font-weight:400;text-transform:none;letter-spacing:0;font-size:9px">Fin. wellness</span></div>
+        <div class="cal-header-cell dh-sat">Saturday<br><span style="font-weight:400;text-transform:none;letter-spacing:0;font-size:9px">Market insights</span></div>
+      </div>
+
+      <!-- ═══════════════════════════════════════
+           WEEK 23 — complete
+      ═══════════════════════════════════════ -->
+      <div class="week-block">
+
+        <!-- Row 1: Theme banner -->
+        <div class="theme-row">
+          <div class="week-meta">
+            <span class="week-num">Wk 23</span>
+            <span class="week-dates">2–7 Jun</span>
+          </div>
+          <div class="theme-banner complete">
+            <i class="ti ti-bookmark" aria-hidden="true"></i>
+            <span class="theme-banner-text">The Empty Boat — projection &amp; how we assign blame</span>
+            <span class="theme-banner-count">6 / 6 published</span>
+          </div>
+        </div>
+
+        <!-- Row 2: Thread row — outgoing only (week is complete) -->
+        <div class="thread-row">
+          <div class="thread-gutter"></div>
+          <div class="thread-content">
+            <div class="thread-seg outgoing">
+              <i class="ti ti-arrow-right" aria-hidden="true"></i>
+              <span class="thread-label">Thread planted →</span>
+              <span class="thread-text">&nbsp;"When did you last mistake the boat for the rower?"</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Row 3: Posts -->
+        <div class="posts-row">
+          <div class="posts-row-meta"></div>
+          <div class="day-cell">
+            <span class="pillar-tag tag-coaching">Coaching</span>
+            <span class="post-title">The projection habit that cost him a COO role</span>
+            <span class="status-chip s-published"><i class="ti ti-check" style="font-size:9px" aria-hidden="true"></i>Published</span>
+          </div>
+          <div class="day-cell">
+            <span class="pillar-tag tag-finance">Finance</span>
+            <span class="post-title">Portfolio construction philosophy for HNIs</span>
+            <span class="status-chip s-published"><i class="ti ti-check" style="font-size:9px" aria-hidden="true"></i>Published</span>
+          </div>
+          <div class="day-cell">
+            <span class="pillar-tag tag-vedic">Vedic</span>
+            <span class="post-title">Jatayu and the cost of righteous anger</span>
+            <span class="status-chip s-published"><i class="ti ti-check" style="font-size:9px" aria-hidden="true"></i>Published</span>
+          </div>
+          <div class="day-cell">
+            <span class="pillar-tag tag-inner">Inner Work</span>
+            <span class="post-title">5 signs your intelligence is your blind spot</span>
+            <span class="status-chip s-published"><i class="ti ti-check" style="font-size:9px" aria-hidden="true"></i>Published</span>
+          </div>
+          <div class="day-cell">
+            <span class="pillar-tag tag-finance">Finance</span>
+            <span class="post-title">The scarcity mindset and why it keeps you broke</span>
+            <span class="status-chip s-published"><i class="ti ti-check" style="font-size:9px" aria-hidden="true"></i>Published</span>
+          </div>
+          <div class="day-cell">
+            <span class="pillar-tag tag-finance">Finance</span>
+            <span class="post-title">Nifty weekly: what market noise is hiding</span>
+            <span class="status-chip s-published"><i class="ti ti-check" style="font-size:9px" aria-hidden="true"></i>Published</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- ═══════════════════════════════════════
+           WEEK 24 — current, in progress
+      ═══════════════════════════════════════ -->
+      <div class="week-block">
+
+        <!-- Row 1: Theme banner -->
+        <div class="theme-row">
+          <div class="week-meta">
+            <span class="week-num">Wk 24</span>
+            <span class="week-dates">9–14 Jun</span>
+            <span class="week-current-badge">Current</span>
+          </div>
+          <div class="theme-banner">
+            <i class="ti ti-bookmark" aria-hidden="true"></i>
+            <span class="theme-banner-text">Walking Away — the courage of Ranchhordas</span>
+            <span class="theme-banner-count">2 published · 1 approved · 3 in progress</span>
+          </div>
+        </div>
+
+        <!-- Row 2: Thread row — incoming from Wk23 + outgoing pending -->
+        <div class="thread-row">
+          <div class="thread-gutter"></div>
+          <div class="thread-content">
+            <div class="thread-seg incoming">
+              <i class="ti ti-arrow-left" aria-hidden="true"></i>
+              <span class="thread-label">Picked up from Wk 23 →</span>
+              <span class="thread-text">&nbsp;"When did you last mistake the boat for the rower?"</span>
+            </div>
+            <div class="thread-seg pending">
+              <i class="ti ti-arrow-right" aria-hidden="true"></i>
+              <span class="thread-label">Thread for Wk 25</span>
+              <span class="thread-text">&nbsp;Plants in Saturday post · pending publish</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Row 3: Posts -->
+        <div class="posts-row">
+          <div class="posts-row-meta"></div>
+          <div class="day-cell today">
+            <span class="pillar-tag tag-coaching">Coaching</span>
+            <span class="post-title">The banker who walked away — and why it changed everything</span>
+            <span class="status-chip s-published"><i class="ti ti-check" style="font-size:9px" aria-hidden="true"></i>Published</span>
+          </div>
+          <div class="day-cell today">
+            <span class="pillar-tag tag-finance">Finance</span>
+            <span class="post-title">When to walk away from a trade: risk logic vs ego</span>
+            <span class="status-chip s-approved">Approved</span>
+            <span class="action-link"><i class="ti ti-send" aria-hidden="true"></i>Publish now</span>
+          </div>
+          <div class="day-cell today">
+            <span class="pillar-tag tag-vedic">Vedic</span>
+            <span class="post-title">Ranchhordas: the name for Krishna no one talks about</span>
+            <span class="status-chip s-draft">Draft</span>
+            <span class="action-link"><i class="ti ti-edit" aria-hidden="true"></i>Open editor</span>
+          </div>
+          <div class="day-cell today">
+            <span class="pillar-tag tag-inner">Inner Work</span>
+            <span class="post-title">Knowing when to leave — carousel</span>
+            <span class="status-chip s-planned">Planned</span>
+            <span class="action-link"><i class="ti ti-sparkles" aria-hidden="true"></i>Generate</span>
+          </div>
+          <div class="day-cell today">
+            <span class="pillar-tag tag-finance">Finance</span>
+            <span class="post-title">The emotional cost of the wrong job</span>
+            <span class="status-chip s-planned">Planned</span>
+            <span class="action-link"><i class="ti ti-sparkles" aria-hidden="true"></i>Generate</span>
+          </div>
+          <div class="day-cell today">
+            <span class="pillar-tag tag-finance">Finance</span>
+            <span class="post-title">Market insight — awaiting Nifty data</span>
+            <span class="status-chip s-waiting"><i class="ti ti-clock" style="font-size:9px" aria-hidden="true"></i>Awaiting data</span>
+            <span class="action-link"><i class="ti ti-database" aria-hidden="true"></i>Enter market data</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- ═══════════════════════════════════════
+           WEEK 25 — no theme yet
+      ═══════════════════════════════════════ -->
+      <div class="week-block">
+
+        <!-- Row 1: Theme banner — empty state -->
+        <div class="theme-row">
+          <div class="week-meta">
+            <span class="week-num">Wk 25</span>
+            <span class="week-dates">16–21 Jun</span>
+          </div>
+          <div class="theme-empty" id="theme-area-25">
+            <button class="theme-pick-btn" onclick="openModal('w25')">
+              <i class="ti ti-wand" aria-hidden="true"></i>
+              Choose theme for this week
+            </button>
+          </div>
+        </div>
+
+        <!-- Row 2: Thread row — incoming pending (Wk24 not complete yet) -->
+        <div class="thread-row" id="thread-row-25">
+          <div class="thread-gutter"></div>
+          <div class="thread-content">
+            <div class="thread-seg pending">
+              <i class="ti ti-arrow-left" aria-hidden="true"></i>
+              <span class="thread-label">Incoming thread</span>
+              <span class="thread-text">&nbsp;Will populate once Wk 24 Saturday post is published</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Row 3: Posts — locked until theme set -->
+        <div class="posts-row" id="posts-25">
+          <div class="posts-row-meta"></div>
+          <div class="day-cell locked"><span class="post-title" style="color:var(--text-tertiary);font-size:10px">Choose theme first</span></div>
+          <div class="day-cell locked"><span class="post-title" style="color:var(--text-tertiary);font-size:10px">Choose theme first</span></div>
+          <div class="day-cell locked"><span class="post-title" style="color:var(--text-tertiary);font-size:10px">Choose theme first</span></div>
+          <div class="day-cell locked"><span class="post-title" style="color:var(--text-tertiary);font-size:10px">Choose theme first</span></div>
+          <div class="day-cell locked"><span class="post-title" style="color:var(--text-tertiary);font-size:10px">Choose theme first</span></div>
+          <div class="day-cell locked"><span class="post-title" style="color:var(--text-tertiary);font-size:10px">Choose theme first</span></div>
+        </div>
+      </div>
+
+      <!-- ═══════════════════════════════════════
+           WEEK 26 — theme set, plan not yet generated
+      ═══════════════════════════════════════ -->
+      <div class="week-block">
+
+        <!-- Row 1: Theme banner — muted state -->
+        <div class="theme-row">
+          <div class="week-meta">
+            <span class="week-num">Wk 26</span>
+            <span class="week-dates">23–28 Jun</span>
+          </div>
+          <div class="theme-banner muted">
+            <i class="ti ti-bookmark" aria-hidden="true"></i>
+            <span class="theme-banner-text">Portfolio Thinking — applying investment logic to life decisions</span>
+            <button class="btn" style="font-size:11px;padding:4px 10px;flex-shrink:0" onclick="openModal('w26')">
+              <i class="ti ti-layout-grid" aria-hidden="true"></i> Generate plan
+            </button>
+          </div>
+        </div>
+
+        <!-- Row 2: Thread row — nothing yet -->
+        <div class="thread-row">
+          <div class="thread-gutter"></div>
+          <div class="thread-content">
+            <div class="thread-seg none">
+              <i class="ti ti-dots" aria-hidden="true"></i>
+              <span class="thread-label">Thread</span>
+              <span class="thread-text">&nbsp;Will carry forward from Wk 25 once published</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Row 3: Posts — locked -->
+        <div class="posts-row">
+          <div class="posts-row-meta"></div>
+          <div class="day-cell locked"><span class="post-title" style="color:var(--text-tertiary);font-size:10px">Generate plan first</span></div>
+          <div class="day-cell locked"><span class="post-title" style="color:var(--text-tertiary);font-size:10px">Generate plan first</span></div>
+          <div class="day-cell locked"><span class="post-title" style="color:var(--text-tertiary);font-size:10px">Generate plan first</span></div>
+          <div class="day-cell locked"><span class="post-title" style="color:var(--text-tertiary);font-size:10px">Generate plan first</span></div>
+          <div class="day-cell locked"><span class="post-title" style="color:var(--text-tertiary);font-size:10px">Generate plan first</span></div>
+          <div class="day-cell locked"><span class="post-title" style="color:var(--text-tertiary);font-size:10px">Generate plan first</span></div>
+        </div>
+      </div>
+
+    </div><!-- /cal-wrap -->
+
+    <!-- Legend -->
+    <div class="legend" aria-label="Status and thread legend">
+      <div class="legend-item"><div class="legend-dot" style="background:#1a6b34"></div>Published</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#085041"></div>Approved</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#BA7517"></div>Draft</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#444441"></div>Planned</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#D85A30"></div>Awaiting data</div>
+      <div style="width:1px;background:var(--border);margin:0 4px"></div>
+      <div class="legend-thread"><div class="legend-thread-bar" style="background:#1D9E75"></div>Thread planted</div>
+      <div class="legend-thread"><div class="legend-thread-bar" style="background:#378ADD"></div>Thread picked up</div>
+      <div class="legend-thread"><div class="legend-thread-bar" style="background:var(--border-strong)"></div>Thread pending</div>
+    </div>
+
+  </div><!-- /main -->
+</div><!-- /app -->
+
+<!-- ── Theme picker modal ── -->
+<div class="modal-backdrop" id="theme-modal" role="dialog" aria-modal="true" aria-label="Choose theme">
+  <div class="modal">
+    <div class="modal-header">
+      <div>
+        <div class="modal-title">Choose theme for <span id="modal-week-label">Week 25</span></div>
+        <div class="modal-sub">AI-proposed themes based on your Q2 arc and last week's open thread</div>
+      </div>
+      <button class="modal-close" onclick="closeModal()" aria-label="Close"><i class="ti ti-x" aria-hidden="true"></i></button>
+    </div>
+
+    <!-- Thread context shown in the modal -->
+    <div class="modal-thread-note">
+      <i class="ti ti-arrow-left" aria-hidden="true"></i>
+      Picking up from Wk 24: "What would you do if you had Ranchhordas's courage this week?" — all proposals continue this thread.
+    </div>
+
+    <div class="modal-body">
+      <div class="theme-option" id="opt1" onclick="selectTheme(1)">
+        <div class="to-radio"></div>
+        <div class="to-check"><i class="ti ti-check" aria-hidden="true"></i></div>
+        <div>
+          <div class="to-name">The Crossroads — when the old road ends</div>
+          <div class="to-rationale">Natural next beat after "walking away." Explores what follows the leap — uncertainty as invitation, not failure. Strongest Category B resonance in Q2.</div>
+          <div class="to-meta">
+            <span class="to-badge">Category B</span>
+            <span class="to-badge">Coaching Transformation</span>
+            <span class="to-badge teal">Continues Wk 24 thread</span>
+          </div>
+        </div>
+      </div>
+      <div class="theme-option" id="opt2" onclick="selectTheme(2)">
+        <div class="to-radio"></div>
+        <div class="to-check"><i class="ti ti-check" aria-hidden="true"></i></div>
+        <div>
+          <div class="to-name">Jambavan's gift — reminding others of their greatness</div>
+          <div class="to-rationale">The mythological coaching archetype. Jambavan reminded Hanuman of his forgotten power. High shareability across Category A and B audiences.</div>
+          <div class="to-meta">
+            <span class="to-badge">Category A / B</span>
+            <span class="to-badge">Vedic-Leadership</span>
+          </div>
+        </div>
+      </div>
+      <div class="theme-option" id="opt3" onclick="selectTheme(3)">
+        <div class="to-radio"></div>
+        <div class="to-check"><i class="ti ti-check" aria-hidden="true"></i></div>
+        <div>
+          <div class="to-name">The hidden game — how smart people stop growing</div>
+          <div class="to-rationale">Intelligence as a career trap. Connects the trading floor pattern to self-coaching insights. Particularly strong for senior tech and finance professionals.</div>
+          <div class="to-meta">
+            <span class="to-badge">Category B</span>
+            <span class="to-badge">Banker-Coach</span>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-primary" id="confirm-btn" onclick="confirmTheme()" disabled style="opacity:.5;cursor:not-allowed">
+        <i class="ti ti-check" aria-hidden="true"></i> Confirm &amp; generate plan
+      </button>
+    </div>
+  </div>
+</div>
+
+<script>
+  var selected = null;
+  var currentWeek = 'w25';
+  var themes = {
+    1: 'The Crossroads — when the old road ends',
+    2: "Jambavan's gift — reminding others of their greatness",
+    3: 'The hidden game — how smart people stop growing'
+  };
+
+  function openModal(week) {
+    currentWeek = week;
+    document.getElementById('theme-modal').classList.add('open');
+    document.getElementById('modal-week-label').textContent = week === 'w25' ? 'Week 25' : 'Week 26';
+    selected = null;
+    [1,2,3].forEach(function(i){ document.getElementById('opt'+i).classList.remove('selected'); });
+    var btn = document.getElementById('confirm-btn');
+    btn.disabled = true; btn.style.opacity = '.5'; btn.style.cursor = 'not-allowed';
+  }
+
+  function closeModal() {
+    document.getElementById('theme-modal').classList.remove('open');
+  }
+
+  function selectTheme(n) {
+    selected = n;
+    [1,2,3].forEach(function(i){ document.getElementById('opt'+i).classList.remove('selected'); });
+    document.getElementById('opt'+n).classList.add('selected');
+    var btn = document.getElementById('confirm-btn');
+    btn.disabled = false; btn.style.opacity = '1'; btn.style.cursor = 'pointer';
+  }
+
+  function confirmTheme() {
+    if (!selected) return;
+    closeModal();
+
+    if (currentWeek === 'w25') {
+      /* ── Update Row 1: theme banner ── */
+      var area = document.getElementById('theme-area-25');
+      if (area) {
+        area.outerHTML =
+          '<div class="theme-banner" style="border-left-color:#378ADD;background:var(--blue-bg)">' +
+            '<i class="ti ti-bookmark" aria-hidden="true"></i>' +
+            '<span class="theme-banner-text">' + themes[selected] + '</span>' +
+            '<span class="theme-banner-count">Theme set · 6 posts generating…</span>' +
+          '</div>';
+      }
+
+      /* ── Update Row 2: thread row — incoming becomes confirmed ── */
+      var trow = document.getElementById('thread-row-25');
+      if (trow) {
+        trow.querySelector('.thread-content').innerHTML =
+          '<div class="thread-seg incoming">' +
+            '<i class="ti ti-arrow-left" aria-hidden="true"></i>' +
+            '<span class="thread-label">Picking up from Wk 24 →</span>' +
+            '<span class="thread-text">&nbsp;"What would you do with Ranchhordas\'s courage this week?"</span>' +
+          '</div>' +
+          '<div class="thread-seg pending">' +
+            '<i class="ti ti-arrow-right" aria-hidden="true"></i>' +
+            '<span class="thread-label">Thread for Wk 26</span>' +
+            '<span class="thread-text">&nbsp;Will plant in Saturday post</span>' +
+          '</div>';
+      }
+
+      /* ── Update Row 3: unlock day cells ── */
+      var postsRow = document.getElementById('posts-25');
+      if (postsRow) {
+        var pillars     = ['tag-coaching','tag-finance','tag-vedic','tag-inner','tag-finance','tag-finance'];
+        var pillarNames = ['Coaching','Finance','Vedic','Inner Work','Finance','Finance'];
+        var titles      = ['Coaching story · long-form','Wealth management post','Vedic-leadership article','Carousel · inner work','Financial wellness post','Market insights'];
+        var cells = postsRow.querySelectorAll('.day-cell');
+        cells.forEach(function(c, i) {
+          c.classList.remove('locked');
+          c.innerHTML =
+            '<span class="pillar-tag ' + pillars[i] + '">' + pillarNames[i] + '</span>' +
+            '<span class="post-title" style="color:var(--text-secondary)">' + titles[i] + '</span>' +
+            '<span class="status-chip s-planned">Planned</span>' +
+            '<span class="action-link"><i class="ti ti-sparkles" aria-hidden="true"></i>Generate</span>';
+        });
+      }
+    }
+  }
+</script>
+</body>
+</html>
