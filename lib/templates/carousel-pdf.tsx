@@ -14,6 +14,8 @@ Font.register({
   ],
 })
 
+Font.register({ family: 'NotoDevanagari', src: FONT_PATHS.devanagari })
+
 // 1080×1080 pt square (LinkedIn carousel optimal size)
 const SIZE = 1080
 
@@ -29,6 +31,13 @@ const S = StyleSheet.create({
     backgroundColor: BRAND_BLUE,
     padding:         80,
     justifyContent:  'space-between',
+  },
+  logoBox: {
+    backgroundColor:  '#FFFFFF',
+    borderRadius:     4,
+    paddingHorizontal: 8,
+    paddingVertical:  4,
+    alignSelf:        'flex-start',
   },
   logoOnDark: {
     width:  120,
@@ -218,7 +227,9 @@ function CarouselDocument({ theme, titleSlide, slides, pillar, quarter, weekNumb
 
       {/* Slide 1 — Title */}
       <Page size={[SIZE, SIZE]} style={S.titlePage}>
-        <Image src={logoSrc} style={S.logoOnDark} />
+        <View style={S.logoBox}>
+          <Image src={logoSrc} style={S.logoOnDark} />
+        </View>
         <View>
           <View style={S.titleGoldRule} />
           <Text style={S.titleText}>{titleSlide}</Text>
@@ -254,7 +265,9 @@ function CarouselDocument({ theme, titleSlide, slides, pillar, quarter, weekNumb
         <View style={S.ctaGoldRule} />
         <Text style={S.ctaHeadline}>Follow for weekly insights</Text>
         <Text style={S.ctaSub}>Executive coaching · Vedic wisdom · Financial intelligence</Text>
-        <Image src={logoSrc} style={S.ctaLogoLg} />
+        <View style={{ backgroundColor: '#FFFFFF', borderRadius: 4, paddingHorizontal: 10, paddingVertical: 6 }}>
+          <Image src={logoSrc} style={S.ctaLogoLg} />
+        </View>
       </Page>
 
     </Document>
@@ -281,20 +294,44 @@ export function parseCarouselSlides(content: string): { titleSlide: string; slid
   }
 
   for (const line of lines) {
-    // Match "SLIDE N | HEADLINE: ..." or "SLIDE N:" or "## Slide N"
-    const slideMatch = line.match(/^(?:SLIDE\s*\d+\s*\|?\s*)?HEADLINE:\s*(.+)/i)
-    const bodyMatch  = line.match(/^BODY:\s*(.+)/i)
-    const slideStart = line.match(/^(?:#{1,3}|SLIDE\s*\d+)\s*[:|]\s*/i)
+    if (line.match(/^(WORD_COUNT|CORE_INSIGHT|CALLBACK_USED|THREAD_PLANTED|REFERENCES|HASHTAGS|LINKEDIN_CAPTION|QUOTE):/)) {
+      continue
+    }
 
-    if (slideMatch) {
+    // Single-line format: "SLIDE N | HEADLINE: title | BODY: body text"
+    const singleLine = line.match(/^SLIDE\s*\d+\s*\|\s*HEADLINE:\s*(.+?)\s*\|\s*BODY:\s*(.+)/i)
+    if (singleLine) {
       flushSlide()
-      currentHeadline = slideMatch[1].trim()
-    } else if (bodyMatch) {
-      currentBodyLines.push(bodyMatch[1].trim())
-    } else if (slideStart) {
+      currentHeadline = singleLine[1].trim()
+      currentBodyLines = [singleLine[2].trim()]
+      continue
+    }
+
+    // Multi-line: "HEADLINE: title" on its own line
+    const headlineOnly = line.match(/^(?:SLIDE\s*\d+\s*\|?\s*)?HEADLINE:\s*(.+)/i)
+    if (headlineOnly) {
+      flushSlide()
+      currentHeadline = headlineOnly[1].trim()
+      continue
+    }
+
+    // Multi-line: "BODY: text" on its own line
+    const bodyOnly = line.match(/^BODY:\s*(.+)/i)
+    if (bodyOnly) {
+      currentBodyLines.push(bodyOnly[1].trim())
+      continue
+    }
+
+    // Fallback: markdown heading or "SLIDE N:" style
+    const slideStart = line.match(/^(?:#{1,3}|SLIDE\s*\d+)\s*[:|]\s*/i)
+    if (slideStart) {
       flushSlide()
       currentHeadline = line.replace(slideStart[0], '').trim()
-    } else if (currentHeadline && line.trim() && !line.match(/^(WORD_COUNT|HASHTAGS|LINKEDIN_CAPTION|QUOTE):/)) {
+      continue
+    }
+
+    // Continuation body line
+    if (currentHeadline && line.trim()) {
       currentBodyLines.push(line.trim())
     }
   }

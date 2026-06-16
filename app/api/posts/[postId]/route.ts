@@ -41,9 +41,16 @@ export async function GET(
   const nonOriginals  = drafts?.filter((d: { is_original: boolean }) => !d.is_original) ?? []
   const currentDraft  = nonOriginals[nonOriginals.length - 1] ?? originalDraft
 
+  // Parse quote/caption suggestions from original draft (never auto-saved, keeps all metadata)
+  const originalContent = originalDraft?.content ?? ''
+  const getMetaField = (key: string): string | null => {
+    const line = originalContent.split('\n').find((l: string) => l.startsWith(`${key}:`))
+    return line ? line.slice(key.length + 1).trim() || null : null
+  }
+
   return NextResponse.json({
     post,
-    originalContent: originalDraft?.content ?? '',
+    originalContent,
     currentContent:  currentDraft?.content  ?? '',
     wordCount:       currentDraft?.word_count ?? 0,
     hashtags:        currentDraft?.hashtags  ?? [],
@@ -55,6 +62,10 @@ export async function GET(
     })),
     currentVersionId: currentDraft?.id ?? null,
     media: mediaRecords ?? [],
+    // Pre-computed suggestions for MediaPanel text fields
+    suggestedTitle: (post as Record<string, unknown>).hook_idea as string | null
+      || getMetaField('CORE_INSIGHT'),
+    suggestedQuote: getMetaField('QUOTE'),
   })
 }
 

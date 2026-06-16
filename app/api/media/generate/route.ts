@@ -18,9 +18,11 @@ export async function POST(req: NextRequest) {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorised' }, { status: 401 })
 
-  const { postId, mediaType } = await req.json() as {
+  const { postId, mediaType, customTitle, customQuote } = await req.json() as {
     postId: string
     mediaType: MediaType
+    customTitle?: string   // user-confirmed title override for article_pdf
+    customQuote?: string   // user-confirmed quote override for quote_png
   }
 
   // ── Fetch post + current draft ────────────────────────────────────────
@@ -80,7 +82,7 @@ export async function POST(req: NextRequest) {
       // Title: use the planned hook_idea (article angle set during planning),
       // fall back to CORE_INSIGHT from the generated metadata, then a generic label
       const hookIdea = (post as unknown as { hook_idea: string | null }).hook_idea
-      const rawTitle = hookIdea || meta.coreInsight || 'Weekly Article'
+      const rawTitle = customTitle || hookIdea || meta.coreInsight || 'Weekly Article'
       const title = rawTitle.length > 100 ? rawTitle.slice(0, 97) + '...' : rawTitle
 
       fileBuffer = await generateArticlePDF({
@@ -112,7 +114,7 @@ export async function POST(req: NextRequest) {
       mimeType = 'application/pdf'
 
     } else if (mediaType === 'quote_png') {
-      const quote = meta.quote ?? extractFallbackQuote(meta.content)
+      const quote = customQuote || meta.quote || extractFallbackQuote(meta.content)
 
       fileBuffer = await generateQuoteImage({
         quote,

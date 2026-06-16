@@ -22,6 +22,13 @@ type MediaPanelProps = {
   onCaptionChange?: (caption: string) => void
 }
 
+// Which field the confirmedText maps to for each media type
+const TEXT_FIELD_CONFIG: Record<MediaType, { label: string; placeholder: string; multiline: boolean } | null> = {
+  article_pdf:  { label: 'Article title', placeholder: 'Enter the article title…', multiline: false },
+  carousel_pdf: null,
+  quote_png:    { label: 'Quote text', placeholder: 'Enter the quote to feature…', multiline: true },
+}
+
 const MEDIA_CONFIG: Record<string, { type: MediaType; label: string; icon: typeof FileText; desc: string }> = {
   long_form_article: {
     type:  'article_pdf',
@@ -58,6 +65,7 @@ export default function MediaPanel({ postId, format, onCaptionChange }: MediaPan
   const [error, setError]             = useState<string | null>(null)
   const [caption, setCaption]         = useState('')
   const [captionDirty, setCaptionDirty] = useState(false)
+  const [confirmedText, setConfirmedText] = useState('')  // user-editable title or quote
 
   // Load existing media on mount
   useEffect(() => {
@@ -72,6 +80,14 @@ export default function MediaPanel({ postId, format, onCaptionChange }: MediaPan
       const res = await fetch(`/api/posts/${postId}`)
       if (!res.ok) return
       const data = await res.json()
+
+      // Pre-populate confirmedText with suggested title/quote from post metadata
+      if (config?.type === 'article_pdf' && data.suggestedTitle) {
+        setConfirmedText(data.suggestedTitle)
+      } else if (config?.type === 'quote_png' && data.suggestedQuote) {
+        setConfirmedText(data.suggestedQuote)
+      }
+
       const existing = data.media?.find((m: { media_type: string }) => m.media_type === config?.type)
       if (existing) {
         // Get fresh signed URL
@@ -104,10 +120,14 @@ export default function MediaPanel({ postId, format, onCaptionChange }: MediaPan
     setGenerating(true)
     setError(null)
     try {
+      const body: Record<string, string> = { postId, mediaType: config.type }
+      if (config.type === 'article_pdf' && confirmedText) body.customTitle = confirmedText
+      if (config.type === 'quote_png'   && confirmedText) body.customQuote = confirmedText
+
       const res = await fetch('/api/media/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ postId, mediaType: config.type }),
+        body: JSON.stringify(body),
       })
       if (!res.ok) {
         const err = await res.json()
@@ -184,6 +204,7 @@ export default function MediaPanel({ postId, format, onCaptionChange }: MediaPan
 
   const Icon = config.icon
   const fileSizeMB = media ? (media.fileSize / 1024 / 1024).toFixed(1) : null
+  const textFieldCfg = TEXT_FIELD_CONFIG[config.type]
 
   return (
     <div className="border border-ink-800 rounded-xl overflow-hidden">
@@ -223,6 +244,31 @@ export default function MediaPanel({ postId, format, onCaptionChange }: MediaPan
           /* Generate button */
           <div className="space-y-2">
             <p className="text-xs text-ink-500">{config.desc}</p>
+
+            {/* Editable title / quote field */}
+            {textFieldCfg && (
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-ink-400">{textFieldCfg.label}</label>
+                {textFieldCfg.multiline ? (
+                  <textarea
+                    value={confirmedText}
+                    onChange={e => setConfirmedText(e.target.value)}
+                    rows={4}
+                    placeholder={textFieldCfg.placeholder}
+                    className="w-full bg-ink-800/40 border border-ink-700 rounded-lg px-3 py-2 text-xs text-cream placeholder-ink-600 resize-none focus:outline-none focus:ring-1 focus:ring-blue-700/50"
+                  />
+                ) : (
+                  <input
+                    type="text"
+                    value={confirmedText}
+                    onChange={e => setConfirmedText(e.target.value)}
+                    placeholder={textFieldCfg.placeholder}
+                    className="w-full bg-ink-800/40 border border-ink-700 rounded-lg px-3 py-2 text-xs text-cream placeholder-ink-600 focus:outline-none focus:ring-1 focus:ring-blue-700/50"
+                  />
+                )}
+              </div>
+            )}
+
             <button
               onClick={generate}
               disabled={generating}
@@ -238,6 +284,30 @@ export default function MediaPanel({ postId, format, onCaptionChange }: MediaPan
         ) : (
           /* Media card */
           <div className="space-y-3">
+            {/* Editable title / quote for regeneration */}
+            {textFieldCfg && (
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-ink-400">{textFieldCfg.label}</label>
+                {textFieldCfg.multiline ? (
+                  <textarea
+                    value={confirmedText}
+                    onChange={e => setConfirmedText(e.target.value)}
+                    rows={3}
+                    placeholder={textFieldCfg.placeholder}
+                    className="w-full bg-ink-800/40 border border-ink-700 rounded-lg px-3 py-2 text-xs text-cream placeholder-ink-600 resize-none focus:outline-none focus:ring-1 focus:ring-blue-700/50"
+                  />
+                ) : (
+                  <input
+                    type="text"
+                    value={confirmedText}
+                    onChange={e => setConfirmedText(e.target.value)}
+                    placeholder={textFieldCfg.placeholder}
+                    className="w-full bg-ink-800/40 border border-ink-700 rounded-lg px-3 py-2 text-xs text-cream placeholder-ink-600 focus:outline-none focus:ring-1 focus:ring-blue-700/50"
+                  />
+                )}
+              </div>
+            )}
+
             {/* File info row */}
             <div className="flex items-center gap-2 px-3 py-2 bg-ink-800/40 rounded-lg">
               <CheckCircle2 size={12} className="text-emerald-400 shrink-0" />
