@@ -147,11 +147,18 @@ export default function MediaPanel({ postId, format, onCaptionChange }: MediaPan
 
   async function saveCaption() {
     if (!media) return
-    // Update caption in post_media record via the generate route (re-use id field)
-    // We patch via a minimal upsert — for now just update local state optimistically
-    // (full caption save API can be added later if needed)
-    setCaptionDirty(false)
-    onCaptionChange?.(caption)
+    try {
+      const res = await fetch(`/api/media/${media.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ linkedinCaption: caption }),
+      })
+      if (!res.ok) throw new Error('Save failed')
+      setCaptionDirty(false)
+      onCaptionChange?.(caption)
+    } catch {
+      setError('Failed to save caption')
+    }
   }
 
   if (!config) return null

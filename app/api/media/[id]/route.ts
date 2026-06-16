@@ -40,7 +40,30 @@ export async function DELETE(
   return NextResponse.json({ deleted: true })
 }
 
-// GET /api/media/[id]/signed-url — return fresh signed URL
+// PATCH /api/media/[id] — update linkedin_caption
+export async function PATCH(
+  req: NextRequest,
+  { params }: { params: { id: string } }
+) {
+  const supabase = createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return NextResponse.json({ error: 'Unauthorised' }, { status: 401 })
+
+  const { linkedinCaption } = await req.json() as { linkedinCaption: string }
+
+  const { error } = await supabase
+    .from('post_media')
+    .update({ linkedin_caption: linkedinCaption, updated_at: new Date().toISOString() })
+    .eq('id', params.id)
+
+  if (error) {
+    return NextResponse.json({ error: error.message }, { status: 500 })
+  }
+
+  return NextResponse.json({ saved: true })
+}
+
+// GET /api/media/[id] — return fresh signed URL
 export async function GET(
   _req: NextRequest,
   { params }: { params: { id: string } }
