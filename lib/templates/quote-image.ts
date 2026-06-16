@@ -1,187 +1,159 @@
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const satori = require('satori').default ?? require('satori')
 import { Resvg } from '@resvg/resvg-js'
-import { getFontBuffers, BRAND_BLUE, BRAND_GOLD } from './fonts'
+import { getFontBuffers } from './fonts'
 import fs from 'fs'
 import path from 'path'
 
-const LOGO_PATH = path.join(process.cwd(), 'public/brand/coach-sharath-logo.png')
-const SWANS_LOGO_PATH = path.join(process.cwd(), 'public/brand/5swans-logo.png')
+const BRAND_DIR = path.join(process.cwd(), 'public/brand')
 
-// Convert PNG file to data URI for satori (satori can't access filesystem paths)
-function pngToDataUri(filePath: string): string {
+function fileToDataUri(filePath: string, mime: string): string {
   const data = fs.readFileSync(filePath)
-  return `data:image/png;base64,${data.toString('base64')}`
+  return `data:${mime};base64,${data.toString('base64')}`
 }
 
-// Cached data URIs
-let _logoDataUri: string | null = null
-let _swansDataUri: string | null = null
+// Cached data URIs — loaded once per process
+let _financeTemplate: string | null = null
+let _coachTemplate: string | null = null
 
-function getLogoDataUri(useSwans = false): string {
-  if (useSwans) {
-    if (!_swansDataUri) _swansDataUri = pngToDataUri(SWANS_LOGO_PATH)
-    return _swansDataUri
-  }
-  if (!_logoDataUri) _logoDataUri = pngToDataUri(LOGO_PATH)
-  return _logoDataUri
+function getTemplates() {
+  if (!_financeTemplate)
+    _financeTemplate = fileToDataUri(path.join(BRAND_DIR, 'quote-finance-template.jpeg'), 'image/jpeg')
+  if (!_coachTemplate)
+    _coachTemplate = fileToDataUri(path.join(BRAND_DIR, 'quote-coach-template.png'), 'image/png')
+  return { finance: _financeTemplate!, coach: _coachTemplate! }
 }
 
 export type QuoteImageProps = {
-  quote:         string   // Short quote extracted by AI (max ~120 chars)
-  authorName:    string   // "Coach Sharath" or business name
+  quote:         string
+  authorName:    string
   pillar:        string
-  useSwansLogo?: boolean  // Finance pillar posts
+  useSwansLogo?: boolean
 }
 
 export async function generateQuoteImage(props: QuoteImageProps): Promise<Buffer> {
-  const { quote, authorName, useSwansLogo } = props
+  const { quote, useSwansLogo } = props
   const fonts = getFontBuffers()
+  const { finance, coach } = getTemplates()
 
-  // Trim quote to a reasonable display length
-  const displayQuote = quote.length > 160
-    ? quote.slice(0, 157) + '...'
-    : quote
+  const displayQuote = quote.length > 200 ? quote.slice(0, 197) + '...' : quote
 
-  const logoDataUri = getLogoDataUri(useSwansLogo)
+  // Font size: scale down for longer quotes
+  const fontSize = displayQuote.length > 150 ? 32
+    : displayQuote.length > 100 ? 38
+    : 44
+
+  // ── Finance template (5-Swans posts) ──────────────────────────────────────
+  // Template layout: dark blue/purple gradient bg, large centred white rounded box,
+  // 5 Swans logo top-centre, footer strip bottom.
+  // Text zone inside white box: approx top=310 left=130 width=820 height=380
+  const financeLayout = {
+    type: 'div',
+    props: {
+      style: {
+        width: 1080, height: 1080,
+        position: 'relative' as const,
+        display: 'flex',
+        backgroundImage: `url('${finance}')`,
+        backgroundSize: 'cover',
+        backgroundPosition: 'center',
+      },
+      children: [
+        {
+          type: 'div',
+          props: {
+            style: {
+              position: 'absolute' as const,
+              top: 310, left: 130,
+              width: 820, height: 400,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+            },
+            children: {
+              type: 'div',
+              props: {
+                style: {
+                  fontSize,
+                  fontWeight: 700,
+                  color: '#1a2d6b',
+                  textTransform: 'uppercase' as const,
+                  textAlign: 'center' as const,
+                  lineHeight: 1.3,
+                  fontFamily: 'Montserrat',
+                },
+                children: displayQuote,
+              },
+            },
+          },
+        },
+      ],
+    },
+  }
+
+  // ── Coach Sharath template (all other posts) ───────────────────────────────
+  // Template layout: light background with chart graphics, gold speech bubble,
+  // Sharath photo top-left overlapping bubble, Coach Sharath logo top-right,
+  // author strip below bubble, footer bottom.
+  // Text zone inside speech bubble (below photo): approx top=290 left=210 width=660 height=390
+  const coachLayout = {
+    type: 'div',
+    props: {
+      style: {
+        width: 1080, height: 1080,
+        position: 'relative' as const,
+        display: 'flex',
+        backgroundImage: `url('${coach}')`,
+        backgroundSize: 'cover',
+        backgroundPosition: 'center',
+      },
+      children: [
+        {
+          type: 'div',
+          props: {
+            style: {
+              position: 'absolute' as const,
+              top: 290, left: 210,
+              width: 660, height: 390,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+            },
+            children: {
+              type: 'div',
+              props: {
+                style: {
+                  fontSize,
+                  fontWeight: 600,
+                  color: '#1a2d6b',
+                  textAlign: 'center' as const,
+                  lineHeight: 1.45,
+                  fontFamily: 'Montserrat',
+                },
+                children: displayQuote,
+              },
+            },
+          },
+        },
+      ],
+    },
+  }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const svg = await (satori as any)(
+    useSwansLogo ? financeLayout : coachLayout,
     {
-      type: 'div',
-      props: {
-        style: {
-          width:           '1080px',
-          height:          '1080px',
-          display:         'flex',
-          flexDirection:   'column',
-          justifyContent:  'space-between',
-          backgroundColor: BRAND_BLUE,
-          padding:         '80px',
-          fontFamily:      'Montserrat',
-        },
-        children: [
-          // Top: Logo
-          {
-            type: 'img',
-            props: {
-              src:    logoDataUri,
-              width:  130,
-              height: 44,
-              style:  { objectFit: 'contain' },
-            },
-          },
-          // Middle: Quote block
-          {
-            type: 'div',
-            props: {
-              style: { display: 'flex', flexDirection: 'column', gap: '20px' },
-              children: [
-                // Gold quote mark
-                {
-                  type: 'div',
-                  props: {
-                    style: {
-                      fontSize:   120,
-                      lineHeight: 0.8,
-                      color:      BRAND_GOLD,
-                      fontWeight: 700,
-                      marginBottom: '10px',
-                    },
-                    children: '“',
-                  },
-                },
-                // Quote text
-                {
-                  type: 'div',
-                  props: {
-                    style: {
-                      fontSize:   displayQuote.length > 100 ? 32 : 38,
-                      fontWeight: 600,
-                      color:      '#FFFFFF',
-                      lineHeight: 1.45,
-                    },
-                    children: displayQuote,
-                  },
-                },
-              ],
-            },
-          },
-          // Bottom: Author + gold rule
-          {
-            type: 'div',
-            props: {
-              style: { display: 'flex', flexDirection: 'column', gap: '14px' },
-              children: [
-                // Gold rule
-                {
-                  type: 'div',
-                  props: {
-                    style: {
-                      height:          '2px',
-                      backgroundColor: BRAND_GOLD,
-                      width:           '60px',
-                    },
-                  },
-                },
-                // Author name
-                {
-                  type: 'div',
-                  props: {
-                    style: {
-                      fontSize:   18,
-                      fontWeight: 600,
-                      color:      BRAND_GOLD,
-                      letterSpacing: '0.05em',
-                    },
-                    children: authorName.toUpperCase(),
-                  },
-                },
-                {
-                  type: 'div',
-                  props: {
-                    style: {
-                      fontSize: 14,
-                      color:    'rgba(168, 200, 232, 0.8)',
-                    },
-                    children: 'Executive Coach · coachsharath.com',
-                  },
-                },
-              ],
-            },
-          },
-        ],
-      },
-    },
-    {
-      width:  1080,
+      width: 1080,
       height: 1080,
       fonts: [
-        {
-          name:   'Montserrat',
-          data:   fonts.regular.buffer,
-          weight: 400,
-          style:  'normal',
-        },
-        {
-          name:   'Montserrat',
-          data:   fonts.semiBold.buffer,
-          weight: 600,
-          style:  'normal',
-        },
-        {
-          name:   'Montserrat',
-          data:   fonts.bold.buffer,
-          weight: 700,
-          style:  'normal',
-        },
+        { name: 'Montserrat', data: fonts.regular.buffer,  weight: 400, style: 'normal' },
+        { name: 'Montserrat', data: fonts.semiBold.buffer, weight: 600, style: 'normal' },
+        { name: 'Montserrat', data: fonts.bold.buffer,     weight: 700, style: 'normal' },
       ],
     }
   )
 
-  const resvg = new Resvg(svg, {
-    fitTo: { mode: 'width', value: 1080 },
-  })
+  const resvg = new Resvg(svg, { fitTo: { mode: 'width', value: 1080 } })
   const png = resvg.render()
   return Buffer.from(png.asPng())
 }

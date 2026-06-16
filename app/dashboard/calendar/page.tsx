@@ -589,39 +589,19 @@ function WeekBlock({
         )}
       </div>
 
-      {/* ── Row 2: Thread strip ── */}
-      <div className="grid border-b border-ink-800/40" style={{ gridTemplateColumns: '72px 1fr' }}>
-        <div className="border-r border-ink-800" />
-        <div className="flex items-stretch min-h-[26px]">
-          {/* Incoming thread */}
-          {incomingThread ? (
-            <div className="flex items-center gap-1.5 px-3 py-1 bg-blue-900/15 border-r border-ink-800">
-              <ArrowLeft size={10} className="text-blue-500 shrink-0" />
-              <span className="text-xs text-blue-400 font-medium whitespace-nowrap">Wk {prevWeekNumber} →</span>
-              <span className="text-xs text-ink-300 italic truncate max-w-[220px]">"{incomingThread}"</span>
-            </div>
-          ) : prevWeekNumber > 0 ? (
-            <div className="flex items-center gap-1.5 px-3 py-1 border-r border-ink-800">
-              <ArrowLeft size={10} className="text-ink-500 shrink-0" />
-              <span className="text-xs text-ink-400">Incoming thread pending</span>
-            </div>
-          ) : null}
-
-          {/* Outgoing thread */}
-          {outgoingThread ? (
-            <div className="flex items-center gap-1.5 px-3 py-1 bg-teal-900/15">
-              <ArrowRight size={10} className="text-teal-500 shrink-0" />
-              <span className="text-xs text-teal-400 font-medium whitespace-nowrap">Thread planted →</span>
-              <span className="text-xs text-ink-300 italic truncate max-w-[220px]">"{outgoingThread}"</span>
-            </div>
-          ) : hasPosts ? (
-            <div className="flex items-center gap-1.5 px-3 py-1">
-              <ArrowRight size={10} className="text-ink-500 shrink-0" />
-              <span className="text-xs text-ink-400">Thread for Wk {week.week_number + 1} · plants in Saturday post</span>
-            </div>
-          ) : null}
+      {/* ── Row 2: Thread strip — incoming only ── */}
+      {incomingThread && (
+        <div className="grid border-b border-ink-800/40" style={{ gridTemplateColumns: '72px 1fr' }}>
+          <div className="border-r border-ink-800" />
+          <div className="flex items-center gap-2 px-3 py-1 min-h-[26px] bg-blue-900/10">
+            <span className="text-xs text-blue-500 font-medium whitespace-nowrap shrink-0">
+              Thread Planted from Week {prevWeekNumber}
+            </span>
+            <ArrowRight size={11} className="text-blue-500 shrink-0" />
+            <span className="text-xs text-ink-300 italic truncate">"{incomingThread}"</span>
+          </div>
         </div>
-      </div>
+      )}
 
       {/* ── Row 3: Day cells ── */}
       <div className="grid" style={{ gridTemplateColumns: '72px repeat(6, minmax(0, 1fr))' }}>

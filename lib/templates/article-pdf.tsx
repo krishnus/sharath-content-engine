@@ -251,8 +251,6 @@ function ArticleDocument({ title, content, pillar, quarter, weekNumber, dateStr 
           <View style={S.metaRow}>
             <Text style={S.metaChip}>{pillarLabel}</Text>
             <Text style={S.metaSep}>·</Text>
-            <Text style={S.metaChip}>{quarter} · Week {weekNumber}</Text>
-            <Text style={S.metaSep}>·</Text>
             <Text style={S.metaChip}>{dateStr}</Text>
           </View>
         </View>

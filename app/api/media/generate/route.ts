@@ -27,7 +27,7 @@ export async function POST(req: NextRequest) {
   const { data: post, error: postError } = await supabase
     .from('posts')
     .select(`
-      id, day, pillar, format, week_id,
+      id, day, pillar, format, week_id, hook_idea,
       drafts ( id, content, is_original, version ),
       weeks ( week_number, year, week_start, theme, quarter )
     `)
@@ -77,9 +77,11 @@ export async function POST(req: NextRequest) {
   // ── Generate the media ───────────────────────────────────────────────
   try {
     if (mediaType === 'article_pdf') {
-      // Extract title from first line of content
-      const firstLine = meta.content.split('\n').find(l => l.trim()) ?? 'Article'
-      const title = firstLine.length > 80 ? firstLine.slice(0, 77) + '...' : firstLine
+      // Title: use the planned hook_idea (article angle set during planning),
+      // fall back to CORE_INSIGHT from the generated metadata, then a generic label
+      const hookIdea = (post as unknown as { hook_idea: string | null }).hook_idea
+      const rawTitle = hookIdea || meta.coreInsight || 'Weekly Article'
+      const title = rawTitle.length > 100 ? rawTitle.slice(0, 97) + '...' : rawTitle
 
       fileBuffer = await generateArticlePDF({
         title,

@@ -133,6 +133,25 @@ export default function MediaPanel({ postId, format, onCaptionChange }: MediaPan
     }
   }
 
+  async function downloadFile() {
+    if (!media?.signedUrl) return
+    try {
+      const res  = await fetch(media.signedUrl)
+      const blob = await res.blob()
+      const url  = URL.createObjectURL(blob)
+      const a    = document.createElement('a')
+      a.href     = url
+      a.download = media.fileName
+      a.target   = '_blank'
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      URL.revokeObjectURL(url)
+    } catch {
+      setError('Download failed')
+    }
+  }
+
   async function deleteMedia() {
     if (!media) return
     try {
@@ -231,14 +250,13 @@ export default function MediaPanel({ postId, format, onCaptionChange }: MediaPan
               </div>
               <div className="flex items-center gap-1.5 shrink-0">
                 {media.signedUrl && (
-                  <a
-                    href={media.signedUrl}
-                    download={media.fileName}
+                  <button
+                    onClick={downloadFile}
                     className="text-ink-500 hover:text-ink-300 transition-colors"
                     title="Download"
                   >
                     <Download size={12} />
-                  </a>
+                  </button>
                 )}
                 <button
                   onClick={deleteMedia}
