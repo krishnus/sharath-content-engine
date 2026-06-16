@@ -1,10 +1,9 @@
 -- Migration 004: post_media table for PDF and image attachments
 -- Run this after 003_drafts_linkedin_excerpt.sql
 --
--- STORAGE SETUP (do this manually in Supabase Dashboard → Storage):
---   1. Create a new bucket named: post-media
---   2. Set it to PRIVATE (not public)
---   3. Add RLS policy: authenticated users can upload/download their own files
+-- STORAGE SETUP:
+--   1. Create a new bucket named: post-media (Dashboard → Storage → New Bucket, set Private)
+--   2. Run the storage policy below (storage.objects is not covered by table migrations)
 
 CREATE TABLE IF NOT EXISTS post_media (
   id               uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -28,3 +27,10 @@ ALTER TABLE post_media ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Authenticated users can manage post_media"
   ON post_media FOR ALL TO authenticated
   USING (true) WITH CHECK (true);
+
+-- Storage bucket policy (run this after creating the post-media bucket)
+-- This must be run separately as storage.objects is managed by Supabase Storage
+CREATE POLICY "Authenticated users can manage post-media files"
+  ON storage.objects FOR ALL TO authenticated
+  USING (bucket_id = 'post-media')
+  WITH CHECK (bucket_id = 'post-media');
