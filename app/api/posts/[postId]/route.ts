@@ -32,11 +32,10 @@ export async function GET(
     return NextResponse.json({ error: 'Post not found' }, { status: 404 })
   }
 
-  const { data: drafts } = await supabase
-    .from('drafts')
-    .select('*')
-    .eq('post_id', postId)
-    .order('version', { ascending: true })
+  const [{ data: drafts }, { data: mediaRecords }] = await Promise.all([
+    supabase.from('drafts').select('*').eq('post_id', postId).order('version', { ascending: true }),
+    supabase.from('post_media').select('id, media_type, file_name, file_size, page_count, linkedin_caption, storage_path').eq('post_id', postId),
+  ])
 
   const originalDraft = drafts?.find((d: { is_original: boolean }) => d.is_original)
   const nonOriginals  = drafts?.filter((d: { is_original: boolean }) => !d.is_original) ?? []
@@ -55,6 +54,7 @@ export async function GET(
       createdAt: d.created_at,
     })),
     currentVersionId: currentDraft?.id ?? null,
+    media: mediaRecords ?? [],
   })
 }
 

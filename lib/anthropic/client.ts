@@ -27,6 +27,8 @@ export function parseGenerationMetadata(rawOutput: string): {
   threadPlanted: string | null
   referencesUsed: { vedic: string[]; banking: string[]; coaching: string[] }
   hashtags: string[]
+  linkedinCaption: string | null
+  quote: string | null
 } {
   const lines = rawOutput.split('\n')
   const metaStart = lines.findIndex(l =>
@@ -58,10 +60,12 @@ export function parseGenerationMetadata(rawOutput: string): {
   return {
     content,
     wordCount: wordCountRaw ? parseInt(wordCountRaw, 10) : countWords(content),
-    coreInsight:    getMeta('CORE_INSIGHT'),
-    callbackUsed:   getMeta('CALLBACK_USED'),
-    threadPlanted:  getMeta('THREAD_PLANTED'),
+    coreInsight:     getMeta('CORE_INSIGHT'),
+    callbackUsed:    getMeta('CALLBACK_USED'),
+    threadPlanted:   getMeta('THREAD_PLANTED'),
     referencesUsed,
     hashtags,
+    linkedinCaption: getMeta('LINKEDIN_CAPTION'),
+    quote:           getMeta('QUOTE'),
   }
 }

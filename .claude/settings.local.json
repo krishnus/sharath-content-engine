@@ -1,7 +1,26 @@
 {
   "permissions": {
     "allow": [
-      "Bash(npx tsc *)"
+      "Bash(npx tsc *)",
+      "WebFetch(domain:developer.linkedin.com)",
+      "WebFetch(domain:www.linkedin.com)",
+      "WebFetch(domain:coachsharath.com)",
+      "WebFetch(domain:www.coachsharath.com)",
+      "Bash(python3 -c \"import subprocess; result = subprocess.run\\(['mdimport', '-d2', '/Users/sharath/Coaching/sharath-content-engine/docs/logos/COACH SHARTH guidelines.pdf'], capture_output=True, text=True\\); print\\(result.stdout[:500]\\)\")",
+      "Bash(python3 *)",
+      "Bash(pdfinfo \"/Users/sharath/Coaching/sharath-content-engine/docs/logos/COACH SHARTH guidelines.pdf\")",
+      "Bash(pdftoppm -r 72 -png \"/Users/sharath/Coaching/sharath-content-engine/docs/logos/COACH SHARTH guidelines.pdf\" /tmp/brand_guidelines_page)",
+      "Read(//private/tmp/**)",
+      "Bash(pdftoppm -r 200 -png \"/Users/sharath/Coaching/sharath-content-engine/docs/logos/COACH SHARTH guidelines.pdf\" /tmp/brand_hi)",
+      "Bash(pdftoppm -r 300 -png -x 0 -y 1800 -W 595 -H 400 \"/Users/sharath/Coaching/sharath-content-engine/docs/logos/COACH SHARTH guidelines.pdf\" /tmp/brand_palette)",
+      "Bash(convert --version)",
+      "Bash(pdftotext \"/Users/sharath/Coaching/sharath-content-engine/docs/logos/COACH SHARTH guidelines.pdf\" -)",
+      "Bash(npm install *)",
+      "Bash(curl -sL \"https://github.com/google/fonts/raw/main/ofl/montserrat/static/Montserrat-Regular.ttf\" -o /Users/sharath/Coaching/sharath-content-engine/public/fonts/Montserrat-Regular.ttf)",
+      "Bash(curl -sL \"https://github.com/google/fonts/raw/main/ofl/montserrat/static/Montserrat-SemiBold.ttf\" -o /Users/sharath/Coaching/sharath-content-engine/public/fonts/Montserrat-SemiBold.ttf)",
+      "Bash(curl -sL \"https://github.com/google/fonts/raw/main/ofl/montserrat/static/Montserrat-Bold.ttf\" -o /Users/sharath/Coaching/sharath-content-engine/public/fonts/Montserrat-Bold.ttf)",
+      "Bash(wait)",
+      "Bash(npm run *)"
     ]
   }
 }

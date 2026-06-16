@@ -103,9 +103,9 @@ function statusChip(status: string, hasDraft: boolean) {
   if (status === 'scheduled')            return { label: 'Scheduled',     cls: 'bg-sky-900/50 text-sky-400' }
   if (status === 'edited')               return { label: 'Edited',        cls: 'bg-violet-900/50 text-violet-400' }
   if (status === 'awaiting_market_data') return { label: 'Awaiting data', cls: 'bg-red-900/50 text-red-400' }
-  if (status === 'draft' && !hasDraft)   return { label: 'Planned',       cls: 'bg-stone-800 text-stone-500' }
+  if (status === 'draft' && !hasDraft)   return { label: 'Planned',       cls: 'bg-stone-800 text-stone-300' }
   if (status === 'draft')                return { label: 'Draft',         cls: 'bg-amber-900/50 text-amber-400' }
-  return { label: status, cls: 'bg-stone-800 text-stone-500' }
+  return { label: status, cls: 'bg-stone-800 text-stone-300' }
 }
 
 // ── Main component ──────────────────────────────────────────────────────
@@ -306,7 +306,7 @@ export default function CalendarPage() {
       <div className="shrink-0 bg-ink-900 border-b border-ink-800 px-6 py-3 flex items-center gap-4">
         <div className="flex items-center gap-3">
           <h1 className="font-display text-lg text-cream">Content Calendar</h1>
-          <span className="text-xs text-ink-500 border border-ink-700 rounded px-2 py-0.5">
+          <span className="text-sm font-medium text-cream/70">
             {format(today, 'EEEE, d MMMM yyyy')}
           </span>
         </div>
@@ -390,7 +390,7 @@ export default function CalendarPage() {
                 )}>
                   {DAY_LABELS[day]}
                 </div>
-                <div className="text-xs text-ink-600 mt-0.5 normal-case tracking-normal font-normal">
+                <div className="text-xs text-ink-400 mt-0.5 normal-case tracking-normal font-normal">
                   {DAY_SUBTITLES[day]}
                 </div>
               </div>
@@ -532,7 +532,7 @@ function WeekBlock({
         {/* Week meta */}
         <div className="border-r border-ink-800 px-2 py-2 flex flex-col justify-center gap-0.5">
           <span className="text-xs font-semibold text-cream">Wk {week.week_number}</span>
-          <span className="text-xs text-ink-600">
+          <span className="text-xs text-ink-400">
             {format(weekMonday, 'd MMM')}–{format(weekSaturday, 'd MMM')}
           </span>
           {isCurrent && (
@@ -598,12 +598,12 @@ function WeekBlock({
             <div className="flex items-center gap-1.5 px-3 py-1 bg-blue-900/15 border-r border-ink-800">
               <ArrowLeft size={10} className="text-blue-500 shrink-0" />
               <span className="text-xs text-blue-400 font-medium whitespace-nowrap">Wk {prevWeekNumber} →</span>
-              <span className="text-xs text-ink-400 italic truncate max-w-[220px]">"{incomingThread}"</span>
+              <span className="text-xs text-ink-300 italic truncate max-w-[220px]">"{incomingThread}"</span>
             </div>
           ) : prevWeekNumber > 0 ? (
             <div className="flex items-center gap-1.5 px-3 py-1 border-r border-ink-800">
-              <ArrowLeft size={10} className="text-ink-600 shrink-0" />
-              <span className="text-xs text-ink-600">Incoming thread pending</span>
+              <ArrowLeft size={10} className="text-ink-500 shrink-0" />
+              <span className="text-xs text-ink-400">Incoming thread pending</span>
             </div>
           ) : null}
 
@@ -612,12 +612,12 @@ function WeekBlock({
             <div className="flex items-center gap-1.5 px-3 py-1 bg-teal-900/15">
               <ArrowRight size={10} className="text-teal-500 shrink-0" />
               <span className="text-xs text-teal-400 font-medium whitespace-nowrap">Thread planted →</span>
-              <span className="text-xs text-ink-400 italic truncate max-w-[220px]">"{outgoingThread}"</span>
+              <span className="text-xs text-ink-300 italic truncate max-w-[220px]">"{outgoingThread}"</span>
             </div>
           ) : hasPosts ? (
             <div className="flex items-center gap-1.5 px-3 py-1">
-              <ArrowRight size={10} className="text-ink-600 shrink-0" />
-              <span className="text-xs text-ink-600">Thread for Wk {week.week_number + 1} · plants in Saturday post</span>
+              <ArrowRight size={10} className="text-ink-500 shrink-0" />
+              <span className="text-xs text-ink-400">Thread for Wk {week.week_number + 1} · plants in Saturday post</span>
             </div>
           ) : null}
         </div>
@@ -674,7 +674,7 @@ function DayCell({
         !hasTheme ? 'opacity-40' : '',
         isToday && 'bg-gold-500/[0.03]',
       )}>
-        <span className="text-xs text-ink-700 mt-1">
+        <span className="text-xs text-ink-500 mt-1">
           {!hasTheme ? 'Set theme first' : !post ? 'Generate plan first' : ''}
         </span>
       </div>

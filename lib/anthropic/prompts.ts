@@ -246,7 +246,7 @@ export function buildGeneratePostPrompt(params: GeneratePostPromptParams): strin
   const formatInstructions: Record<PostFormat, string> = {
     long_form_article: `Write a full long-form LinkedIn article. Target ${params.targetWordCount} words (between 900–1,100). Structure: story hook → tension → Vedic/banking/coaching wisdom → specific application → reflection close. Use line breaks every 1–2 sentences. LinkedIn formatting only (no markdown headings). First 210 characters must be a complete scroll-stopping hook.`,
     text_post: `Write a LinkedIn text post. Target ${params.targetWordCount} words (between 180–250). One main idea only. First line must stop the scroll. End with a reflection question or soft CTA — not both.`,
-    carousel: `Write a LinkedIn carousel outline. 8–10 slides. Format each slide as: [Slide N]: [Slide title (5–8 words)] | [Slide text (15–25 words)]. Slide 1 = bold hook. Slides 2–8 = one idea per slide. Slide 9 = key takeaway. Slide 10 = reflection question + follow prompt.`,
+    carousel: `Write a LinkedIn carousel. 8–10 slides. Format EACH slide EXACTLY as:\nSLIDE N | HEADLINE: [title in 5–8 words] | BODY: [body text in 30–60 words]\nSlide 1 = bold hook (the title slide). Slides 2–8 = one actionable idea per slide. Slide 9 = key takeaway. Slide 10 = reflection question + follow prompt.`,
     market_insights: `Write a LinkedIn Market Insights post. Target ${params.targetWordCount} words (180–250). Lead with the key market observation from this week. Connect market data to investor psychology or leadership behaviour. End with a behavioural or strategic implication. Include relevant data points provided in the context.`,
   }
 
@@ -283,6 +283,10 @@ export function buildGeneratePostPrompt(params: GeneratePostPromptParams): strin
     `After that, on a new line starting with "THREAD_PLANTED:", output the exact thread planted in the closing.`,
     `After that, on a new line starting with "REFERENCES:", output a JSON object: {"vedic":[],"banking":[],"coaching":[]} listing any specific references used.`,
     `After that, on a new line starting with "HASHTAGS:", output 6–8 LinkedIn hashtags separated by spaces. These three are MANDATORY in every post regardless of pillar or audience: #CoachSharath #5Swans #BradfordInternationalAlliance. Then add 3–5 pillar-specific and audience-specific tags from the playbook hashtag strategy. Format: #CoachSharath #5Swans #BradfordInternationalAlliance #Tag4 #Tag5 #Tag6`,
+    // Format-specific extra fields
+    (params.format === 'long_form_article' || params.format === 'carousel')
+      ? `After that, on a new line starting with "LINKEDIN_CAPTION:", write a compelling 200–280 character LinkedIn caption that introduces this document post. It must stop the scroll, hint at the value inside, and end with a reason to open the document. No hashtags in the caption.`
+      : `After that, on a new line starting with "QUOTE:", output a single memorable quotable line from the post — maximum 120 characters. It should stand alone as a visual pull-quote. No hashtags. No author attribution.`,
   ].filter(Boolean)
 
   return lines.join('\n')

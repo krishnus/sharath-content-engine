@@ -11,6 +11,7 @@ import Link from 'next/link'
 import { cn, countWords, PILLAR_LABELS, FORMAT_LABELS, getQuarter } from '@/lib/utils/helpers'
 import DiffView from '@/components/DiffView'
 import PublishPanel from '@/components/PublishPanel'
+import MediaPanel from '@/components/MediaPanel'
 import CandidateRulesModal, { type CandidateRule } from '@/components/CandidateRulesModal'
 
 // ── Types ─────────────────────────────────────────────────────────────
@@ -44,7 +45,7 @@ type DraftVersion = {
 
 // Strip AI metadata from displayed content
 function stripMetadata(raw: string): string {
-  const metaKeys = ['WORD_COUNT:', 'CORE_INSIGHT:', 'CALLBACK_USED:', 'THREAD_PLANTED:', 'REFERENCES:', 'HASHTAGS:']
+  const metaKeys = ['WORD_COUNT:', 'CORE_INSIGHT:', 'CALLBACK_USED:', 'THREAD_PLANTED:', 'REFERENCES:', 'HASHTAGS:', 'LINKEDIN_CAPTION:', 'QUOTE:']
   const lines = raw.split('\n')
   const firstMetaLine = lines.findIndex(l => metaKeys.some(k => l.trim().startsWith(k)))
   return (firstMetaLine > -1 ? lines.slice(0, firstMetaLine) : lines).join('\n').trim()
@@ -555,8 +556,11 @@ export default function DraftEditorPage() {
         </div>
       )}
 
-      {/* ── Main area: editor or diff ────────────────────────────── */}
-      <div className="flex-1 overflow-hidden flex flex-col">
+      {/* ── Main area: editor + sidebar ─────────────────────────── */}
+      <div className="flex-1 overflow-hidden flex">
+
+        {/* Editor column */}
+        <div className="flex-1 overflow-hidden flex flex-col min-w-0">
 
         {showDiff ? (
           /* Diff view */
@@ -670,6 +674,19 @@ export default function DraftEditorPage() {
             </div>
           </div>
         )}
+        </div>{/* end editor column */}
+
+        {/* ── Media sidebar ─────────────────────────────────────── */}
+        {post && content && (
+          <div className="w-72 shrink-0 border-l border-ink-800 overflow-y-auto p-4 space-y-4 bg-ink-950/30">
+            <p className="text-xs font-semibold text-ink-400 uppercase tracking-wider">Media</p>
+            <MediaPanel
+              postId={postId}
+              format={post.format}
+            />
+          </div>
+        )}
+
       </div>
     </div>
   )

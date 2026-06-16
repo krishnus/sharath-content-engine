@@ -1,11 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient, createServiceClient } from '@/lib/supabase/server'
+import { parseGenerationMetadata } from '@/lib/anthropic/client'
 
 export const runtime = 'nodejs'
+export const maxDuration = 60
 
-// LinkedIn /rest/posts hard limit. We target 2900 to leave room for the suffix.
-const LI_MAX_CHARS = 3000
+// LinkedIn text post character limit
+const LI_MAX_CHARS  = 3000
 const LI_SAFE_CHARS = 2900
+
+const STORAGE_BUCKET = 'post-media'
 
 export async function POST(req: NextRequest) {
   const isCron = req.headers.get('x-cron-secret') === process.env.CRON_SECRET
@@ -28,12 +32,12 @@ export async function POST(req: NextRequest) {
       linkedinPostId?: string
     }
 
-  // ── Fetch post + draft ──────────────────────────────────────────
+  // ── Fetch post + draft + media ────────────────────────────────────────
   const { data: post, error: postError } = await supabase
     .from('posts')
     .select(`
-      id, day, status, week_id,
-      drafts ( id, content, linkedin_excerpt, is_original, version ),
+      id, day, format, status, week_id,
+      drafts ( id, content, is_original, version ),
       weeks ( id, week_start )
     `)
     .eq('id', postId)
@@ -53,15 +57,10 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  // Pick the most recent edited draft; fall back to original
+  // Pick the most recent non-original draft
   const drafts = (post.drafts as Array<{
-    id: string
-    content: string
-    linkedin_excerpt: string | null
-    is_original: boolean
-    version: number
+    id: string; content: string; is_original: boolean; version: number
   }>)
-
   const currentDraft = drafts
     ?.filter(d => !d.is_original)
     ?.sort((a, b) => b.version - a.version)[0]
@@ -71,17 +70,40 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'No draft content found' }, { status: 400 })
   }
 
-  // ── Resolve what text to publish ────────────────────────────────
-  // Long-form posts (Mon/Wed) have a linkedin_excerpt saved at generation time.
-  // If present, use it. Otherwise, smart-truncate the full content.
-  const isLongForm = post.day === 'monday' || post.day === 'wednesday'
-  const publishText = resolvePublishText(
-    currentDraft.content,
-    currentDraft.linkedin_excerpt ?? null,
-    isLongForm
-  )
+  // ── Check for attached media ──────────────────────────────────────────
+  const format: string = post.format as string
+  const expectedMediaType =
+    format === 'long_form_article' ? 'article_pdf'   :
+    format === 'carousel'          ? 'carousel_pdf'  :
+    format === 'text_post' || format === 'market_insights' ? 'quote_png' : null
 
-  // ── Schedule only ────────────────────────────────────────────────
+  let mediaRecord: {
+    id: string; storage_path: string; file_name: string;
+    media_type: string; linkedin_caption: string | null;
+  } | null = null
+
+  if (expectedMediaType) {
+    const { data: media } = await supabase
+      .from('post_media')
+      .select('id, storage_path, file_name, media_type, linkedin_caption')
+      .eq('post_id', postId)
+      .eq('media_type', expectedMediaType)
+      .maybeSingle()
+    mediaRecord = media
+  }
+
+  // ── Resolve publish text ──────────────────────────────────────────────
+  // For media posts, use the AI-drafted caption if available; otherwise smart-truncate
+  const meta = parseGenerationMetadata(currentDraft.content)
+  let publishText: string
+
+  if (mediaRecord?.linkedin_caption) {
+    publishText = mediaRecord.linkedin_caption
+  } else {
+    publishText = resolvePublishText(meta.content)
+  }
+
+  // ── Schedule only ─────────────────────────────────────────────────────
   if (!publishNow && !preview && scheduledAt) {
     await supabase.from('posts')
       .update({ status: 'scheduled', scheduled_at: scheduledAt })
@@ -89,7 +111,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ scheduled: true, scheduledAt })
   }
 
-  // ── Get LinkedIn token ───────────────────────────────────────────
+  // ── Get LinkedIn token ────────────────────────────────────────────────
   const tokenQuery = userId
     ? supabase.from('linkedin_tokens').select('*').eq('user_id', userId).single()
     : supabase.from('linkedin_tokens').select('*').limit(1).single()
@@ -110,34 +132,85 @@ export async function POST(req: NextRequest) {
     )
   }
 
-  // ── Promote preview → PUBLIC ─────────────────────────────────────
+  const authorUrn = tokenRow.linkedin_id
+    ? `urn:li:person:${tokenRow.linkedin_id}`
+    : await fetchAuthorUrn(tokenRow.access_token)
+
+  if (!authorUrn) {
+    return NextResponse.json(
+      { error: 'Could not resolve LinkedIn author URN. Please reconnect.' },
+      { status: 502 }
+    )
+  }
+
+  // ── Promote preview → PUBLIC (text posts only) ────────────────────────
   if (promotePreview && linkedinPostId) {
     await deleteLinkedInPost(linkedinPostId, tokenRow.access_token)
+    const result = await postTextToLinkedIn(publishText, tokenRow.access_token, authorUrn, 'PUBLIC')
+    if (!result.success) {
+      await supabase.from('posts').update({ status: 'publish_failed' }).eq('id', postId)
+      return NextResponse.json({ error: result.error }, { status: 502 })
+    }
+    await supabase.from('linkedin_posts').upsert({
+      post_id: postId, linkedin_post_id: result.postId!,
+      linkedin_url: result.url ?? null, published_at: new Date().toISOString(),
+    }, { onConflict: 'post_id' })
+    await supabase.from('posts').update({ status: 'published' }).eq('id', postId)
+    return NextResponse.json({ published: true, url: result.url })
+  }
 
-    const result = await callLinkedInAPI(
-      publishText, tokenRow.access_token, tokenRow.linkedin_id, 'PUBLIC'
-    )
+  // ── Publish with media (PDF document or image) ────────────────────────
+  if (mediaRecord && !preview) {
+    // Download file from Supabase Storage
+    const { data: fileData, error: dlError } = await supabase.storage
+      .from(STORAGE_BUCKET)
+      .download(mediaRecord.storage_path)
+
+    if (dlError || !fileData) {
+      return NextResponse.json(
+        { error: `Could not download media file: ${dlError?.message}` },
+        { status: 500 }
+      )
+    }
+
+    const fileBuffer = Buffer.from(await fileData.arrayBuffer())
+
+    let result: { success: boolean; postId?: string; url?: string; error?: string }
+
+    if (mediaRecord.media_type === 'article_pdf' || mediaRecord.media_type === 'carousel_pdf') {
+      result = await postDocumentToLinkedIn(
+        publishText, mediaRecord.file_name, fileBuffer,
+        tokenRow.access_token, authorUrn
+      )
+    } else {
+      result = await postImageToLinkedIn(
+        publishText, fileBuffer, tokenRow.access_token, authorUrn
+      )
+    }
+
     if (!result.success) {
       await supabase.from('posts').update({ status: 'publish_failed' }).eq('id', postId)
       return NextResponse.json({ error: result.error }, { status: 502 })
     }
 
-    await supabase.from('linkedin_posts').upsert({
-      post_id:          postId,
-      linkedin_post_id: result.postId!,
-      linkedin_url:     result.url ?? null,
-      published_at:     new Date().toISOString(),
-    }, { onConflict: 'post_id' })
-
+    await supabase.from('linkedin_posts').insert({
+      post_id: postId, linkedin_post_id: result.postId!,
+      linkedin_url: result.url ?? null, published_at: new Date().toISOString(),
+    })
     await supabase.from('posts').update({ status: 'published' }).eq('id', postId)
-    return NextResponse.json({ published: true, url: result.url })
+
+    return NextResponse.json({
+      published:      true,
+      url:            result.url,
+      linkedinPostId: result.postId,
+      hasMedia:       true,
+      mediaType:      mediaRecord.media_type,
+    })
   }
 
-  // ── Preview or full publish ──────────────────────────────────────
+  // ── Text-only publish (no media attached, or preview mode) ────────────
   const visibility = preview ? 'LOGGED_IN' : 'PUBLIC'
-  const result = await callLinkedInAPI(
-    publishText, tokenRow.access_token, tokenRow.linkedin_id, visibility
-  )
+  const result = await postTextToLinkedIn(publishText, tokenRow.access_token, authorUrn, visibility)
 
   if (!result.success) {
     if (!preview) {
@@ -148,10 +221,8 @@ export async function POST(req: NextRequest) {
 
   if (!preview) {
     await supabase.from('linkedin_posts').insert({
-      post_id:          postId,
-      linkedin_post_id: result.postId!,
-      linkedin_url:     result.url ?? null,
-      published_at:     new Date().toISOString(),
+      post_id: postId, linkedin_post_id: result.postId!,
+      linkedin_url: result.url ?? null, published_at: new Date().toISOString(),
     })
     await supabase.from('posts').update({ status: 'published' }).eq('id', postId)
   }
@@ -161,117 +232,172 @@ export async function POST(req: NextRequest) {
     preview:        preview ?? false,
     url:            result.url,
     linkedinPostId: result.postId,
-    // Let the UI know if the published text was a truncated excerpt
-    wasExcerpt:     publishText !== currentDraft.content,
+    hasMedia:       false,
   })
 }
 
 
-// ── Resolve what to publish ──────────────────────────────────────────
-// Priority order:
-//   1. linkedin_excerpt saved at generation time (AI-crafted, best quality)
-//   2. Smart truncation at the last paragraph break before LI_SAFE_CHARS
-//   3. Hard truncation with ellipsis as last resort
-function resolvePublishText(
-  fullContent: string,
-  linkedinExcerpt: string | null,
-  isLongForm: boolean,
-): string {
-  // Short content — no action needed
-  if (fullContent.length <= LI_MAX_CHARS) return fullContent
+// ── Resolve text for text-only publish ────────────────────────────────────
+function resolvePublishText(content: string): string {
+  if (content.length <= LI_MAX_CHARS) return content
 
-  // Long-form: prefer the AI-crafted excerpt if it exists and fits
-  if (isLongForm && linkedinExcerpt?.trim()) {
-    const excerpt = linkedinExcerpt.trim()
-    if (excerpt.length <= LI_MAX_CHARS) return excerpt
-  }
-
-  // Fall back: smart truncation — cut at the last double-newline before LI_SAFE_CHARS
-  const candidate = fullContent.slice(0, LI_SAFE_CHARS)
+  const candidate = content.slice(0, LI_SAFE_CHARS)
   const lastBreak = candidate.lastIndexOf('\n\n')
 
-  let truncated: string
   if (lastBreak > LI_SAFE_CHARS * 0.6) {
-    // Good paragraph break found — use it
-    truncated = candidate.slice(0, lastBreak).trimEnd()
-  } else {
-    // No good break — fall back to last sentence end
-    const lastPeriod = candidate.lastIndexOf('.')
-    truncated = lastPeriod > LI_SAFE_CHARS * 0.6
-      ? candidate.slice(0, lastPeriod + 1).trimEnd()
-      : candidate.trimEnd() + '...'
+    return candidate.slice(0, lastBreak).trimEnd()
   }
-
-  // Append the full-article pointer
-  truncated += '\n\n[Full article on coachsharath.com — link in bio]'
-
-  return truncated
+  const lastPeriod = candidate.lastIndexOf('.')
+  return lastPeriod > LI_SAFE_CHARS * 0.6
+    ? candidate.slice(0, lastPeriod + 1).trimEnd()
+    : candidate.trimEnd() + '...'
 }
 
 
-// ── LinkedIn REST Posts API (/rest/posts) ────────────────────────────
-// Replaces the deprecated /v2/ugcPosts endpoint.
-// The /rest/posts limit is 3,000 characters for personal profiles.
-async function callLinkedInAPI(
+// ── Fetch author URN from LinkedIn userinfo ────────────────────────────────
+async function fetchAuthorUrn(accessToken: string): Promise<string | null> {
+  try {
+    const res = await fetch('https://api.linkedin.com/v2/userinfo', {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    })
+    if (!res.ok) return null
+    const profile = await res.json()
+    return `urn:li:person:${profile.sub}`
+  } catch {
+    return null
+  }
+}
+
+
+// ── Text-only post ─────────────────────────────────────────────────────────
+async function postTextToLinkedIn(
   content: string,
   accessToken: string,
-  linkedinId: string | null,
+  authorUrn: string,
   visibility: 'PUBLIC' | 'LOGGED_IN' | 'CONNECTIONS',
 ): Promise<{ success: boolean; postId?: string; url?: string; error?: string }> {
   try {
-    let authorUrn: string
-
-    if (linkedinId) {
-      authorUrn = `urn:li:person:${linkedinId}`
-    } else {
-      const profileRes = await fetch('https://api.linkedin.com/v2/userinfo', {
-        headers: { Authorization: `Bearer ${accessToken}` },
-      })
-      if (!profileRes.ok) {
-        return { success: false, error: 'Failed to fetch LinkedIn profile. Please reconnect.' }
-      }
-      const profile = await profileRes.json()
-      authorUrn = `urn:li:person:${profile.sub}`
-    }
-
-    // Map old visibility values to the /rest/posts enum
-    const visibilityMap: Record<string, string> = {
-      PUBLIC:       'PUBLIC',
-      LOGGED_IN:    'LOGGED_IN',  // preview — visible to logged-in LinkedIn members
-      CONNECTIONS:  'CONNECTIONS',
-    }
-
-    const postBody = {
-      author:     authorUrn,
-      commentary: content,
-      visibility: visibilityMap[visibility] ?? 'PUBLIC',
-      distribution: {
-        feedDistribution:               'MAIN_FEED',
-        targetEntities:                 [],
-        thirdPartyDistributionChannels: [],
+    const res = await fetch('https://api.linkedin.com/rest/posts', {
+      method: 'POST',
+      headers: {
+        Authorization:              `Bearer ${accessToken}`,
+        'Content-Type':             'application/json',
+        'LinkedIn-Version':         '202604',
+        'X-Restli-Protocol-Version': '2.0.0',
       },
-      lifecycleState:         'PUBLISHED',
-      isReshareDisabledByAuthor: false,
+      body: JSON.stringify({
+        author:     authorUrn,
+        commentary: content,
+        visibility,
+        distribution: {
+          feedDistribution:               'MAIN_FEED',
+          targetEntities:                 [],
+          thirdPartyDistributionChannels: [],
+        },
+        lifecycleState:            'PUBLISHED',
+        isReshareDisabledByAuthor: false,
+      }),
+    })
+
+    if (!res.ok) {
+      return { success: false, error: `LinkedIn API error (${res.status}): ${await res.text()}` }
     }
 
+    const location = res.headers.get('location') ?? ''
+    const liPostId = decodeURIComponent(location.split('/').pop() ?? location)
+
+    return {
+      success: true,
+      postId:  liPostId,
+      url:     liPostId ? `https://www.linkedin.com/feed/update/${liPostId}/` : undefined,
+    }
+  } catch (err) {
+    return { success: false, error: err instanceof Error ? err.message : 'Unknown error' }
+  }
+}
+
+
+// ── Document post (PDF) ────────────────────────────────────────────────────
+async function postDocumentToLinkedIn(
+  caption: string,
+  fileName: string,
+  fileBuffer: Buffer,
+  accessToken: string,
+  authorUrn: string,
+): Promise<{ success: boolean; postId?: string; url?: string; error?: string }> {
+  try {
+    // Step 1: Initialize upload
+    const initRes = await fetch(
+      'https://api.linkedin.com/rest/documents?action=initializeUpload',
+      {
+        method: 'POST',
+        headers: {
+          Authorization:              `Bearer ${accessToken}`,
+          'Content-Type':             'application/json',
+          'LinkedIn-Version':         '202604',
+          'X-Restli-Protocol-Version': '2.0.0',
+        },
+        body: JSON.stringify({
+          initializeUploadRequest: { owner: authorUrn },
+        }),
+      }
+    )
+
+    if (!initRes.ok) {
+      return { success: false, error: `Document init failed (${initRes.status}): ${await initRes.text()}` }
+    }
+
+    const { value: initData } = await initRes.json()
+    const uploadUrl    = initData.uploadUrl as string
+    const documentUrn  = initData.document as string
+
+    // Step 2: Upload the binary
+    const uploadRes = await fetch(uploadUrl, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/octet-stream',
+      },
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      body: fileBuffer as any,
+    })
+
+    if (!uploadRes.ok) {
+      return { success: false, error: `Document upload failed (${uploadRes.status}): ${await uploadRes.text()}` }
+    }
+
+    // Step 3: Create the post
     const postRes = await fetch('https://api.linkedin.com/rest/posts', {
       method: 'POST',
       headers: {
         Authorization:              `Bearer ${accessToken}`,
         'Content-Type':             'application/json',
-        'LinkedIn-Version':         '202604',   // pin to a stable monthly version
+        'LinkedIn-Version':         '202604',
         'X-Restli-Protocol-Version': '2.0.0',
       },
-      body: JSON.stringify(postBody),
+      body: JSON.stringify({
+        author:     authorUrn,
+        commentary: caption,
+        visibility: 'PUBLIC',
+        distribution: {
+          feedDistribution:               'MAIN_FEED',
+          targetEntities:                 [],
+          thirdPartyDistributionChannels: [],
+        },
+        content: {
+          media: {
+            id:    documentUrn,
+            title: fileName.replace(/\.(pdf|png|jpg)$/i, '').replace(/-/g, ' '),
+          },
+        },
+        lifecycleState:            'PUBLISHED',
+        isReshareDisabledByAuthor: false,
+      }),
     })
 
     if (!postRes.ok) {
-      const errBody = await postRes.text()
-      return { success: false, error: `LinkedIn API error (${postRes.status}): ${errBody}` }
+      return { success: false, error: `Post create failed (${postRes.status}): ${await postRes.text()}` }
     }
 
-    // /rest/posts returns the post URN in the Location header: urn:li:share:123456789
-    // The URN may be URL-encoded in the header — decode to a clean canonical form
     const location = postRes.headers.get('location') ?? ''
     const liPostId = decodeURIComponent(location.split('/').pop() ?? location)
 
@@ -286,28 +412,116 @@ async function callLinkedInAPI(
 }
 
 
-// ── Delete a LinkedIn post ───────────────────────────────────────────
-// Uses /rest/posts for consistency with the new API.
+// ── Image post ─────────────────────────────────────────────────────────────
+async function postImageToLinkedIn(
+  caption: string,
+  imageBuffer: Buffer,
+  accessToken: string,
+  authorUrn: string,
+): Promise<{ success: boolean; postId?: string; url?: string; error?: string }> {
+  try {
+    // Step 1: Initialize image upload
+    const initRes = await fetch(
+      'https://api.linkedin.com/rest/images?action=initializeUpload',
+      {
+        method: 'POST',
+        headers: {
+          Authorization:              `Bearer ${accessToken}`,
+          'Content-Type':             'application/json',
+          'LinkedIn-Version':         '202604',
+          'X-Restli-Protocol-Version': '2.0.0',
+        },
+        body: JSON.stringify({
+          initializeUploadRequest: { owner: authorUrn },
+        }),
+      }
+    )
+
+    if (!initRes.ok) {
+      return { success: false, error: `Image init failed (${initRes.status}): ${await initRes.text()}` }
+    }
+
+    const { value: initData } = await initRes.json()
+    const uploadUrl  = initData.uploadUrl as string
+    const imageUrn   = initData.image as string
+
+    // Step 2: Upload the image
+    const uploadRes = await fetch(uploadUrl, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'image/png',
+      },
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      body: imageBuffer as any,
+    })
+
+    if (!uploadRes.ok) {
+      return { success: false, error: `Image upload failed (${uploadRes.status}): ${await uploadRes.text()}` }
+    }
+
+    // Step 3: Create the post
+    const postRes = await fetch('https://api.linkedin.com/rest/posts', {
+      method: 'POST',
+      headers: {
+        Authorization:              `Bearer ${accessToken}`,
+        'Content-Type':             'application/json',
+        'LinkedIn-Version':         '202604',
+        'X-Restli-Protocol-Version': '2.0.0',
+      },
+      body: JSON.stringify({
+        author:     authorUrn,
+        commentary: caption,
+        visibility: 'PUBLIC',
+        distribution: {
+          feedDistribution:               'MAIN_FEED',
+          targetEntities:                 [],
+          thirdPartyDistributionChannels: [],
+        },
+        content: {
+          media: {
+            id: imageUrn,
+          },
+        },
+        lifecycleState:            'PUBLISHED',
+        isReshareDisabledByAuthor: false,
+      }),
+    })
+
+    if (!postRes.ok) {
+      return { success: false, error: `Post create failed (${postRes.status}): ${await postRes.text()}` }
+    }
+
+    const location = postRes.headers.get('location') ?? ''
+    const liPostId = decodeURIComponent(location.split('/').pop() ?? location)
+
+    return {
+      success: true,
+      postId:  liPostId,
+      url:     liPostId ? `https://www.linkedin.com/feed/update/${liPostId}/` : undefined,
+    }
+  } catch (err) {
+    return { success: false, error: err instanceof Error ? err.message : 'Unknown error' }
+  }
+}
+
+
+// ── Delete a LinkedIn post ────────────────────────────────────────────────
 async function deleteLinkedInPost(linkedinPostId: string, accessToken: string): Promise<void> {
   try {
-    // Try /rest/posts first; fall back to /v2/ugcPosts for legacy post IDs
     const normalizedId = encodeURIComponent(decodeURIComponent(linkedinPostId))
-    const restUrl = `https://api.linkedin.com/rest/posts/${normalizedId}`
-    const res = await fetch(restUrl, {
+    const res = await fetch(`https://api.linkedin.com/rest/posts/${normalizedId}`, {
       method: 'DELETE',
       headers: {
-        Authorization:      `Bearer ${accessToken}`,
-        'LinkedIn-Version': '202504',
+        Authorization:              `Bearer ${accessToken}`,
+        'LinkedIn-Version':         '202604',
         'X-Restli-Protocol-Version': '2.0.0',
       },
     })
-
     if (!res.ok && res.status !== 404) {
-      // Fall back to legacy endpoint for any old ugcPost IDs still in the DB
       await fetch(`https://api.linkedin.com/v2/ugcPosts/${encodeURIComponent(linkedinPostId)}`, {
         method: 'DELETE',
         headers: {
-          Authorization: `Bearer ${accessToken}`,
+          Authorization:              `Bearer ${accessToken}`,
           'X-Restli-Protocol-Version': '2.0.0',
         },
       })
