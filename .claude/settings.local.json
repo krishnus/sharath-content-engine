@@ -24,7 +24,13 @@
       "Bash(node *)",
       "Bash(npm show *)",
       "Bash(git add *)",
-      "Bash(git commit -m ' *)"
+      "Bash(git commit -m ' *)",
+      "Bash(2>/dev/null)",
+      "Bash(curl -s \"https://api.github.com/repos/google/fonts/contents/ofl/montserrat\")",
+      "Bash(curl -s -A \"Mozilla/4.0\" \"https://fonts.googleapis.com/css?family=Montserrat:400,600,700\")",
+      "Bash(curl -sL \"https://fonts.gstatic.com/s/montserrat/v31/JTUHjIg1_i6t8kCHKm4532VJOt5-QNFgpCtr6Hw5aX8.ttf\" -o public/fonts/Montserrat-Regular.ttf)",
+      "Bash(curl -sL \"https://fonts.gstatic.com/s/montserrat/v31/JTUHjIg1_i6t8kCHKm4532VJOt5-QNFgpCu173w5aX8.ttf\" -o public/fonts/Montserrat-SemiBold.ttf)",
+      "Bash(curl -sL \"https://fonts.gstatic.com/s/montserrat/v31/JTUHjIg1_i6t8kCHKm4532VJOt5-QNFgpCuM73w5aX8.ttf\" -o public/fonts/Montserrat-Bold.ttf)"
     ]
   }
 }
