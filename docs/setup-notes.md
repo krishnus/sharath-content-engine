@@ -56,11 +56,11 @@ public/
 
 To restore these files (e.g. after a fresh clone):
 ```bash
-# Fonts
+# Fonts — download directly from Google Fonts CDN (NOT GitHub raw — that repo now only has variable fonts)
 mkdir -p public/fonts
-curl -sL "https://github.com/google/fonts/raw/main/ofl/montserrat/static/Montserrat-Regular.ttf" -o public/fonts/Montserrat-Regular.ttf
-curl -sL "https://github.com/google/fonts/raw/main/ofl/montserrat/static/Montserrat-SemiBold.ttf" -o public/fonts/Montserrat-SemiBold.ttf
-curl -sL "https://github.com/google/fonts/raw/main/ofl/montserrat/static/Montserrat-Bold.ttf" -o public/fonts/Montserrat-Bold.ttf
+curl -sL "https://fonts.gstatic.com/s/montserrat/v31/JTUHjIg1_i6t8kCHKm4532VJOt5-QNFgpCtr6Hw5aX8.ttf" -o public/fonts/Montserrat-Regular.ttf
+curl -sL "https://fonts.gstatic.com/s/montserrat/v31/JTUHjIg1_i6t8kCHKm4532VJOt5-QNFgpCu173w5aX8.ttf" -o public/fonts/Montserrat-SemiBold.ttf
+curl -sL "https://fonts.gstatic.com/s/montserrat/v31/JTUHjIg1_i6t8kCHKm4532VJOt5-QNFgpCuM73w5aX8.ttf" -o public/fonts/Montserrat-Bold.ttf
 
 # Logos
 mkdir -p public/brand
