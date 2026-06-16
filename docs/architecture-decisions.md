@@ -60,42 +60,41 @@ A record of significant architectural decisions made during development, includi
 
 ---
 
-## 6. LinkedIn publishing — excerpt generation instead of full-article truncation
+## 6. LinkedIn publishing — full-article PDF document post (not excerpt, not article API)
 
-**Decision:** For Monday/Wednesday long-form articles (900–1100 words ≈ 5000–7000 chars), a **second silent Anthropic call** generates a purpose-built LinkedIn feed excerpt (1800–2700 chars) that is saved to `drafts.linkedin_excerpt` and used for publishing. The full article remains in the editor.
+**Decision (revised 2026-06-16):** For Monday/Wednesday long-form articles (900–1100 words), publish the **full article formatted as a PDF** via LinkedIn's document post API (`/rest/documents`). The PDF is generated server-side with `@react-pdf/renderer` using Coach Sharath's brand template (navy/gold, Montserrat font), uploaded to Supabase Storage, downloaded at publish time, and uploaded to LinkedIn as a document post (which displays as a scrollable document viewer in the LinkedIn feed).
 
-**Alternatives considered (in order of consideration):**
-1. **Option A — naive truncation:** Cut the full article at ~3800 chars and append a "Read more" link. Quick fix, but produces excerpts that often end mid-sentence or mid-thought, undermining Sharath's carefully-crafted closing reflection questions.
-2. **Option B (original) — LinkedIn Article API:** Investigated using LinkedIn's native long-form Article API (`/v2/articles`) which has no character limit. **Rejected after research** — this API does not exist / is not available for third-party publishing; LinkedIn long-form articles can only be created through the web UI.
-3. **Option 1 (revised) — migrate to `/rest/posts` + truncate to 3000 chars:** Technically correct migration, but truncation alone still produces awkward cut-off excerpts.
-4. **Option 3 — manual publishing for long-form:** Reduces automation value; rejected because Monday/Wednesday are the highest-value posts (Category A/B conversion).
+**Previous approach (removed):** A second Anthropic call generated a 1800–2700 char `linkedin_excerpt` saved to `drafts.linkedin_excerpt`, which was then published as a text post with a smart truncation fallback. This was removed because: (1) excerpts of long-form pieces rarely read as complete; (2) the AI excerpt call added latency; (3) excerpts cannot carry the same engagement signals as document posts.
 
-**Decision made — Option 2 (AI-generated excerpt) combined with the `/rest/posts` migration:**
-- Migrate `callLinkedInAPI()` from deprecated `/v2/ugcPosts` to `/rest/posts` (3000-char limit, current API)
-- Generate a dedicated excerpt via `buildLinkedInExcerptPrompt()` that preserves Sharath's hook, core wisdom, and closing reflection question within 1800–2700 chars
-- Fall back to smart truncation (cut at last paragraph break + pointer to full article) only if excerpt generation fails or wasn't run (e.g. old drafts pre-migration)
+**Alternatives considered:**
+1. **LinkedIn Article API** — investigated `/v2/articles`. **Does not exist** for third-party API publishing. LinkedIn long-form articles can only be created through the web UI.
+2. **Manual publish (Sharath uploads manually)** — rejected because Mon/Wed are the highest-value posts and removing automation there defeats the system's purpose.
+3. **Text post with smart truncation** — technically valid (fits 3000-char limit with paragraph-break truncation) but produces incomplete-feeling posts that undermine Category A/B conversion.
+4. **Link card to coachsharath.com** — rejected because coachsharath.com is on Wix, dormant 2+ years, near-zero SEO authority, and has no publishing API.
 
-**Trade-off accepted:** One extra Anthropic API call per long-form post (cost: negligible — 2 posts/week), plus added complexity in `resolvePublishText()`'s priority chain. In exchange: LinkedIn feed posts read as complete, polished pieces rather than truncated fragments — critical for Category A/B conversion, which is the system's core commercial purpose.
+**Trade-off accepted:** Generating PDFs adds ~2–5 seconds to the publish flow (one-time, before LinkedIn upload). The `post_media` table and Supabase Storage add operational overhead (bucket must be created manually). In exchange: full articles reach the audience with no truncation, LinkedIn document posts have higher engagement than text posts, and metrics are fully trackable via the analytics cron.
+
+**Implementation:** `lib/templates/article-pdf.tsx` + `lib/templates/carousel-pdf.tsx` (react-pdf), `lib/templates/quote-image.ts` (satori + resvg-js), `app/api/media/generate/route.ts`, `app/api/media/[id]/route.ts`, `post_media` DB table.
 
 ---
 
-## 7. Streaming generation via Server-Sent Events (raw `ReadableStream`), not a charting/streaming library
+## 7. Streaming generation via raw `ReadableStream`, not a streaming library
 
 **Decision:** `/api/generate` returns a raw `ReadableStream` of UTF-8 text chunks with `Content-Type: text/plain` and `Transfer-Encoding: chunked`. The frontend reads this stream directly and appends to the editor in real time.
 
 **Alternatives considered:** Use a library like `ai` (Vercel AI SDK) which provides hooks (`useChat`, `useCompletion`) for streaming.
 
-**Trade-off accepted:** More manual plumbing (manually parsing chunks, manually triggering `saveDrafts()` after `controller.close()`), but avoids adding a dependency whose abstractions (chat-message paradigm) don't map cleanly onto "stream one long-form document into an editor and then run post-processing." The custom approach also makes it straightforward to fire the async excerpt-generation call after the stream closes without fighting a library's lifecycle.
+**Trade-off accepted:** More manual plumbing (manually parsing chunks, manually triggering `saveDrafts()` after `controller.close()`), but avoids adding a dependency whose abstractions (chat-message paradigm) don't map cleanly onto "stream one long-form document into an editor and then run post-processing."
 
 ---
 
-## 8. Excerpt generation is asynchronous (non-blocking) in streaming mode, synchronous in non-streaming mode
+## 8. Media attached to posts, not to drafts
 
-**Decision:** In the streaming path, `generateAndSaveExcerpt()` is called with `.catch()` and not awaited — the response stream closes immediately after `saveDrafts()`, and the excerpt arrives a few seconds later via a background update to `drafts.linkedin_excerpt`. In the non-streaming path (used for Saturday's structured JSON-ish responses and any programmatic calls), it's awaited and returned in the JSON response.
+**Decision:** The `post_media` table links to `posts.id`, not `drafts.id`. One media file per media type per post (`UNIQUE(post_id, media_type)`). When content is regenerated, the media is regenerated and the record is upserted — the new file replaces the old one at the same storage path.
 
-**Alternatives considered:** Always await excerpt generation, even in streaming mode — simpler code path, single behaviour.
+**Alternatives considered:** Attach media to a specific draft version (link to `drafts.id`). This would preserve media history across regenerations.
 
-**Trade-off accepted:** Streaming mode prioritises perceived responsiveness — Sharath sees the article finish streaming and can start reading/editing immediately, while the excerpt (which he doesn't see during editing) generates in the background. The risk is a race condition: if Sharath clicks "Publish" within ~3-5 seconds of generation finishing, the excerpt might not be saved yet, and `resolvePublishText()` falls back to smart truncation. This was judged an acceptable edge case given the actual workflow (Sharath reviews/edits for minutes before publishing).
+**Trade-off accepted:** We don't need a versioned media history — media is derived from content, and content versioning is already handled by the `drafts` table. Attaching to the post (not the draft) keeps the media model simple: there is always at most one current PDF/image per post, which is what the publish route needs.
 
 ---
 
@@ -136,10 +135,9 @@ Per-post generation (Mon–Sat)
        ├─> fetch active voice_rules → buildVoiceRulesBlock()
        ├─> fetch story_log (latest) + weeks.open_thread → buildNarrativeContext()
        ├─> buildGeneratePostPrompt() (or buildSaturdayMarketInsightsPrompt() for Saturday)
+       │    └─> output includes LINKEDIN_CAPTION: (long-form/carousel) or QUOTE: (text/market) fields
        ├─> Anthropic streaming call → ReadableStream → editor
-       ├─> on stream close: saveDrafts() → INSERT INTO drafts (version 1 original + version 2 working copy on first run; new version on regen)
-       └─> if Mon/Wed long-form: generateAndSaveExcerpt() (async, non-blocking in streaming mode)
-            └─> buildLinkedInExcerptPrompt() → UPDATE drafts SET linkedin_excerpt
+       └─> on stream close: saveDrafts() → INSERT INTO drafts
 
 Sharath edits draft in editor
   └─> /api/drafts/save → UPDATE drafts SET content, word_count (in-place, no new version)
@@ -154,10 +152,23 @@ Sharath approves post
             └─> CandidateRulesModal → Sharath reviews
                  └─> POST /api/rules/candidates → INSERT INTO voice_rules (approved subset only)
 
+Media generation (editor sidebar, optional before publish)
+  └─> POST /api/media/generate { postId, mediaType }
+       ├─> fetch post + current draft
+       ├─> generate PDF (react-pdf) or PNG (satori + resvg-js) from draft content
+       ├─> upload to Supabase Storage (bucket: post-media, path: posts/{id}/{type}/{file})
+       ├─> UPSERT INTO post_media
+       └─> return signed URL for preview
+
 Publishing
   └─> POST /api/publish { postId, publishNow: true }
-       ├─> resolvePublishText() — excerpt > smart truncate > hard truncate
-       ├─> callLinkedInAPI() → POST https://api.linkedin.com/rest/posts
+       ├─> fetch post + current draft + post_media record (if any)
+       ├─> resolve caption: post_media.linkedin_caption → fallback smart truncation
+       ├─> if media exists:
+       │    ├─> download file from Supabase Storage
+       │    ├─> if PDF: POST /rest/documents (init) → PUT binary → POST /rest/posts with content.media.id
+       │    └─> if PNG: POST /rest/images (init) → PUT binary → POST /rest/posts with content.media.id
+       └─> if no media: POST /rest/posts with text commentary only
        └─> INSERT INTO linkedin_posts, UPDATE posts.status = 'published'
 
 Scheduled publishing

@@ -33,7 +33,42 @@ npx shadcn-ui@latest init
 
 # Utilities
 npm install clsx tailwind-merge  # for cn() helper
+
+# Media generation
+npm install @react-pdf/renderer   # PDF generation for article and carousel templates
+npm install satori                 # HTML/CSS → SVG (for quote images)
+npm install @resvg/resvg-js       # SVG → PNG conversion (native Node.js binding)
 ```
+
+### Brand assets setup
+The following files must be present for PDF/image generation to work:
+
+```
+public/
+  fonts/
+    Montserrat-Regular.ttf      # Download from: https://github.com/google/fonts/raw/main/ofl/montserrat/static/
+    Montserrat-SemiBold.ttf
+    Montserrat-Bold.ttf
+  brand/
+    coach-sharath-logo.png      # Copied from docs/logos/COACH-SHARTH-logo.png
+    5swans-logo.png             # Copied from docs/logos/Logo Pink Blue Transperant.png
+```
+
+To restore these files (e.g. after a fresh clone):
+```bash
+# Fonts
+mkdir -p public/fonts
+curl -sL "https://github.com/google/fonts/raw/main/ofl/montserrat/static/Montserrat-Regular.ttf" -o public/fonts/Montserrat-Regular.ttf
+curl -sL "https://github.com/google/fonts/raw/main/ofl/montserrat/static/Montserrat-SemiBold.ttf" -o public/fonts/Montserrat-SemiBold.ttf
+curl -sL "https://github.com/google/fonts/raw/main/ofl/montserrat/static/Montserrat-Bold.ttf" -o public/fonts/Montserrat-Bold.ttf
+
+# Logos
+mkdir -p public/brand
+cp "docs/logos/COACH-SHARTH-logo.png" public/brand/coach-sharath-logo.png
+cp "docs/logos/Logo Pink Blue Transperant.png" public/brand/5swans-logo.png
+```
+
+Brand colors: Primary blue `#0B4E94`, Gold `#FFAF38` (from `docs/logos/COACH SHARTH guidelines.pdf`)
 
 ---
 
@@ -61,9 +96,19 @@ In Supabase dashboard → **SQL Editor**, run in order:
 -- 2. LinkedIn token storage
 -- Copy/paste contents of: supabase/migrations/002_linkedin_tokens.sql
 
--- 3. LinkedIn excerpt column on drafts table
+-- 3. LinkedIn excerpt column on drafts (deprecated — column exists but is never written)
 -- Copy/paste contents of: supabase/migrations/003_drafts_linkedin_excerpt.sql
+
+-- 4. post_media table for PDF and image attachments
+-- Copy/paste contents of: supabase/migrations/004_post_media.sql
 ```
+
+### Creating the Storage bucket
+After running migrations, create the media storage bucket:
+1. Supabase Dashboard → **Storage** → **New Bucket**
+2. Name: `post-media`
+3. Set to **Private** (not public — access via signed URLs only)
+4. The RLS policy in migration 004 covers DB records; Storage bucket policies are set separately in the dashboard under Storage → Policies if needed
 
 Then create the `system_settings` table manually:
 ```sql
@@ -149,7 +194,7 @@ LinkedIn OAuth tokens are stored in the `linkedin_tokens` Supabase table. The to
 2. Create new API key
 3. Copy to `ANTHROPIC_API_KEY` in `.env.local`
 4. Model: controlled by `ANTHROPIC_MODEL` env var; defaults to `claude-sonnet-4-5-20250929` if not set. Defined as `MODEL` constant in `lib/anthropic/client.ts`.
-5. `MAX_TOKENS` constant = **2048** (used for main generation). Excerpt generation hardcodes `max_tokens: 1024` directly in `generateAndSaveExcerpt()`.
+5. `MAX_TOKENS` constant = **2048** (used for all generation). No secondary excerpt generation call exists — long-form articles are published as PDFs, not truncated excerpts.
 
 ---
 

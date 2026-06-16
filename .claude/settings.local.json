@@ -20,7 +20,11 @@
       "Bash(curl -sL \"https://github.com/google/fonts/raw/main/ofl/montserrat/static/Montserrat-SemiBold.ttf\" -o /Users/sharath/Coaching/sharath-content-engine/public/fonts/Montserrat-SemiBold.ttf)",
       "Bash(curl -sL \"https://github.com/google/fonts/raw/main/ofl/montserrat/static/Montserrat-Bold.ttf\" -o /Users/sharath/Coaching/sharath-content-engine/public/fonts/Montserrat-Bold.ttf)",
       "Bash(wait)",
-      "Bash(npm run *)"
+      "Bash(npm run *)",
+      "Bash(node *)",
+      "Bash(npm show *)",
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)"
     ]
   }
 }
