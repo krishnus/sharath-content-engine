@@ -1,7 +1,7 @@
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const satori = require('satori').default ?? require('satori')
 import { Resvg } from '@resvg/resvg-js'
-import { getFontBuffers } from './fonts'
+import { getFontBuffers, normalizeIAST } from './fonts'
 import fs from 'fs'
 import path from 'path'
 
@@ -36,7 +36,7 @@ export async function generateQuoteImage(props: QuoteImageProps): Promise<Buffer
   const fonts = getFontBuffers()
   const { finance, coach } = getTemplates()
 
-  const displayQuote = quote.length > 200 ? quote.slice(0, 197) + '...' : quote
+  const displayQuote = normalizeIAST(quote.length > 200 ? quote.slice(0, 197) + '...' : quote)
 
   // Font size: scale down for longer quotes
   const fontSize = displayQuote.length > 150 ? 32

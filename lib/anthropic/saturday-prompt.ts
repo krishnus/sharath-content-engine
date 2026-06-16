@@ -33,7 +33,7 @@ export function buildSaturdayMarketInsightsPrompt(params: {
     `5. Closing reflection (1 sentence): Bridge into next week.`,
     ``,
     `**Scriptural citations:** If referencing any shloka or text, use full format:`,
-    `Sanskrit in Devanagari + transliteration + reference code (BG 3.21 / AS 1.6 etc.) + translation.`,
+    `Sanskrit in Devanagari + simple phonetic romanization (standard English letters only, no diacritical marks) + reference code (BG 3.21 / AS 1.6 etc.) + translation.`,
     ``,
     `**Tone:** Analytical, peer-to-peer with HNIs. Never a product pitch.`,
     ``,

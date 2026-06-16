@@ -3,7 +3,7 @@ import React from 'react'
 import {
   Document, Page, Text, View, Image, Font, StyleSheet, renderToBuffer,
 } from '@react-pdf/renderer'
-import { BRAND_BLUE, BRAND_GOLD, FONT_PATHS, LOGO_PATH, SWANS_LOGO_PATH } from './fonts'
+import { BRAND_BLUE, BRAND_GOLD, FONT_PATHS, LOGO_PATH, SWANS_LOGO_PATH, normalizeIAST } from './fonts'
 
 Font.register({
   family: 'Montserrat',
@@ -214,11 +214,11 @@ function CarouselDocument({ theme, titleSlide, slides, pillar, quarter, weekNumb
         return (
           <View key={`${key}-${i}`} style={S.bulletRowSlide}>
             <Text style={S.bulletDot}>•</Text>
-            <Text style={S.bulletBodyText}>{line.replace(/^[-•]\s/, '')}</Text>
+            <Text style={S.bulletBodyText}>{normalizeIAST(line.replace(/^[-•]\s/, ''))}</Text>
           </View>
         )
       }
-      return <Text key={`${key}-${i}`} style={S.bodyText}>{line}</Text>
+      return <Text key={`${key}-${i}`} style={S.bodyText}>{normalizeIAST(line)}</Text>
     })
   }
 
@@ -245,7 +245,7 @@ function CarouselDocument({ theme, titleSlide, slides, pillar, quarter, weekNumb
       {slides.map((slide, i) => (
         <Page key={i} size={[SIZE, SIZE]} style={S.contentPage}>
           <View style={S.contentHeader}>
-            <Text style={S.slideHeadline}>{slide.headline}</Text>
+            <Text style={S.slideHeadline}>{normalizeIAST(slide.headline)}</Text>
             <View style={S.slideNumBadge}>
               <Text style={S.slideNumText}>{i + 2}</Text>
             </View>

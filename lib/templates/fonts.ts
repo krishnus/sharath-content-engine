@@ -37,3 +37,29 @@ export const FONT_PATHS = {
 
 export const LOGO_PATH = path.join(process.cwd(), 'public/brand/coach-sharath-logo.png')
 export const SWANS_LOGO_PATH = path.join(process.cwd(), 'public/brand/5swans-logo.png')
+
+// ── IAST diacritical → ASCII safety net ──────────────────────────────────────
+// Montserrat has no glyphs for Latin Extended Additional (U+1E00–U+1EFF).
+// Normalise any stray IAST characters before passing to react-pdf or satori.
+const IAST: Record<string, string> = {
+  'ā': 'a',  'Ā': 'A',
+  'ī': 'i',  'Ī': 'I',
+  'ū': 'u',  'Ū': 'U',
+  'ṛ': 'r',  'Ṛ': 'R',
+  'ṝ': 'r',  'Ṝ': 'R',
+  'ḷ': 'l',  'Ḷ': 'L',
+  'ṭ': 't',  'Ṭ': 'T',
+  'ḍ': 'd',  'Ḍ': 'D',
+  'ṇ': 'n',  'Ṇ': 'N',
+  'ṅ': 'n',  'Ṅ': 'N',
+  'ś': 'sh', 'Ś': 'Sh',
+  'ṣ': 'sh', 'Ṣ': 'Sh',
+  'ḥ': 'h',  'Ḥ': 'H',
+  'ṃ': 'm',  'Ṃ': 'M',
+  'ñ': 'n',  'Ñ': 'N',
+}
+const IAST_RE = new RegExp(Object.keys(IAST).join('|'), 'g')
+
+export function normalizeIAST(text: string): string {
+  return text.replace(IAST_RE, ch => IAST[ch] ?? ch)
+}

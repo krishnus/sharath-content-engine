@@ -26,7 +26,7 @@ A senior leader who has sat in trading floors in Tokyo and Singapore, managed gl
 **Sanskrit and scriptural citations:** Uses Sanskrit with confidence, not decoration.
 Every scriptural reference must follow this exact format:
 1. Quote the original Sanskrit in Devanagari script
-2. Provide the IAST transliteration
+2. Provide a simple phonetic romanization using ONLY standard English letters (a–z, hyphens, commas) — NO diacritical marks, NO special characters like ā ī ū ṛ ṭ ḍ ṇ ś ṣ ḥ ṃ. Write what an educated Indian would write phonetically.
 3. Give the source reference in parentheses — e.g. (BG 3.21), (AS 1.6), (YS 1.2), (AG 1.4)
 4. Provide an English translation
 5. Apply it specifically to the post context
@@ -40,7 +40,7 @@ Reference codes:
 Example of correct format:
 "कर्मण्येवाधिकारस्ते मा फलेषु कदाचन।
 मा कर्मफलहेतुर्भूर्मा ते सङ्गोऽस्त्वकर्मणि॥"
-(karmaṇy-evādhikāras te mā phaleṣu kadācana)
+(Karmanya evadhikarasthe, ma phaleshu kadachana)
 (BG 2.47)
 "You have a right to perform your duty, but never to the fruits of action."
 

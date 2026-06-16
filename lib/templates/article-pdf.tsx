@@ -3,7 +3,7 @@ import React from 'react'
 import {
   Document, Page, Text, View, Image, Font, StyleSheet, renderToBuffer,
 } from '@react-pdf/renderer'
-import { BRAND_BLUE, BRAND_GOLD, FONT_PATHS, LOGO_PATH } from './fonts'
+import { BRAND_BLUE, BRAND_GOLD, FONT_PATHS, LOGO_PATH, normalizeIAST } from './fonts'
 
 Font.register({
   family: 'Montserrat',
@@ -166,10 +166,11 @@ const S = StyleSheet.create({
 
 const DEVANAGARI_RE = /[ऀ-ॿ]+/
 
-// Split a string into alternating Latin / Devanagari segments for mixed-font rendering
+// Split a string into alternating Latin / Devanagari segments for mixed-font rendering.
+// Latin segments are passed through normalizeIAST() so Montserrat glyphs always exist.
 function renderMixedScript(text: string, baseStyle: object, devStyle: object, keyBase: number): React.ReactNode {
   if (!DEVANAGARI_RE.test(text)) {
-    return <Text key={keyBase} style={baseStyle}>{text}</Text>
+    return <Text key={keyBase} style={baseStyle}>{normalizeIAST(text)}</Text>
   }
   const parts = text.split(/([ऀ-ॿ]+)/)
   return (
@@ -177,7 +178,7 @@ function renderMixedScript(text: string, baseStyle: object, devStyle: object, ke
       {parts.map((part, i) =>
         DEVANAGARI_RE.test(part)
           ? <Text key={i} style={devStyle}>{part}</Text>
-          : part
+          : normalizeIAST(part)
       )}
     </Text>
   )
