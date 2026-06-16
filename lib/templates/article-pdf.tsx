@@ -14,6 +14,11 @@ Font.register({
   ],
 })
 
+Font.register({
+  family: 'NotoDevanagari',
+  src: FONT_PATHS.devanagari,
+})
+
 const S = StyleSheet.create({
   page: {
     fontFamily:      'Montserrat',
@@ -36,9 +41,15 @@ const S = StyleSheet.create({
     alignItems:    'center',
     marginBottom:  14,
   },
+  logoBox: {
+    backgroundColor: '#FFFFFF',
+    borderRadius:    4,
+    paddingHorizontal: 8,
+    paddingVertical:   4,
+  },
   logo: {
-    width:  90,
-    height: 30,
+    width:     100,
+    height:    32,
     objectFit: 'contain',
   },
   goldRule: {
@@ -153,41 +164,61 @@ const S = StyleSheet.create({
   },
 })
 
+const DEVANAGARI_RE = /[ऀ-ॿ]+/
+
+// Split a string into alternating Latin / Devanagari segments for mixed-font rendering
+function renderMixedScript(text: string, baseStyle: object, devStyle: object, keyBase: number): React.ReactNode {
+  if (!DEVANAGARI_RE.test(text)) {
+    return <Text key={keyBase} style={baseStyle}>{text}</Text>
+  }
+  const parts = text.split(/([ऀ-ॿ]+)/)
+  return (
+    <Text key={keyBase} style={baseStyle}>
+      {parts.map((part, i) =>
+        DEVANAGARI_RE.test(part)
+          ? <Text key={i} style={devStyle}>{part}</Text>
+          : part
+      )}
+    </Text>
+  )
+}
+
 // ── Content parser ─────────────────────────────────────────────────────────
-// Splits raw text into paragraphs / headings / bullets for react-pdf rendering
 function parseContent(text: string): React.ReactNode[] {
   const lines = text.split('\n')
   const nodes: React.ReactNode[] = []
   let key = 0
 
+  const devStyle = { fontFamily: 'NotoDevanagari' }
+
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i]
     if (!line.trim()) continue
 
-    // Heading: line ending with ':' or starting with '##'
+    // Heading
     if (/^#{1,3}\s/.test(line) || /^[A-Z][^a-z]{5,}:$/.test(line)) {
-      const text = line.replace(/^#{1,3}\s/, '').replace(/:$/, '')
-      nodes.push(<Text key={key++} style={S.heading}>{text}</Text>)
+      const t = line.replace(/^#{1,3}\s/, '').replace(/:$/, '')
+      nodes.push(renderMixedScript(t, S.heading, { ...S.heading, ...devStyle }, key++))
       continue
     }
 
-    // Bullet: starts with - or •
+    // Bullet
     if (/^[-•]\s/.test(line)) {
       nodes.push(
         <View key={key++} style={S.bulletRow}>
           <Text style={S.bullet}>•</Text>
-          <Text style={S.bulletText}>{line.replace(/^[-•]\s/, '')}</Text>
+          {renderMixedScript(line.replace(/^[-•]\s/, ''), S.bulletText, { ...S.bulletText, ...devStyle }, key++)}
         </View>
       )
       continue
     }
 
-    // Strip metadata lines (WORD_COUNT:, CORE_INSIGHT:, etc.)
+    // Strip metadata lines
     if (/^(WORD_COUNT|CORE_INSIGHT|CALLBACK_USED|THREAD_PLANTED|REFERENCES|HASHTAGS|LINKEDIN_CAPTION|QUOTE):/.test(line)) {
       continue
     }
 
-    nodes.push(<Text key={key++} style={S.paragraph}>{line}</Text>)
+    nodes.push(renderMixedScript(line, S.paragraph, { ...S.paragraph, ...devStyle }, key++))
   }
 
   return nodes
@@ -211,7 +242,9 @@ function ArticleDocument({ title, content, pillar, quarter, weekNumber, dateStr 
         {/* Header */}
         <View style={S.header} fixed>
           <View style={S.logoRow}>
-            <Image src={LOGO_PATH} style={S.logo} />
+            <View style={S.logoBox}>
+              <Image src={LOGO_PATH} style={S.logo} />
+            </View>
           </View>
           <View style={S.goldRule} />
           <Text style={S.articleTitle}>{title}</Text>

@@ -53,6 +53,17 @@ export async function POST(req: NextRequest) {
   const weeksArr = post.weeks as Array<{ week_number: number; year: number; week_start: string; theme: string | null; quarter: string | null }>
   const week = Array.isArray(weeksArr) ? weeksArr[0] : (post.weeks as unknown as { week_number: number; year: number; week_start: string; theme: string | null; quarter: string | null })
   const meta = parseGenerationMetadata(currentDraft.content)
+
+  // Auto-save strips LINKEDIN_CAPTION/QUOTE from editor content before media is generated.
+  // The original draft (is_original: true, never auto-saved) still has the full metadata.
+  let linkedinCaption = meta.linkedinCaption
+  if (!linkedinCaption) {
+    const originalDraft = drafts?.find(d => d.is_original)
+    if (originalDraft) {
+      linkedinCaption = parseGenerationMetadata(originalDraft.content).linkedinCaption
+    }
+  }
+
   const weekDateStr = format(new Date(`${week.week_start}T00:00:00`), 'd MMM yyyy')
 
   const pillar: string = post.pillar as string
@@ -146,7 +157,7 @@ export async function POST(req: NextRequest) {
       file_name:        fileName,
       file_size:        fileBuffer.length,
       page_count:       pageCount ?? null,
-      linkedin_caption: meta.linkedinCaption ?? null,
+      linkedin_caption: linkedinCaption ?? null,
       updated_at:       new Date().toISOString(),
     }, { onConflict: 'post_id,media_type' })
     .select('id')
@@ -169,7 +180,7 @@ export async function POST(req: NextRequest) {
     fileSize:        fileBuffer.length,
     pageCount:       pageCount ?? null,
     signedUrl:       signedUrl?.signedUrl ?? null,
-    linkedinCaption: meta.linkedinCaption ?? null,
+    linkedinCaption: linkedinCaption ?? null,
   })
 }
 

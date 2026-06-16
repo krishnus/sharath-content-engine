@@ -15,9 +15,12 @@ const DEFAULT_TIMES: Record<string, string> = {
 
 type Mode = 'schedule' | 'now' | 'preview'
 
+const DOCUMENT_FORMATS = ['long_form_article', 'carousel']
+
 export default function PublishPanel({
   postId,
   day,
+  format,
   weekStart,
   onPublished,
   onScheduled,
@@ -25,11 +28,13 @@ export default function PublishPanel({
 }: {
   postId: string
   day: string
+  format?: string
   weekStart: string
   onPublished: (url: string) => void
   onScheduled: (scheduledAt: string) => void
   onPreviewActive?: () => void
 }) {
+  const isDocumentPost = DOCUMENT_FORMATS.includes(format ?? '')
   const [mode, setMode]                   = useState<Mode>('schedule')
   const [loading, setLoading]             = useState(false)
   const [deleting, setDeleting]           = useState(false)
@@ -247,28 +252,53 @@ export default function PublishPanel({
         <p className="text-sm font-medium text-cream">Publish to LinkedIn</p>
       </div>
 
-      {/* Three-way mode toggle */}
-      <div className="flex rounded-lg overflow-hidden border border-ink-700">
-        {([
-          { key: 'preview',  label: 'Preview',  icon: <Eye size={12} /> },
-          { key: 'schedule', label: 'Schedule', icon: <Clock size={12} /> },
-          { key: 'now',      label: 'Publish',  icon: <Send size={12} /> },
-        ] as const).map(({ key, label, icon }) => (
-          <button
-            key={key}
-            onClick={() => setMode(key)}
-            className={cn(
-              'flex-1 py-2 text-xs font-medium transition-colors flex items-center justify-center gap-1.5',
-              mode === key ? 'bg-ink-700 text-cream' : 'text-ink-400 hover:text-cream'
-            )}
-          >
-            {icon}{label}
-          </button>
-        ))}
-      </div>
+      {/* Mode toggle — document posts (PDF) don't support preview */}
+      {isDocumentPost ? (
+        <div className="space-y-2">
+          <div className="flex rounded-lg overflow-hidden border border-ink-700">
+            {([
+              { key: 'schedule', label: 'Schedule', icon: <Clock size={12} /> },
+              { key: 'now',      label: 'Publish',  icon: <Send size={12} /> },
+            ] as const).map(({ key, label, icon }) => (
+              <button
+                key={key}
+                onClick={() => setMode(key)}
+                className={cn(
+                  'flex-1 py-2 text-xs font-medium transition-colors flex items-center justify-center gap-1.5',
+                  mode === key ? 'bg-ink-700 text-cream' : 'text-ink-400 hover:text-cream'
+                )}
+              >
+                {icon}{label}
+              </button>
+            ))}
+          </div>
+          <p className="text-xs text-ink-500">
+            Preview is not available for document posts — LinkedIn document uploads are always public.
+          </p>
+        </div>
+      ) : (
+        <div className="flex rounded-lg overflow-hidden border border-ink-700">
+          {([
+            { key: 'preview',  label: 'Preview',  icon: <Eye size={12} /> },
+            { key: 'schedule', label: 'Schedule', icon: <Clock size={12} /> },
+            { key: 'now',      label: 'Publish',  icon: <Send size={12} /> },
+          ] as const).map(({ key, label, icon }) => (
+            <button
+              key={key}
+              onClick={() => setMode(key)}
+              className={cn(
+                'flex-1 py-2 text-xs font-medium transition-colors flex items-center justify-center gap-1.5',
+                mode === key ? 'bg-ink-700 text-cream' : 'text-ink-400 hover:text-cream'
+              )}
+            >
+              {icon}{label}
+            </button>
+          ))}
+        </div>
+      )}
 
       {/* Mode descriptions */}
-      {mode === 'preview' && (
+      {mode === 'preview' && !isDocumentPost && (
         <div className="px-3 py-2.5 rounded-lg bg-violet-900/15 border border-violet-700/25 space-y-1">
           <p className="text-xs text-violet-300 font-medium">How preview works</p>
           <p className="text-xs text-ink-400">

@@ -5,6 +5,7 @@ const nextConfig = {
       '@anthropic-ai/sdk',
       '@resvg/resvg-js',
       '@react-pdf/renderer',
+      'satori',
     ],
   },
 }

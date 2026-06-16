@@ -637,6 +637,7 @@ export default function DraftEditorPage() {
             <PublishPanel
               postId={postId}
               day={post?.day ?? 'monday'}
+              format={post?.format}
               weekStart={post?.weeks?.week_start ?? new Date().toISOString().slice(0, 10)}
               onPublished={(url) => { setPublishedUrl(url); setPreviewActive(false) }}
               onScheduled={(at) => setScheduledAt(at)}
