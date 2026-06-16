@@ -30,7 +30,10 @@
       "Bash(curl -s -A \"Mozilla/4.0\" \"https://fonts.googleapis.com/css?family=Montserrat:400,600,700\")",
       "Bash(curl -sL \"https://fonts.gstatic.com/s/montserrat/v31/JTUHjIg1_i6t8kCHKm4532VJOt5-QNFgpCtr6Hw5aX8.ttf\" -o public/fonts/Montserrat-Regular.ttf)",
       "Bash(curl -sL \"https://fonts.gstatic.com/s/montserrat/v31/JTUHjIg1_i6t8kCHKm4532VJOt5-QNFgpCu173w5aX8.ttf\" -o public/fonts/Montserrat-SemiBold.ttf)",
-      "Bash(curl -sL \"https://fonts.gstatic.com/s/montserrat/v31/JTUHjIg1_i6t8kCHKm4532VJOt5-QNFgpCuM73w5aX8.ttf\" -o public/fonts/Montserrat-Bold.ttf)"
+      "Bash(curl -sL \"https://fonts.gstatic.com/s/montserrat/v31/JTUHjIg1_i6t8kCHKm4532VJOt5-QNFgpCuM73w5aX8.ttf\" -o public/fonts/Montserrat-Bold.ttf)",
+      "Bash(curl -s -A \"Mozilla/4.0\" \"https://fonts.googleapis.com/css?family=Noto+Sans+Devanagari:400\")",
+      "Bash(curl -sL \"https://fonts.gstatic.com/s/notosansdevanagari/v30/TuGoUUFzXI5FBtUq5a8bjKYTZjtRU6Sgv3NaV_SNmI0b8QQCQmHn6B2OHjbL_08AlXQl--c5pA.ttf\" -o public/fonts/NotoSansDevanagari-Regular.ttf)",
+      "Bash(git commit *)"
     ]
   }
 }
