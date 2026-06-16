@@ -33,7 +33,13 @@
       "Bash(curl -sL \"https://fonts.gstatic.com/s/montserrat/v31/JTUHjIg1_i6t8kCHKm4532VJOt5-QNFgpCuM73w5aX8.ttf\" -o public/fonts/Montserrat-Bold.ttf)",
       "Bash(curl -s -A \"Mozilla/4.0\" \"https://fonts.googleapis.com/css?family=Noto+Sans+Devanagari:400\")",
       "Bash(curl -sL \"https://fonts.gstatic.com/s/notosansdevanagari/v30/TuGoUUFzXI5FBtUq5a8bjKYTZjtRU6Sgv3NaV_SNmI0b8QQCQmHn6B2OHjbL_08AlXQl--c5pA.ttf\" -o public/fonts/NotoSansDevanagari-Regular.ttf)",
-      "Bash(git commit *)"
+      "Bash(git commit *)",
+      "Bash(curl -s -A \"Mozilla/4.0\" \"https://fonts.googleapis.com/css?family=Noto+Sans+Devanagari\")",
+      "Bash(curl -s -A 'Mozilla/5.0 \\(Macintosh; Intel Mac OS X 10_15_7\\) AppleWebKit/537.36 \\(KHTML, like Gecko\\) Chrome/120.0.0.0 Safari/537.36' https://fonts.googleapis.com/css2?family=Noto+Sans+Devanagari:wght@400)",
+      "Bash(curl -s \"https://api.github.com/repos/notofonts/devanagari/releases/latest\")",
+      "Bash(curl -s \"https://api.github.com/repos/googlefonts/noto-fonts/contents/hinted/ttf/NotoSansDevanagari\")",
+      "Bash(curl -sI \"https://raw.githubusercontent.com/googlefonts/noto-fonts/main/hinted/ttf/NotoSansDevanagari/NotoSansDevanagari-Regular.ttf\")",
+      "Bash(curl -sL https://raw.githubusercontent.com/googlefonts/noto-fonts/main/hinted/ttf/NotoSansDevanagari/NotoSansDevanagari-Regular.ttf -o public/fonts/NotoSansDevanagari-Regular.ttf)"
     ]
   }
 }
