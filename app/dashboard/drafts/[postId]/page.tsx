@@ -43,19 +43,22 @@ type DraftVersion = {
   createdAt: string
 }
 
+// Normalise a metadata line — strips bold markdown so "**KEY:** value" → "KEY: value"
+const normMetaLine = (l: string) => l.replace(/^\*+\s*/, '').replace(/\*+\s*:/g, ':')
+
 // Strip AI metadata from displayed content
 function stripMetadata(raw: string): string {
   const metaKeys = ['WORD_COUNT:', 'CORE_INSIGHT:', 'CALLBACK_USED:', 'THREAD_PLANTED:', 'REFERENCES:', 'HASHTAGS:', 'LINKEDIN_CAPTION:', 'QUOTE:']
   const lines = raw.split('\n')
-  const firstMetaLine = lines.findIndex(l => metaKeys.some(k => l.trim().startsWith(k)))
+  const firstMetaLine = lines.findIndex(l => metaKeys.some(k => normMetaLine(l).startsWith(k)))
   return (firstMetaLine > -1 ? lines.slice(0, firstMetaLine) : lines).join('\n').trim()
 }
 
 // Extract hashtags from raw AI output
 function extractHashtags(raw: string): string[] {
-  const line = raw.split('\n').find(l => l.trim().startsWith('HASHTAGS:'))
+  const line = raw.split('\n').find(l => normMetaLine(l).startsWith('HASHTAGS:'))
   if (!line) return []
-  return line.replace('HASHTAGS:', '').trim().split(/\s+/).filter(h => h.startsWith('#'))
+  return normMetaLine(line).replace('HASHTAGS:', '').trim().split(/\s+/).filter(h => h.startsWith('#'))
 }
 
 function getWordCountRange(format: string): { min: number; max: number } {

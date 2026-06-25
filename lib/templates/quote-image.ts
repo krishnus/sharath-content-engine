@@ -31,17 +31,33 @@ export type QuoteImageProps = {
   useSwansLogo?: boolean
 }
 
+// Dynamic font size — more granular steps so shorter quotes render larger
+// Finance text zone: 820px wide × 400px tall
+function financeFontSize(len: number): number {
+  if (len <= 30)  return 56
+  if (len <= 50)  return 48
+  if (len <= 70)  return 42
+  if (len <= 90)  return 36
+  if (len <= 110) return 32
+  return 28
+}
+
+// Coach text zone: 660px wide × 390px tall (narrower)
+function coachFontSize(len: number): number {
+  if (len <= 30)  return 48
+  if (len <= 50)  return 42
+  if (len <= 70)  return 36
+  if (len <= 90)  return 30
+  if (len <= 110) return 26
+  return 24
+}
+
 export async function generateQuoteImage(props: QuoteImageProps): Promise<Buffer> {
   const { quote, useSwansLogo } = props
   const fonts = getFontBuffers()
   const { finance, coach } = getTemplates()
 
-  const displayQuote = normalizeIAST(quote.length > 200 ? quote.slice(0, 197) + '...' : quote)
-
-  // Font size: scale down for longer quotes
-  const fontSize = displayQuote.length > 150 ? 32
-    : displayQuote.length > 100 ? 38
-    : 44
+  const displayQuote = normalizeIAST(quote.length > 120 ? quote.slice(0, 117) + '...' : quote)
 
   // ── Finance template (5-Swans posts) ──────────────────────────────────────
   // Template layout: dark blue/purple gradient bg, large centred white rounded box,
@@ -74,10 +90,9 @@ export async function generateQuoteImage(props: QuoteImageProps): Promise<Buffer
               type: 'div',
               props: {
                 style: {
-                  fontSize,
+                  fontSize: financeFontSize(displayQuote.length),
                   fontWeight: 700,
                   color: '#1a2d6b',
-                  textTransform: 'uppercase' as const,
                   textAlign: 'center' as const,
                   lineHeight: 1.3,
                   fontFamily: 'Montserrat',
@@ -123,7 +138,7 @@ export async function generateQuoteImage(props: QuoteImageProps): Promise<Buffer
               type: 'div',
               props: {
                 style: {
-                  fontSize,
+                  fontSize: coachFontSize(displayQuote.length),
                   fontWeight: 600,
                   color: '#1a2d6b',
                   textAlign: 'center' as const,

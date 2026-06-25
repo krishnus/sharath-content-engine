@@ -39,9 +39,11 @@ export function buildSaturdayMarketInsightsPrompt(params: {
     ``,
     `## OUTPUT INSTRUCTIONS`,
     `Write the post only. No preamble.`,
-    `After the post: WORD_COUNT: [integer]`,
-    `After that: CORE_INSIGHT: [1 sentence]`,
-    `After that: THREAD_PLANTED: [closing line]`,
-    `After that: HASHTAGS: #CoachSharath #5Swans #BradfordInternationalAlliance #WealthManagement #MarketInsights #InvestorPsychology [add 1-2 sector tags from the market events]`,
+    `IMPORTANT: Output each metadata field as plain text on its own line — no markdown, no bold, no asterisks. Exactly as shown below.`,
+    `After the post, on a new line: WORD_COUNT: [integer]`,
+    `After that, on a new line: CORE_INSIGHT: [1 sentence]`,
+    `After that, on a new line: THREAD_PLANTED: [closing line]`,
+    `After that, on a new line: HASHTAGS: #CoachSharath #5Swans #BradfordInternationalAlliance #WealthManagement #MarketInsights #InvestorPsychology [add 1-2 sector tags from the market events]`,
+    `After that, on a new line: QUOTE: [the single most striking sentence from the post — maximum 120 characters, no hashtags, sentence case not all-caps]`,
   ].filter(Boolean).join('\n')
 }

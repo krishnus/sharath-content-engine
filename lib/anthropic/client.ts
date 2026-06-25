@@ -31,17 +31,23 @@ export function parseGenerationMetadata(rawOutput: string): {
   quote: string | null
 } {
   const lines = rawOutput.split('\n')
-  const metaStart = lines.findIndex(l =>
-    l.startsWith('WORD_COUNT:') || l.startsWith('CORE_INSIGHT:')
-  )
+
+  // Normalise a line so "**WORD_COUNT:** 215" is treated the same as "WORD_COUNT: 215"
+  const norm = (l: string) => l.replace(/^\*+\s*/, '').replace(/\*+\s*:/g, ':')
+
+  const metaStart = lines.findIndex(l => {
+    const n = norm(l)
+    return n.startsWith('WORD_COUNT:') || n.startsWith('CORE_INSIGHT:')
+  })
 
   const content = metaStart > -1
     ? lines.slice(0, metaStart).join('\n').trim()
     : rawOutput.trim()
 
   const getMeta = (key: string): string | null => {
-    const line = lines.find(l => l.startsWith(`${key}:`))
-    return line ? line.slice(key.length + 1).trim() : null
+    const line = lines.find(l => norm(l).startsWith(`${key}:`))
+    if (!line) return null
+    return norm(line).slice(key.length + 1).trim()
   }
 
   const wordCountRaw = getMeta('WORD_COUNT')

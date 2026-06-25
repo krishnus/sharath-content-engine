@@ -43,9 +43,12 @@ export async function GET(
 
   // Parse quote/caption suggestions from original draft (never auto-saved, keeps all metadata)
   const originalContent = originalDraft?.content ?? ''
+  // Normalise lines so "**KEY:** value" parses the same as "KEY: value"
+  const normLine = (l: string) => l.replace(/^\*+\s*/, '').replace(/\*+\s*:/g, ':')
   const getMetaField = (key: string): string | null => {
-    const line = originalContent.split('\n').find((l: string) => l.startsWith(`${key}:`))
-    return line ? line.slice(key.length + 1).trim() || null : null
+    const line = originalContent.split('\n').find((l: string) => normLine(l).startsWith(`${key}:`))
+    if (!line) return null
+    return normLine(line).slice(key.length + 1).trim() || null
   }
 
   return NextResponse.json({
