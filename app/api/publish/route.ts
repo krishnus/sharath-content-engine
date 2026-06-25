@@ -143,10 +143,27 @@ export async function POST(req: NextRequest) {
     )
   }
 
-  // ── Promote preview → PUBLIC (text posts only) ────────────────────────
+  // ── Promote preview → PUBLIC ──────────────────────────────────────────
   if (promotePreview && linkedinPostId) {
     await deleteLinkedInPost(linkedinPostId, tokenRow.access_token)
-    const result = await postTextToLinkedIn(publishText, tokenRow.access_token, authorUrn, 'PUBLIC')
+
+    let result: { success: boolean; postId?: string; url?: string; error?: string }
+
+    // If the post has an image (quote_png), re-publish with the image at PUBLIC visibility
+    if (mediaRecord?.media_type === 'quote_png') {
+      const { data: fileData } = await supabase.storage
+        .from(STORAGE_BUCKET)
+        .download(mediaRecord.storage_path)
+      if (fileData) {
+        const fileBuffer = Buffer.from(await fileData.arrayBuffer())
+        result = await postImageToLinkedIn(publishText, fileBuffer, tokenRow.access_token, authorUrn, 'PUBLIC')
+      } else {
+        result = await postTextToLinkedIn(publishText, tokenRow.access_token, authorUrn, 'PUBLIC')
+      }
+    } else {
+      result = await postTextToLinkedIn(publishText, tokenRow.access_token, authorUrn, 'PUBLIC')
+    }
+
     if (!result.success) {
       await supabase.from('posts').update({ status: 'publish_failed' }).eq('id', postId)
       return NextResponse.json({ error: result.error }, { status: 502 })
@@ -160,7 +177,12 @@ export async function POST(req: NextRequest) {
   }
 
   // ── Publish with media (PDF document or image) ────────────────────────
-  if (mediaRecord && !preview) {
+  // Images (quote_png) are included in preview too (posted as LOGGED_IN).
+  // PDFs are skipped in preview mode (text-only preview is sufficient for review).
+  const isImageMedia = mediaRecord?.media_type === 'quote_png'
+  const shouldPublishMedia = mediaRecord && (!preview || isImageMedia)
+
+  if (shouldPublishMedia) {
     // Download file from Supabase Storage
     const { data: fileData, error: dlError } = await supabase.storage
       .from(STORAGE_BUCKET)
@@ -183,24 +205,30 @@ export async function POST(req: NextRequest) {
         tokenRow.access_token, authorUrn
       )
     } else {
+      const imgVisibility = preview ? 'LOGGED_IN' : 'PUBLIC'
       result = await postImageToLinkedIn(
-        publishText, fileBuffer, tokenRow.access_token, authorUrn
+        publishText, fileBuffer, tokenRow.access_token, authorUrn, imgVisibility
       )
     }
 
     if (!result.success) {
-      await supabase.from('posts').update({ status: 'publish_failed' }).eq('id', postId)
+      if (!preview) {
+        await supabase.from('posts').update({ status: 'publish_failed' }).eq('id', postId)
+      }
       return NextResponse.json({ error: result.error }, { status: 502 })
     }
 
-    await supabase.from('linkedin_posts').insert({
-      post_id: postId, linkedin_post_id: result.postId!,
-      linkedin_url: result.url ?? null, published_at: new Date().toISOString(),
-    })
-    await supabase.from('posts').update({ status: 'published' }).eq('id', postId)
+    if (!preview) {
+      await supabase.from('linkedin_posts').insert({
+        post_id: postId, linkedin_post_id: result.postId!,
+        linkedin_url: result.url ?? null, published_at: new Date().toISOString(),
+      })
+      await supabase.from('posts').update({ status: 'published' }).eq('id', postId)
+    }
 
     return NextResponse.json({
-      published:      true,
+      published:      !preview,
+      preview:        preview ?? false,
       url:            result.url,
       linkedinPostId: result.postId,
       hasMedia:       true,
@@ -418,6 +446,7 @@ async function postImageToLinkedIn(
   imageBuffer: Buffer,
   accessToken: string,
   authorUrn: string,
+  visibility: 'PUBLIC' | 'LOGGED_IN' | 'CONNECTIONS' = 'PUBLIC',
 ): Promise<{ success: boolean; postId?: string; url?: string; error?: string }> {
   try {
     // Step 1: Initialize image upload
@@ -471,7 +500,7 @@ async function postImageToLinkedIn(
       body: JSON.stringify({
         author:     authorUrn,
         commentary: caption,
-        visibility: 'PUBLIC',
+        visibility,
         distribution: {
           feedDistribution:               'MAIN_FEED',
           targetEntities:                 [],

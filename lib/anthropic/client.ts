@@ -47,7 +47,8 @@ export function parseGenerationMetadata(rawOutput: string): {
   const getMeta = (key: string): string | null => {
     const line = lines.find(l => norm(l).startsWith(`${key}:`))
     if (!line) return null
-    return norm(line).slice(key.length + 1).trim()
+    // Strip any trailing bold markers after the colon (e.g. "**QUOTE:** text" → "text")
+    return norm(line).slice(key.length + 1).replace(/^\*+\s*/, '').trim()
   }
 
   const wordCountRaw = getMeta('WORD_COUNT')

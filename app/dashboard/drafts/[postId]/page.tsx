@@ -254,9 +254,8 @@ export default function DraftEditorPage() {
       if (candidates.length > 0) {
         setCandidateRules(candidates)
         setShowCandidates(true)
-      } else {
-        setTimeout(() => router.push('/dashboard'), 1000)
       }
+      // Stay on page — publish panel is now unlocked, user can proceed to publish
     } catch (err) {
       setGenerateError(err instanceof Error ? err.message : 'Approval failed')
     } finally {

@@ -48,7 +48,8 @@ export async function GET(
   const getMetaField = (key: string): string | null => {
     const line = originalContent.split('\n').find((l: string) => normLine(l).startsWith(`${key}:`))
     if (!line) return null
-    return normLine(line).slice(key.length + 1).trim() || null
+    // Strip any trailing bold markers that appear after the colon (e.g. "**QUOTE:** text" → "text")
+    return normLine(line).slice(key.length + 1).replace(/^\*+\s*/, '').trim() || null
   }
 
   return NextResponse.json({
