@@ -31,25 +31,27 @@ export type QuoteImageProps = {
   useSwansLogo?: boolean
 }
 
-// Dynamic font size — more granular steps so shorter quotes render larger
-// Finance text zone: 820px wide × 400px tall
+// Finance text zone: 820w × 575h (y=265–840, full white box above separator line)
+// Verified against public/brand/quote-finance-template.jpeg
 function financeFontSize(len: number): number {
-  if (len <= 30)  return 56
-  if (len <= 50)  return 48
-  if (len <= 70)  return 42
-  if (len <= 90)  return 36
-  if (len <= 110) return 32
-  return 28
+  if (len <= 30)  return 80
+  if (len <= 50)  return 70
+  if (len <= 70)  return 62
+  if (len <= 90)  return 54
+  if (len <= 110) return 48
+  return 42
 }
 
-// Coach text zone: 660px wide × 390px tall (narrower)
+// Coach text zone: 730w × 275h (y=390–665, below photo+66 marks, above 99 marks)
+// Verified against public/brand/quote-coach-template.png
+// Tighter height (275px vs 575px) → smaller font scale
 function coachFontSize(len: number): number {
-  if (len <= 30)  return 48
-  if (len <= 50)  return 42
-  if (len <= 70)  return 36
-  if (len <= 90)  return 30
-  if (len <= 110) return 26
-  return 24
+  if (len <= 30)  return 68
+  if (len <= 50)  return 58
+  if (len <= 70)  return 50
+  if (len <= 90)  return 44
+  if (len <= 110) return 38
+  return 34
 }
 
 export async function generateQuoteImage(props: QuoteImageProps): Promise<Buffer> {
@@ -60,9 +62,9 @@ export async function generateQuoteImage(props: QuoteImageProps): Promise<Buffer
   const displayQuote = normalizeIAST(quote.length > 120 ? quote.slice(0, 117) + '...' : quote)
 
   // ── Finance template (5-Swans posts) ──────────────────────────────────────
-  // Template layout: dark blue/purple gradient bg, large centred white rounded box,
-  // 5 Swans logo top-centre, footer strip bottom.
-  // Text zone inside white box: approx top=310 left=130 width=820 height=380
+  // White box: top=265 bottom=840 → 575px tall, left=130 right=950 → 820px wide
+  // Opening 66 ornament at top-left (y=295–415), separator line at y=840
+  // Text zone covers full interior above separator line
   const financeLayout = {
     type: 'div',
     props: {
@@ -80,8 +82,8 @@ export async function generateQuoteImage(props: QuoteImageProps): Promise<Buffer
           props: {
             style: {
               position: 'absolute' as const,
-              top: 310, left: 130,
-              width: 820, height: 400,
+              top: 265, left: 130,
+              width: 820, height: 575,
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
@@ -107,10 +109,10 @@ export async function generateQuoteImage(props: QuoteImageProps): Promise<Buffer
   }
 
   // ── Coach Sharath template (all other posts) ───────────────────────────────
-  // Template layout: light background with chart graphics, gold speech bubble,
-  // Sharath photo top-left overlapping bubble, Coach Sharath logo top-right,
-  // author strip below bubble, footer bottom.
-  // Text zone inside speech bubble (below photo): approx top=290 left=210 width=660 height=390
+  // Gold speech bubble: left=80 right=860 top=195 bottom=760 (tail at y=760–820)
+  // Photo (top-left, y=110–265) and opening 66 marks (y=275–365) block top-left
+  // Closing 99 marks at bottom-right (y=685–755, x=760–845)
+  // Safe text zone: below 66 marks and photo, above 99 marks
   const coachLayout = {
     type: 'div',
     props: {
@@ -128,8 +130,8 @@ export async function generateQuoteImage(props: QuoteImageProps): Promise<Buffer
           props: {
             style: {
               position: 'absolute' as const,
-              top: 290, left: 210,
-              width: 660, height: 390,
+              top: 390, left: 110,
+              width: 730, height: 275,
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
