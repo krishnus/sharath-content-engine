@@ -38,7 +38,7 @@ Rules:
 - Must stand alone without context
 - Punchy, memorable, and shareable
 - No hashtags, no author attribution
-- Uppercase for visual impact if short enough
+- Sentence case (not all-caps)
 
 POST CONTENT:
 ${content.slice(0, 3000)}

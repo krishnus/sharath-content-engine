@@ -156,8 +156,15 @@ export default function MediaPanel({ postId, format }: MediaPanelProps) {
         body: JSON.stringify(body),
       })
       if (!res.ok) {
-        const err = await res.json()
-        throw new Error(err.error ?? `Generation failed (${res.status})`)
+        let errMsg = `Generation failed (${res.status})`
+        try {
+          const body = await res.json()
+          errMsg = body.error ?? errMsg
+        } catch {
+          const text = await res.text().catch(() => '')
+          if (text) errMsg = text.slice(0, 200)
+        }
+        throw new Error(errMsg)
       }
       const data = await res.json()
       setMedia({

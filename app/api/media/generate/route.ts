@@ -53,8 +53,14 @@ export async function POST(req: NextRequest) {
   }
 
   // weeks is returned as an array by supabase join — take first element
-  const weeksArr = post.weeks as Array<{ week_number: number; year: number; week_start: string; theme: string | null; quarter: string | null }>
-  const week = Array.isArray(weeksArr) ? weeksArr[0] : (post.weeks as unknown as { week_number: number; year: number; week_start: string; theme: string | null; quarter: string | null })
+  type WeekRow = { week_number: number; year: number; week_start: string; theme: string | null; quarter: string | null }
+  const weeksArr = post.weeks as Array<WeekRow>
+  const week: WeekRow | null = Array.isArray(weeksArr) ? (weeksArr[0] ?? null) : (post.weeks as unknown as WeekRow | null)
+
+  if (!week) {
+    return NextResponse.json({ error: 'Week data not found for this post' }, { status: 404 })
+  }
+
   const meta = parseGenerationMetadata(currentDraft.content)
 
   // Caption priority: user-edited override > original draft LINKEDIN_CAPTION: > current draft metadata
