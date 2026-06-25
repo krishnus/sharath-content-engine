@@ -40,7 +40,8 @@
       "Bash(curl -s \"https://api.github.com/repos/googlefonts/noto-fonts/contents/hinted/ttf/NotoSansDevanagari\")",
       "Bash(curl -sI \"https://raw.githubusercontent.com/googlefonts/noto-fonts/main/hinted/ttf/NotoSansDevanagari/NotoSansDevanagari-Regular.ttf\")",
       "Bash(curl -sL https://raw.githubusercontent.com/googlefonts/noto-fonts/main/hinted/ttf/NotoSansDevanagari/NotoSansDevanagari-Regular.ttf -o public/fonts/NotoSansDevanagari-Regular.ttf)",
-      "Bash(git push *)"
+      "Bash(git push *)",
+      "Bash(git -C /Users/sharath/Coaching/sharath-content-engine add app/api/publish/route.ts)"
     ]
   }
 }
