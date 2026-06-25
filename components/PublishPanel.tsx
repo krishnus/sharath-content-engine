@@ -1,16 +1,15 @@
 'use client'
 
 import { useState } from 'react'
-import { Linkedin, Clock, Send, Eye, Loader2, CheckCircle2, ExternalLink, AlertCircle, X, Trash2 } from 'lucide-react'
+import {
+  Linkedin, Clock, Send, Eye, Loader2, CheckCircle2,
+  ExternalLink, AlertCircle, X, Trash2, Lock,
+} from 'lucide-react'
 import { cn } from '@/lib/utils/helpers'
 
 const DEFAULT_TIMES: Record<string, string> = {
-  monday:    '07:30',
-  tuesday:   '07:30',
-  wednesday: '07:30',
-  thursday:  '07:30',
-  friday:    '08:30',
-  saturday:  '09:30',
+  monday: '07:30', tuesday: '07:30', wednesday: '07:30',
+  thursday: '07:30', friday: '08:30', saturday: '09:30',
 }
 
 type Mode = 'schedule' | 'now' | 'preview'
@@ -22,24 +21,26 @@ export default function PublishPanel({
   day,
   format,
   weekStart,
+  approved,
   onPublished,
   onScheduled,
-  onPreviewActive,
 }: {
   postId: string
   day: string
   format?: string
   weekStart: string
+  approved: boolean
   onPublished: (url: string) => void
   onScheduled: (scheduledAt: string) => void
-  onPreviewActive?: () => void
 }) {
   const isDocumentPost = DOCUMENT_FORMATS.includes(format ?? '')
+
   const [mode, setMode]                   = useState<Mode>('schedule')
   const [loading, setLoading]             = useState(false)
   const [deleting, setDeleting]           = useState(false)
   const [error, setError]                 = useState<string | null>(null)
   const [done, setDone]                   = useState(false)
+  const [doneMode, setDoneMode]           = useState<Mode>('schedule')
   const [previewUrl, setPreviewUrl]       = useState<string | null>(null)
   const [previewPostId, setPreviewPostId] = useState<string | null>(null)
   const [publishedUrl, setPublishedUrl]   = useState<string | null>(null)
@@ -53,8 +54,7 @@ export default function PublishPanel({
     const offset   = DAY_OFFSET[day] ?? 0
     const postDate = new Date(monday)
     postDate.setDate(monday.getDate() + offset)
-    const time = DEFAULT_TIMES[day] ?? '07:30'
-    const [hr, min] = time.split(':').map(Number)
+    const [hr, min] = (DEFAULT_TIMES[day] ?? '07:30').split(':').map(Number)
     postDate.setUTCHours(hr - 5, min - 30, 0, 0)
     return postDate.toISOString()
   }
@@ -65,20 +65,17 @@ export default function PublishPanel({
     return ist.toISOString().slice(0, 16)
   })
 
-  const handleAction = async () => {
+  async function handleAction() {
     setLoading(true)
     setError(null)
-
     try {
       const body =
-        mode === 'preview'  ? { postId, publishNow: true, preview: true } :
-        mode === 'now'      ? { postId, publishNow: true } :
+        mode === 'preview' ? { postId, publishNow: true, preview: true } :
+        mode === 'now'     ? { postId, publishNow: true } :
         {
           postId,
-          publishNow: false,
-          scheduledAt: new Date(
-            new Date(scheduledAt).getTime() - 5.5 * 60 * 60 * 1000
-          ).toISOString(),
+          publishNow:  false,
+          scheduledAt: new Date(new Date(scheduledAt).getTime() - 5.5 * 60 * 60 * 1000).toISOString(),
         }
 
       const res  = await fetch('/api/publish', {
@@ -92,12 +89,13 @@ export default function PublishPanel({
       if (mode === 'preview') {
         setPreviewUrl(json.url)
         setPreviewPostId(json.linkedinPostId ?? null)
-        onPreviewActive?.()  // tell parent not to hide PublishPanel
       } else if (mode === 'now') {
         setPublishedUrl(json.url)
+        setDoneMode('now')
         setDone(true)
         onPublished(json.url)
       } else {
+        setDoneMode('schedule')
         setDone(true)
         onScheduled(json.scheduledAt)
       }
@@ -108,8 +106,7 @@ export default function PublishPanel({
     }
   }
 
-  // Promote preview post to PUBLIC visibility
-  const handlePromote = async () => {
+  async function handlePromote() {
     setLoading(true)
     setError(null)
     try {
@@ -122,6 +119,7 @@ export default function PublishPanel({
       if (!res.ok) throw new Error(json.error ?? `Failed (${res.status})`)
       setPublishedUrl(json.url)
       setPreviewUrl(null)
+      setDoneMode('now')
       setDone(true)
       onPublished(json.url)
     } catch (err) {
@@ -131,8 +129,7 @@ export default function PublishPanel({
     }
   }
 
-  // Delete the preview post from LinkedIn
-  const handleDeletePreview = async () => {
+  async function handleDeletePreview() {
     if (!previewPostId) { setPreviewUrl(null); return }
     setDeleting(true)
     setError(null)
@@ -155,214 +152,259 @@ export default function PublishPanel({
     }
   }
 
-  // ── Done states ──────────────────────────────────────────────────
+  // ── Section header ───────────────────────────────────────────────────────
+  const SectionHeader = () => (
+    <div className="flex items-center gap-2 px-4 py-2.5 bg-ink-800/40 border-b border-ink-800">
+      <div className="w-4 h-4 rounded bg-[#0A66C2]/30 flex items-center justify-center shrink-0">
+        <Linkedin size={10} className="text-[#0A66C2]" />
+      </div>
+      <span className="text-xs font-semibold text-cream tracking-wide">Publish to LinkedIn</span>
+    </div>
+  )
 
-  if (done && (mode === 'now' || mode === 'preview') && publishedUrl) {
+  // ── Error row ────────────────────────────────────────────────────────────
+  const ErrorRow = () => error ? (
+    <div className="flex items-start gap-2 px-3 py-2 bg-red-900/10 border border-red-800/30 rounded-lg">
+      <AlertCircle size={12} className="text-red-400 shrink-0 mt-0.5" />
+      <div className="flex-1 min-w-0">
+        <p className="text-xs text-red-400">{error}</p>
+        {error.includes('not connected') && (
+          <a href="/dashboard/settings" className="text-xs text-gold-500 hover:underline mt-1 block">
+            Connect LinkedIn in Settings →
+          </a>
+        )}
+      </div>
+      <button onClick={() => setError(null)} className="shrink-0 text-ink-500 hover:text-ink-300">
+        <X size={11} />
+      </button>
+    </div>
+  ) : null
+
+  // ── Published / scheduled done states ────────────────────────────────────
+  if (done && doneMode === 'now' && publishedUrl) {
     return (
-      <div className="card px-4 py-4 border-emerald-700/30 bg-emerald-900/10 space-y-3">
-        <div className="flex items-center gap-2">
-          <CheckCircle2 size={16} className="text-emerald-400 shrink-0" />
-          <p className="text-sm text-emerald-300 font-medium">Published to LinkedIn</p>
+      <div className="border border-ink-800 rounded-xl overflow-hidden">
+        <SectionHeader />
+        <div className="p-4 space-y-3">
+          <div className="flex items-center gap-2 px-3 py-2.5 bg-emerald-900/15 border border-emerald-700/30 rounded-lg">
+            <CheckCircle2 size={14} className="text-emerald-400 shrink-0" />
+            <p className="text-xs font-medium text-emerald-300">Published to LinkedIn</p>
+          </div>
+          <a
+            href={publishedUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="btn-secondary text-xs w-full justify-center"
+          >
+            <ExternalLink size={12} /> View on LinkedIn
+          </a>
+          <button
+            onClick={() => { setDone(false); setPublishedUrl(null) }}
+            className="w-full text-xs text-ink-500 hover:text-ink-300 transition-colors py-1"
+          >
+            Publish again
+          </button>
         </div>
-        <a href={publishedUrl} target="_blank" rel="noopener noreferrer" className="btn-secondary text-xs w-full justify-center">
-          <ExternalLink size={13} /> View on LinkedIn
-        </a>
       </div>
     )
   }
 
-  if (done && mode === 'schedule') {
+  if (done && doneMode === 'schedule') {
     return (
-      <div className="card px-4 py-4 border-blue-700/30 bg-blue-900/10">
-        <div className="flex items-center gap-2">
-          <Clock size={15} className="text-blue-400 shrink-0" />
-          <p className="text-sm text-blue-300 font-medium">
-            Scheduled for {new Date(scheduledAt).toLocaleDateString('en-GB', { day:'numeric', month:'short' })} at {scheduledAt.slice(11,16)} IST
-          </p>
-        </div>
-      </div>
-    )
-  }
-
-  // ── Preview live state ───────────────────────────────────────────
-
-  if (previewUrl) {
-    return (
-      <div className="card p-4 space-y-4 border-violet-700/30 bg-violet-900/10">
-        <div className="flex items-center gap-2">
-          <Eye size={15} className="text-violet-400 shrink-0" />
-          <div>
-            <p className="text-sm font-medium text-cream">Preview live on LinkedIn</p>
-            <p className="text-xs text-ink-400 mt-0.5">
-              Only visible to you via the direct link — not distributed in anyone's feed.
+      <div className="border border-ink-800 rounded-xl overflow-hidden">
+        <SectionHeader />
+        <div className="p-4 space-y-3">
+          <div className="flex items-center gap-2 px-3 py-2.5 bg-blue-900/15 border border-blue-700/30 rounded-lg">
+            <Clock size={13} className="text-blue-400 shrink-0" />
+            <p className="text-xs font-medium text-blue-300">
+              Scheduled for {new Date(scheduledAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })} at {scheduledAt.slice(11, 16)} IST
             </p>
           </div>
-        </div>
-
-        <a href={previewUrl} target="_blank" rel="noopener noreferrer" className="btn-secondary text-sm w-full justify-center">
-          <ExternalLink size={13} /> Open preview on LinkedIn
-        </a>
-
-        {error && (
-          <div className="px-3 py-2 rounded-lg bg-red-900/10 border border-red-800/30 flex items-start gap-2">
-            <AlertCircle size={13} className="text-red-400 shrink-0 mt-0.5" />
-            <p className="text-xs text-red-400 flex-1">{error}</p>
-            <button onClick={() => setError(null)}><X size={12} className="text-ink-500" /></button>
-          </div>
-        )}
-
-        <div className="grid grid-cols-2 gap-2">
           <button
-            onClick={handleDeletePreview}
-            disabled={deleting || loading}
-            className="btn-secondary text-sm justify-center text-red-400 hover:text-red-300"
+            onClick={() => setDone(false)}
+            className="w-full text-xs text-ink-500 hover:text-ink-300 transition-colors py-1"
           >
-            {deleting
-              ? <><Loader2 size={13} className="animate-spin" /> Deleting...</>
-              : <><Trash2 size={13} /> Delete preview</>
-            }
-          </button>
-          <button
-            onClick={handlePromote}
-            disabled={loading || deleting}
-            className="btn-primary justify-center text-sm"
-          >
-            {loading
-              ? <><Loader2 size={13} className="animate-spin" /> Publishing...</>
-              : <><Send size={13} /> Publish publicly</>
-            }
+            Change schedule
           </button>
         </div>
-
-        <p className="text-xs text-ink-500 text-center">
-          Happy with how it looks? Publish publicly, or delete and go back to edit.
-        </p>
       </div>
     )
   }
 
-  // ── Main panel ───────────────────────────────────────────────────
+  // ── Preview live state ────────────────────────────────────────────────────
+  if (previewUrl) {
+    return (
+      <div className="border border-ink-800 rounded-xl overflow-hidden">
+        <SectionHeader />
+        <div className="p-4 space-y-3">
+          <div className="flex items-start gap-2 px-3 py-2.5 bg-violet-900/15 border border-violet-700/25 rounded-lg">
+            <Eye size={13} className="text-violet-400 shrink-0 mt-0.5" />
+            <div>
+              <p className="text-xs font-medium text-cream">Preview live on LinkedIn</p>
+              <p className="text-xs text-ink-500 mt-0.5">Only visible to you via the direct link</p>
+            </div>
+          </div>
 
-  return (
-    <div className="card p-4 space-y-4 border-[#0A66C2]/20 bg-[#0A66C2]/5">
-      <div className="flex items-center gap-2">
-        <div className="w-6 h-6 rounded bg-[#0A66C2]/20 flex items-center justify-center">
-          <Linkedin size={13} className="text-[#0A66C2]" />
+          <a
+            href={previewUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="btn-secondary text-xs w-full justify-center"
+          >
+            <ExternalLink size={12} /> Open preview
+          </a>
+
+          <ErrorRow />
+
+          <div className="grid grid-cols-2 gap-2">
+            <button
+              onClick={handleDeletePreview}
+              disabled={deleting || loading}
+              className="flex items-center justify-center gap-1.5 py-2 rounded-lg border border-ink-700 text-xs text-red-400 hover:text-red-300 hover:border-red-800 transition-colors disabled:opacity-40"
+            >
+              {deleting
+                ? <><Loader2 size={11} className="animate-spin" /> Deleting…</>
+                : <><Trash2 size={11} /> Delete</>
+              }
+            </button>
+            <button
+              onClick={handlePromote}
+              disabled={loading || deleting}
+              className="btn-primary justify-center text-xs"
+            >
+              {loading
+                ? <><Loader2 size={11} className="animate-spin" /> Publishing…</>
+                : <><Send size={11} /> Publish</>
+              }
+            </button>
+          </div>
         </div>
-        <p className="text-sm font-medium text-cream">Publish to LinkedIn</p>
       </div>
+    )
+  }
 
-      {/* Mode toggle — document posts (PDF) don't support preview */}
-      {isDocumentPost ? (
-        <div className="space-y-2">
+  // ── Not approved — gated state ────────────────────────────────────────────
+  if (!approved) {
+    return (
+      <div className="border border-ink-800 rounded-xl overflow-hidden">
+        <SectionHeader />
+        <div className="p-4 space-y-3">
+          <div className="flex items-center gap-2 px-3 py-2.5 bg-ink-800/30 border border-ink-700/40 rounded-lg">
+            <Lock size={12} className="text-ink-500 shrink-0" />
+            <p className="text-xs text-ink-400">Approve the post first to enable publishing.</p>
+          </div>
+
+          {/* Mode tabs — visible but faded */}
+          <div className="flex rounded-lg overflow-hidden border border-ink-800 opacity-40 pointer-events-none">
+            {(['schedule', 'now', 'preview'] as const).map(key => (
+              <div key={key} className="flex-1 py-2 text-center text-xs text-ink-500 capitalize">{key}</div>
+            ))}
+          </div>
+
+          <div className="h-9 rounded-lg border border-dashed border-ink-800 flex items-center justify-center opacity-40">
+            <Clock size={12} className="text-ink-600 mr-1.5" />
+            <span className="text-xs text-ink-600">Schedule post</span>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  // ── Main publish controls ─────────────────────────────────────────────────
+  return (
+    <div className="border border-ink-800 rounded-xl overflow-hidden">
+      <SectionHeader />
+      <div className="p-4 space-y-3">
+
+        {/* Mode selector */}
+        {isDocumentPost ? (
           <div className="flex rounded-lg overflow-hidden border border-ink-700">
             {([
-              { key: 'schedule', label: 'Schedule', icon: <Clock size={12} /> },
-              { key: 'now',      label: 'Publish',  icon: <Send size={12} /> },
+              { key: 'schedule', label: 'Schedule', icon: <Clock size={11} /> },
+              { key: 'now',      label: 'Now',      icon: <Send size={11} /> },
             ] as const).map(({ key, label, icon }) => (
               <button
                 key={key}
                 onClick={() => setMode(key)}
                 className={cn(
                   'flex-1 py-2 text-xs font-medium transition-colors flex items-center justify-center gap-1.5',
-                  mode === key ? 'bg-ink-700 text-cream' : 'text-ink-400 hover:text-cream'
+                  mode === key ? 'bg-ink-700 text-cream' : 'text-ink-500 hover:text-cream'
                 )}
               >
                 {icon}{label}
               </button>
             ))}
           </div>
-          <p className="text-xs text-ink-500">
-            Preview is not available for document posts — LinkedIn document uploads are always public.
-          </p>
-        </div>
-      ) : (
-        <div className="flex rounded-lg overflow-hidden border border-ink-700">
-          {([
-            { key: 'preview',  label: 'Preview',  icon: <Eye size={12} /> },
-            { key: 'schedule', label: 'Schedule', icon: <Clock size={12} /> },
-            { key: 'now',      label: 'Publish',  icon: <Send size={12} /> },
-          ] as const).map(({ key, label, icon }) => (
-            <button
-              key={key}
-              onClick={() => setMode(key)}
-              className={cn(
-                'flex-1 py-2 text-xs font-medium transition-colors flex items-center justify-center gap-1.5',
-                mode === key ? 'bg-ink-700 text-cream' : 'text-ink-400 hover:text-cream'
-              )}
-            >
-              {icon}{label}
-            </button>
-          ))}
-        </div>
-      )}
-
-      {/* Mode descriptions */}
-      {mode === 'preview' && !isDocumentPost && (
-        <div className="px-3 py-2.5 rounded-lg bg-violet-900/15 border border-violet-700/25 space-y-1">
-          <p className="text-xs text-violet-300 font-medium">How preview works</p>
-          <p className="text-xs text-ink-400">
-            Publishes with <code className="text-ink-300 bg-ink-800 px-1 rounded">LOGGED_IN</code> visibility —
-            only reachable via the direct link, never distributed in anyone's feed.
-            You review it on LinkedIn, then either publish publicly or delete it.
-          </p>
-        </div>
-      )}
-
-      {mode === 'schedule' && (
-        <div className="space-y-1.5">
-          <label className="section-label">Publish time (IST)</label>
-          <input
-            type="datetime-local"
-            value={scheduledAt}
-            onChange={e => setScheduledAt(e.target.value)}
-            className="input text-sm w-full font-mono"
-          />
-          <p className="text-xs text-ink-500">
-            Default: {DEFAULT_TIMES[day] ?? '07:30'} IST on {day.charAt(0).toUpperCase() + day.slice(1)}
-          </p>
-        </div>
-      )}
-
-      {mode === 'now' && (
-        <p className="text-xs text-ink-400">
-          Post will be published immediately and publicly to your LinkedIn profile.
-        </p>
-      )}
-
-      {error && (
-        <div className="px-3 py-2 rounded-lg bg-red-900/10 border border-red-800/30 flex items-start gap-2">
-          <AlertCircle size={13} className="text-red-400 shrink-0 mt-0.5" />
-          <div className="flex-1 min-w-0">
-            <p className="text-xs text-red-400">{error}</p>
-            {error.includes('not connected') && (
-              <a href="/dashboard/settings" className="text-xs text-gold-500 hover:underline mt-1 block">
-                Connect LinkedIn in Settings →
-              </a>
-            )}
+        ) : (
+          <div className="flex rounded-lg overflow-hidden border border-ink-700">
+            {([
+              { key: 'preview',  label: 'Preview',  icon: <Eye size={11} /> },
+              { key: 'schedule', label: 'Schedule', icon: <Clock size={11} /> },
+              { key: 'now',      label: 'Now',      icon: <Send size={11} /> },
+            ] as const).map(({ key, label, icon }) => (
+              <button
+                key={key}
+                onClick={() => setMode(key)}
+                className={cn(
+                  'flex-1 py-2 text-xs font-medium transition-colors flex items-center justify-center gap-1.5',
+                  mode === key ? 'bg-ink-700 text-cream' : 'text-ink-500 hover:text-cream'
+                )}
+              >
+                {icon}{label}
+              </button>
+            ))}
           </div>
-          <button onClick={() => setError(null)} className="shrink-0">
-            <X size={12} className="text-ink-500" />
-          </button>
-        </div>
-      )}
+        )}
 
-      <button
-        onClick={handleAction}
-        disabled={loading}
-        className="btn-primary w-full justify-center"
-      >
-        {loading
-          ? <><Loader2 size={14} className="animate-spin" />
-              {mode === 'preview' ? 'Creating preview...' : mode === 'now' ? 'Publishing...' : 'Scheduling...'}
-            </>
-          : mode === 'preview'
-            ? <><Eye size={14} /> Preview on LinkedIn</>
-            : mode === 'now'
-              ? <><Send size={14} /> Publish now</>
-              : <><Clock size={14} /> Schedule post</>
-        }
-      </button>
+        {/* Mode content */}
+        {mode === 'preview' && !isDocumentPost && (
+          <p className="text-xs text-ink-500 leading-relaxed">
+            Posts as <code className="text-ink-300 bg-ink-800 px-1 rounded text-xs">LOGGED_IN</code> —
+            only reachable via direct link, never distributed in feeds.
+          </p>
+        )}
+
+        {isDocumentPost && (
+          <p className="text-xs text-ink-500">
+            Preview unavailable for document posts — LinkedIn document uploads are always public.
+          </p>
+        )}
+
+        {mode === 'schedule' && (
+          <div className="space-y-1.5">
+            <label className="text-xs font-medium text-ink-400">Publish time (IST)</label>
+            <input
+              type="datetime-local"
+              value={scheduledAt}
+              onChange={e => setScheduledAt(e.target.value)}
+              className="input text-xs w-full font-mono"
+            />
+            <p className="text-xs text-ink-600">
+              Default: {DEFAULT_TIMES[day] ?? '07:30'} IST on {day.charAt(0).toUpperCase() + day.slice(1)}
+            </p>
+          </div>
+        )}
+
+        <ErrorRow />
+
+        {/* Action button */}
+        <button
+          onClick={handleAction}
+          disabled={loading}
+          className="btn-primary w-full justify-center text-sm"
+        >
+          {loading
+            ? <><Loader2 size={14} className="animate-spin" />
+                {mode === 'preview' ? 'Creating preview…' : mode === 'now' ? 'Publishing…' : 'Scheduling…'}
+              </>
+            : mode === 'preview'
+              ? <><Eye size={14} /> Preview on LinkedIn</>
+              : mode === 'now'
+                ? <><Send size={14} /> Publish now</>
+                : <><Clock size={14} /> Schedule post</>
+          }
+        </button>
+      </div>
     </div>
   )
 }

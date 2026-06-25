@@ -1,8 +1,8 @@
 'use client'
 
-import { useState, useEffect } from 'react'
-import { FileText, Image, Loader2, Download, Trash2, RefreshCw, CheckCircle2, AlertCircle } from 'lucide-react'
-import { cn } from '@/lib/utils/helpers'
+import { useState, useEffect, useRef } from 'react'
+import { FileText, Image, Loader2, Download, Trash2, RefreshCw, CheckCircle2, AlertCircle, Wand2 } from 'lucide-react'
+import { cn, countWords } from '@/lib/utils/helpers'
 
 type MediaType = 'article_pdf' | 'carousel_pdf' | 'quote_png'
 
@@ -17,57 +17,39 @@ type MediaRecord = {
 }
 
 type MediaPanelProps = {
-  postId:   string
-  format:   string
-  onCaptionChange?: (caption: string) => void
+  postId: string
+  format: string
 }
 
-// Which field the confirmedText maps to for each media type
-const TEXT_FIELD_CONFIG: Record<MediaType, { label: string; placeholder: string; multiline: boolean } | null> = {
-  article_pdf:  { label: 'Article title', placeholder: 'Enter the article title…', multiline: false },
-  carousel_pdf: null,
-  quote_png:    { label: 'Quote text', placeholder: 'Enter the quote to feature…', multiline: true },
+const MEDIA_CONFIG: Record<string, { type: MediaType; label: string; icon: typeof FileText }> = {
+  long_form_article: { type: 'article_pdf',  label: 'Article PDF',    icon: FileText },
+  carousel:          { type: 'carousel_pdf', label: 'Carousel PDF',   icon: FileText },
+  text_post:         { type: 'quote_png',    label: 'Quote Image',    icon: Image    },
+  market_insights:   { type: 'quote_png',    label: 'Quote Image',    icon: Image    },
 }
 
-const MEDIA_CONFIG: Record<string, { type: MediaType; label: string; icon: typeof FileText; desc: string }> = {
-  long_form_article: {
-    type:  'article_pdf',
-    label: 'Article PDF',
-    icon:  FileText,
-    desc:  'Full article formatted for LinkedIn document post',
-  },
-  carousel: {
-    type:  'carousel_pdf',
-    label: 'Carousel PDF',
-    icon:  FileText,
-    desc:  'Slide-by-slide carousel for LinkedIn',
-  },
-  text_post: {
-    type:  'quote_png',
-    label: 'Quote Image',
-    icon:  Image,
-    desc:  '1080×1080 quote card for image post',
-  },
-  market_insights: {
-    type:  'quote_png',
-    label: 'Quote Image',
-    icon:  Image,
-    desc:  '1080×1080 quote card for image post',
-  },
+const CAPTION_MAX: Record<MediaType, number> = {
+  article_pdf:  280,
+  carousel_pdf: 280,
+  quote_png:    120,
 }
 
-export default function MediaPanel({ postId, format, onCaptionChange }: MediaPanelProps) {
+export default function MediaPanel({ postId, format }: MediaPanelProps) {
   const config = MEDIA_CONFIG[format]
 
-  const [media, setMedia]             = useState<MediaRecord | null>(null)
-  const [loading, setLoading]         = useState(true)
-  const [generating, setGenerating]   = useState(false)
-  const [error, setError]             = useState<string | null>(null)
-  const [caption, setCaption]         = useState('')
-  const [captionDirty, setCaptionDirty] = useState(false)
-  const [confirmedText, setConfirmedText] = useState('')  // user-editable title or quote
+  const [media, setMedia]                     = useState<MediaRecord | null>(null)
+  const [loading, setLoading]                 = useState(true)
+  const [generating, setGenerating]           = useState(false)
+  const [regenCaption, setRegenCaption]       = useState(false)
+  const [error, setError]                     = useState<string | null>(null)
 
-  // Load existing media on mount
+  // LI Hook / Caption text (for article_pdf + carousel_pdf: 200-280 chars; for quote_png: max 120)
+  const [caption, setCaption]                 = useState('')
+  const captionSaveTimer                      = useRef<ReturnType<typeof setTimeout>>()
+
+  // Confirmed text: article title (article_pdf) or quote text (quote_png)
+  const [confirmedText, setConfirmedText]     = useState('')
+
   useEffect(() => {
     if (!config) { setLoading(false); return }
     loadExistingMedia()
@@ -81,16 +63,20 @@ export default function MediaPanel({ postId, format, onCaptionChange }: MediaPan
       if (!res.ok) return
       const data = await res.json()
 
-      // Pre-populate confirmedText with suggested title/quote from post metadata
-      if (config?.type === 'article_pdf' && data.suggestedTitle) {
+      // Pre-populate from AI-generated suggestions
+      if (config.type === 'article_pdf' && data.suggestedTitle) {
         setConfirmedText(data.suggestedTitle)
-      } else if (config?.type === 'quote_png' && data.suggestedQuote) {
+      }
+      if (config.type === 'quote_png' && data.suggestedQuote) {
         setConfirmedText(data.suggestedQuote)
       }
+      // Caption pre-population (long-form + carousel: LINKEDIN_CAPTION; quote: don't need separate caption)
+      if ((config.type === 'article_pdf' || config.type === 'carousel_pdf') && data.suggestedCaption) {
+        setCaption(data.suggestedCaption)
+      }
 
-      const existing = data.media?.find((m: { media_type: string }) => m.media_type === config?.type)
+      const existing = data.media?.find((m: { media_type: string }) => m.media_type === config.type)
       if (existing) {
-        // Get fresh signed URL
         const urlRes = await fetch(`/api/media/${existing.id}`)
         if (urlRes.ok) {
           const urlData = await urlRes.json()
@@ -104,14 +90,53 @@ export default function MediaPanel({ postId, format, onCaptionChange }: MediaPan
             linkedinCaption: urlData.linkedinCaption,
           }
           setMedia(rec)
-          setCaption(urlData.linkedinCaption ?? '')
-          onCaptionChange?.(urlData.linkedinCaption ?? '')
+          // DB caption takes priority over suggested
+          if (urlData.linkedinCaption) setCaption(urlData.linkedinCaption)
         }
       }
-    } catch {
-      // non-fatal
+    } catch { /* non-fatal */ }
+    finally { setLoading(false) }
+  }
+
+  // Debounced caption save to DB (only when media record exists)
+  function handleCaptionChange(val: string) {
+    setCaption(val)
+    if (!media) return
+    clearTimeout(captionSaveTimer.current)
+    captionSaveTimer.current = setTimeout(() => saveCaption(val, media.id), 1000)
+  }
+
+  async function saveCaption(text: string, mediaId: string) {
+    await fetch(`/api/media/${mediaId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ linkedinCaption: text }),
+    }).catch(() => {/* silent */})
+  }
+
+  async function regenerateCaptionAI() {
+    setRegenCaption(true)
+    setError(null)
+    try {
+      const res = await fetch('/api/media/caption', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ postId }),
+      })
+      if (!res.ok) throw new Error('Regeneration failed')
+      const { caption: newCaption } = await res.json()
+      if (config?.type === 'quote_png') {
+        // For quote images, the regenerated text goes into the image card text field
+        setConfirmedText(newCaption)
+      } else {
+        // For document posts, it's the LinkedIn post hook / caption
+        setCaption(newCaption)
+        if (media) saveCaption(newCaption, media.id)
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to regenerate')
     } finally {
-      setLoading(false)
+      setRegenCaption(false)
     }
   }
 
@@ -121,8 +146,9 @@ export default function MediaPanel({ postId, format, onCaptionChange }: MediaPan
     setError(null)
     try {
       const body: Record<string, string> = { postId, mediaType: config.type }
-      if (config.type === 'article_pdf' && confirmedText) body.customTitle = confirmedText
-      if (config.type === 'quote_png'   && confirmedText) body.customQuote = confirmedText
+      if (config.type === 'article_pdf'  && confirmedText)  body.customTitle = confirmedText
+      if (config.type === 'quote_png'    && confirmedText)  body.customQuote = confirmedText
+      if (caption)                                          body.linkedinCaptionOverride = caption
 
       const res = await fetch('/api/media/generate', {
         method: 'POST',
@@ -134,7 +160,7 @@ export default function MediaPanel({ postId, format, onCaptionChange }: MediaPan
         throw new Error(err.error ?? `Generation failed (${res.status})`)
       }
       const data = await res.json()
-      const rec: MediaRecord = {
+      setMedia({
         id:              data.id,
         mediaType:       data.mediaType,
         fileName:        data.fileName,
@@ -142,10 +168,8 @@ export default function MediaPanel({ postId, format, onCaptionChange }: MediaPan
         pageCount:       data.pageCount,
         signedUrl:       data.signedUrl,
         linkedinCaption: data.linkedinCaption,
-      }
-      setMedia(rec)
-      setCaption(data.linkedinCaption ?? '')
-      onCaptionChange?.(data.linkedinCaption ?? '')
+      })
+      if (data.linkedinCaption && !caption) setCaption(data.linkedinCaption)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Generation failed')
     } finally {
@@ -160,65 +184,45 @@ export default function MediaPanel({ postId, format, onCaptionChange }: MediaPan
       const blob = await res.blob()
       const url  = URL.createObjectURL(blob)
       const a    = document.createElement('a')
-      a.href     = url
-      a.download = media.fileName
-      a.target   = '_blank'
-      document.body.appendChild(a)
-      a.click()
-      document.body.removeChild(a)
-      URL.revokeObjectURL(url)
-    } catch {
-      setError('Download failed')
-    }
+      a.href = url; a.download = media.fileName; a.target = '_blank'
+      document.body.appendChild(a); a.click()
+      document.body.removeChild(a); URL.revokeObjectURL(url)
+    } catch { setError('Download failed') }
   }
 
   async function deleteMedia() {
     if (!media) return
-    try {
-      await fetch(`/api/media/${media.id}`, { method: 'DELETE' })
-      setMedia(null)
-      setCaption('')
-      onCaptionChange?.('')
-    } catch {
-      setError('Failed to delete media')
-    }
-  }
-
-  async function saveCaption() {
-    if (!media) return
-    try {
-      const res = await fetch(`/api/media/${media.id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ linkedinCaption: caption }),
-      })
-      if (!res.ok) throw new Error('Save failed')
-      setCaptionDirty(false)
-      onCaptionChange?.(caption)
-    } catch {
-      setError('Failed to save caption')
-    }
+    await fetch(`/api/media/${media.id}`, { method: 'DELETE' }).catch(() => {})
+    setMedia(null)
   }
 
   if (!config) return null
 
-  const Icon = config.icon
-  const fileSizeMB = media ? (media.fileSize / 1024 / 1024).toFixed(1) : null
-  const textFieldCfg = TEXT_FIELD_CONFIG[config.type]
+  const Icon            = config.icon
+  const fileSizeMB      = media ? (media.fileSize / 1024 / 1024).toFixed(1) : null
+  const captionMax      = CAPTION_MAX[config.type]
+  const captionWords    = countWords(caption)
+  const captionOverMax  = caption.length > captionMax
+  const titleMax        = 100
+  const titleOver       = confirmedText.length > titleMax
+  const isDocumentPost  = config.type === 'article_pdf' || config.type === 'carousel_pdf'
+  const isArticle       = config.type === 'article_pdf'
+  const isQuote         = config.type === 'quote_png'
 
   return (
     <div className="border border-ink-800 rounded-xl overflow-hidden">
+
       {/* Header */}
-      <div className="flex items-center justify-between px-4 py-3 bg-ink-800/40 border-b border-ink-800">
+      <div className="flex items-center justify-between px-4 py-2.5 bg-ink-800/40 border-b border-ink-800">
         <div className="flex items-center gap-2">
-          <Icon size={13} className="text-ink-400" />
-          <span className="text-xs font-semibold text-cream">{config.label}</span>
+          <Icon size={12} className="text-ink-400" />
+          <span className="text-xs font-semibold text-cream tracking-wide">{config.label}</span>
         </div>
         {media && (
           <button
             onClick={generate}
             disabled={generating}
-            title="Regenerate"
+            title="Regenerate media"
             className="text-ink-500 hover:text-ink-300 transition-colors"
           >
             {generating ? <Loader2 size={12} className="animate-spin" /> : <RefreshCw size={12} />}
@@ -226,165 +230,217 @@ export default function MediaPanel({ postId, format, onCaptionChange }: MediaPan
         )}
       </div>
 
-      <div className="p-4 space-y-3">
+      <div className="p-4 space-y-4">
+
         {/* Error */}
         {error && (
           <div className="flex items-start gap-2 px-3 py-2 bg-red-900/20 border border-red-800/30 rounded-lg">
             <AlertCircle size={12} className="text-red-400 shrink-0 mt-0.5" />
-            <p className="text-xs text-red-400">{error}</p>
+            <p className="text-xs text-red-400 flex-1">{error}</p>
+            <button onClick={() => setError(null)} className="text-ink-600 hover:text-ink-400 shrink-0">×</button>
           </div>
         )}
 
         {loading ? (
           <div className="flex items-center gap-2 py-2">
             <Loader2 size={12} className="animate-spin text-ink-400" />
-            <span className="text-xs text-ink-500">Checking…</span>
-          </div>
-        ) : !media ? (
-          /* Generate button */
-          <div className="space-y-2">
-            <p className="text-xs text-ink-500">{config.desc}</p>
-
-            {/* Editable title / quote field */}
-            {textFieldCfg && (
-              <div className="space-y-1">
-                <label className="text-xs font-medium text-ink-400">{textFieldCfg.label}</label>
-                {textFieldCfg.multiline ? (
-                  <textarea
-                    value={confirmedText}
-                    onChange={e => setConfirmedText(e.target.value)}
-                    rows={4}
-                    placeholder={textFieldCfg.placeholder}
-                    className="w-full bg-ink-800/40 border border-ink-700 rounded-lg px-3 py-2 text-xs text-cream placeholder-ink-600 resize-none focus:outline-none focus:ring-1 focus:ring-blue-700/50"
-                  />
-                ) : (
-                  <input
-                    type="text"
-                    value={confirmedText}
-                    onChange={e => setConfirmedText(e.target.value)}
-                    placeholder={textFieldCfg.placeholder}
-                    className="w-full bg-ink-800/40 border border-ink-700 rounded-lg px-3 py-2 text-xs text-cream placeholder-ink-600 focus:outline-none focus:ring-1 focus:ring-blue-700/50"
-                  />
-                )}
-              </div>
-            )}
-
-            <button
-              onClick={generate}
-              disabled={generating}
-              className="w-full flex items-center justify-center gap-2 py-2 rounded-lg border border-dashed border-ink-600 hover:border-blue-600 hover:bg-blue-900/10 text-xs text-ink-400 hover:text-blue-400 transition-all disabled:opacity-50"
-            >
-              {generating ? (
-                <><Loader2 size={12} className="animate-spin" /> Generating…</>
-              ) : (
-                <><Icon size={12} /> Generate {config.label}</>
-              )}
-            </button>
+            <span className="text-xs text-ink-500">Loading…</span>
           </div>
         ) : (
-          /* Media card */
-          <div className="space-y-3">
-            {/* Editable title / quote for regeneration */}
-            {textFieldCfg && (
-              <div className="space-y-1">
-                <label className="text-xs font-medium text-ink-400">{textFieldCfg.label}</label>
-                {textFieldCfg.multiline ? (
-                  <textarea
-                    value={confirmedText}
-                    onChange={e => setConfirmedText(e.target.value)}
-                    rows={3}
-                    placeholder={textFieldCfg.placeholder}
-                    className="w-full bg-ink-800/40 border border-ink-700 rounded-lg px-3 py-2 text-xs text-cream placeholder-ink-600 resize-none focus:outline-none focus:ring-1 focus:ring-blue-700/50"
-                  />
-                ) : (
-                  <input
-                    type="text"
-                    value={confirmedText}
-                    onChange={e => setConfirmedText(e.target.value)}
-                    placeholder={textFieldCfg.placeholder}
-                    className="w-full bg-ink-800/40 border border-ink-700 rounded-lg px-3 py-2 text-xs text-cream placeholder-ink-600 focus:outline-none focus:ring-1 focus:ring-blue-700/50"
-                  />
-                )}
-              </div>
-            )}
-
-            {/* File info row */}
-            <div className="flex items-center gap-2 px-3 py-2 bg-ink-800/40 rounded-lg">
-              <CheckCircle2 size={12} className="text-emerald-400 shrink-0" />
-              <div className="flex-1 min-w-0">
-                <p className="text-xs font-medium text-cream truncate">{media.fileName}</p>
-                <p className="text-xs text-ink-500">
-                  {fileSizeMB} MB
-                  {media.pageCount ? ` · ${media.pageCount} pages` : ''}
-                </p>
-              </div>
-              <div className="flex items-center gap-1.5 shrink-0">
-                {media.signedUrl && (
+          <>
+            {/* ── LI Post Hook / Caption (document posts only) ─── */}
+            {isDocumentPost && (
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-semibold text-ink-300">
+                    {isArticle ? 'LI Post Hook' : 'LI Post Caption'}
+                  </label>
                   <button
-                    onClick={downloadFile}
-                    className="text-ink-500 hover:text-ink-300 transition-colors"
-                    title="Download"
+                    onClick={regenerateCaptionAI}
+                    disabled={regenCaption}
+                    title="Regenerate with AI"
+                    className="flex items-center gap-1 text-xs text-ink-500 hover:text-gold-400 transition-colors disabled:opacity-50"
                   >
-                    <Download size={12} />
+                    {regenCaption
+                      ? <Loader2 size={10} className="animate-spin" />
+                      : <Wand2 size={10} />
+                    }
+                    <span>Regen</span>
                   </button>
-                )}
-                <button
-                  onClick={deleteMedia}
-                  className="text-ink-600 hover:text-red-400 transition-colors"
-                  title="Remove"
-                >
-                  <Trash2 size={12} />
-                </button>
-              </div>
-            </div>
-
-            {/* Preview thumbnail — only for PNG */}
-            {media.mediaType === 'quote_png' && media.signedUrl && (
-              <div className="rounded-lg overflow-hidden border border-ink-800">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={media.signedUrl}
-                  alt="Quote preview"
-                  className="w-full aspect-square object-cover"
+                </div>
+                <textarea
+                  value={caption}
+                  onChange={e => handleCaptionChange(e.target.value)}
+                  rows={5}
+                  placeholder={isArticle
+                    ? 'AI hook that goes as the LinkedIn post text…'
+                    : 'Caption that accompanies the carousel on LinkedIn…'
+                  }
+                  className={cn(
+                    'w-full bg-ink-800/40 border rounded-lg px-3 py-2 text-xs text-cream',
+                    'placeholder-ink-600 resize-none focus:outline-none focus:ring-1',
+                    captionOverMax
+                      ? 'border-red-700/50 focus:ring-red-700/40'
+                      : 'border-ink-700 focus:ring-blue-700/50'
+                  )}
                 />
+                <div className="flex items-center justify-between">
+                  <span className={cn(
+                    'text-xs',
+                    captionOverMax ? 'text-red-400' : caption.length > captionMax * 0.85 ? 'text-amber-400' : 'text-ink-600'
+                  )}>
+                    {caption.length} / {captionMax} chars
+                  </span>
+                  <span className="text-xs text-ink-600">{captionWords}w</span>
+                </div>
               </div>
             )}
 
-            {/* PDF indicator for carousels */}
-            {(media.mediaType === 'article_pdf' || media.mediaType === 'carousel_pdf') && (
-              <div className="flex items-center gap-2 px-3 py-2 bg-blue-900/10 rounded-lg border border-blue-900/20">
-                <FileText size={12} className="text-blue-400" />
-                <span className="text-xs text-blue-300">
-                  Will publish as LinkedIn document post
-                </span>
+            {/* ── Quote Text (quote posts) ─── */}
+            {isQuote && (
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-semibold text-ink-300">Quote Text</label>
+                  <button
+                    onClick={regenerateCaptionAI}
+                    disabled={regenCaption}
+                    title="Regenerate with AI"
+                    className="flex items-center gap-1 text-xs text-ink-500 hover:text-gold-400 transition-colors disabled:opacity-50"
+                  >
+                    {regenCaption
+                      ? <Loader2 size={10} className="animate-spin" />
+                      : <Wand2 size={10} />
+                    }
+                    <span>Regen</span>
+                  </button>
+                </div>
+                <textarea
+                  value={confirmedText}
+                  onChange={e => setConfirmedText(e.target.value)}
+                  rows={4}
+                  placeholder="Pull-quote that appears on the image card…"
+                  className={cn(
+                    'w-full bg-ink-800/40 border rounded-lg px-3 py-2 text-xs text-cream',
+                    'placeholder-ink-600 resize-none focus:outline-none focus:ring-1',
+                    confirmedText.length > captionMax
+                      ? 'border-red-700/50 focus:ring-red-700/40'
+                      : 'border-ink-700 focus:ring-blue-700/50'
+                  )}
+                />
+                <div className={cn(
+                  'text-xs',
+                  confirmedText.length > captionMax ? 'text-red-400'
+                    : confirmedText.length > captionMax * 0.85 ? 'text-amber-400'
+                    : 'text-ink-600'
+                )}>
+                  {confirmedText.length} / {captionMax} chars
+                </div>
               </div>
             )}
 
-            {/* LinkedIn caption */}
-            <div className="space-y-1.5">
-              <label className="text-xs font-medium text-ink-400">LinkedIn caption</label>
-              <textarea
-                value={caption}
-                onChange={e => { setCaption(e.target.value); setCaptionDirty(true) }}
-                rows={4}
-                placeholder="Caption for the LinkedIn post…"
-                className={cn(
-                  'w-full bg-ink-800/40 border rounded-lg px-3 py-2 text-xs text-cream',
-                  'placeholder-ink-600 resize-none focus:outline-none focus:ring-1',
-                  captionDirty ? 'border-gold-500/40 focus:ring-gold-500/30' : 'border-ink-700 focus:ring-blue-700/50'
+            {/* ── Article Title (article_pdf only) ─── */}
+            {isArticle && (
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-semibold text-ink-300">Article Title</label>
+                  <span className={cn(
+                    'text-xs',
+                    titleOver ? 'text-red-400' : confirmedText.length > titleMax * 0.9 ? 'text-amber-400' : 'text-ink-600'
+                  )}>
+                    {confirmedText.length} / {titleMax}
+                  </span>
+                </div>
+                <input
+                  type="text"
+                  value={confirmedText}
+                  onChange={e => setConfirmedText(e.target.value)}
+                  maxLength={titleMax}
+                  placeholder="Title displayed on the PDF cover…"
+                  className={cn(
+                    'w-full bg-ink-800/40 border rounded-lg px-3 py-2 text-xs text-cream',
+                    'placeholder-ink-600 focus:outline-none focus:ring-1',
+                    titleOver
+                      ? 'border-red-700/50 focus:ring-red-700/40'
+                      : 'border-ink-700 focus:ring-blue-700/50'
+                  )}
+                />
+                {titleOver && (
+                  <p className="text-xs text-red-400">Title will be truncated in the PDF at 100 chars</p>
                 )}
-              />
-              {captionDirty && (
+              </div>
+            )}
+
+            {/* ── File card (when media exists) ─── */}
+            {media ? (
+              <div className="space-y-3">
+                <div className="flex items-center gap-2 px-3 py-2 bg-ink-800/40 rounded-lg">
+                  <CheckCircle2 size={12} className="text-emerald-400 shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs font-medium text-cream truncate">{media.fileName}</p>
+                    <p className="text-xs text-ink-500">
+                      {fileSizeMB} MB{media.pageCount ? ` · ${media.pageCount} slides` : ''}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    {media.signedUrl && (
+                      <button onClick={downloadFile} title="Download" className="text-ink-500 hover:text-ink-300 transition-colors">
+                        <Download size={12} />
+                      </button>
+                    )}
+                    <button onClick={deleteMedia} title="Remove" className="text-ink-600 hover:text-red-400 transition-colors">
+                      <Trash2 size={12} />
+                    </button>
+                  </div>
+                </div>
+
+                {/* Quote image preview */}
+                {media.mediaType === 'quote_png' && media.signedUrl && (
+                  <div className="rounded-lg overflow-hidden border border-ink-800">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={media.signedUrl} alt="Quote preview" className="w-full aspect-square object-cover" />
+                  </div>
+                )}
+
+                {/* Document post badge */}
+                {isDocumentPost && (
+                  <div className="flex items-center gap-2 px-3 py-2 bg-blue-900/10 rounded-lg border border-blue-900/20">
+                    <FileText size={11} className="text-blue-400" />
+                    <span className="text-xs text-blue-300">Publishes as LinkedIn document post</span>
+                  </div>
+                )}
+
+                {/* Re-generate button */}
                 <button
-                  onClick={saveCaption}
-                  className="text-xs text-gold-400 hover:text-gold-300"
+                  onClick={generate}
+                  disabled={generating}
+                  className="w-full flex items-center justify-center gap-2 py-2 rounded-lg border border-dashed border-ink-700 hover:border-ink-500 text-xs text-ink-500 hover:text-ink-300 transition-all disabled:opacity-40"
                 >
-                  Save caption
+                  {generating
+                    ? <><Loader2 size={11} className="animate-spin" /> Regenerating…</>
+                    : <><RefreshCw size={11} /> Regenerate {config.label}</>
+                  }
                 </button>
-              )}
-              <p className="text-xs text-ink-600">{caption.length} / 280 chars</p>
-            </div>
-          </div>
+              </div>
+            ) : (
+              /* ── Generate button (no media yet) ─── */
+              <button
+                onClick={generate}
+                disabled={generating || (isArticle && !confirmedText) || (isQuote && !confirmedText)}
+                className={cn(
+                  'w-full flex items-center justify-center gap-2 py-2.5 rounded-lg border border-dashed',
+                  'text-xs transition-all disabled:opacity-40',
+                  generating
+                    ? 'border-ink-600 text-ink-400'
+                    : 'border-ink-600 hover:border-gold-600 hover:bg-gold-900/10 text-ink-400 hover:text-gold-400'
+                )}
+              >
+                {generating
+                  ? <><Loader2 size={12} className="animate-spin" /> Generating…</>
+                  : <><Icon size={12} /> Generate {config.label}</>
+                }
+              </button>
+            )}
+          </>
         )}
       </div>
     </div>

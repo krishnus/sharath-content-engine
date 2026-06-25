@@ -130,7 +130,7 @@ const S = StyleSheet.create({
     opacity:         0.4,
   },
   footerRow: {
-    flexDirection:  'justify',
+    flexDirection:  'row',
     justifyContent: 'space-between',
   },
   footerText: {

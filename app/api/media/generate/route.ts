@@ -18,11 +18,12 @@ export async function POST(req: NextRequest) {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorised' }, { status: 401 })
 
-  const { postId, mediaType, customTitle, customQuote } = await req.json() as {
+  const { postId, mediaType, customTitle, customQuote, linkedinCaptionOverride } = await req.json() as {
     postId: string
     mediaType: MediaType
-    customTitle?: string   // user-confirmed title override for article_pdf
-    customQuote?: string   // user-confirmed quote override for quote_png
+    customTitle?: string            // user-confirmed title override for article_pdf
+    customQuote?: string            // user-confirmed quote override for quote_png
+    linkedinCaptionOverride?: string // user-edited caption for the LinkedIn post
   }
 
   // ── Fetch post + current draft ────────────────────────────────────────
@@ -56,9 +57,8 @@ export async function POST(req: NextRequest) {
   const week = Array.isArray(weeksArr) ? weeksArr[0] : (post.weeks as unknown as { week_number: number; year: number; week_start: string; theme: string | null; quarter: string | null })
   const meta = parseGenerationMetadata(currentDraft.content)
 
-  // Auto-save strips LINKEDIN_CAPTION/QUOTE from editor content before media is generated.
-  // The original draft (is_original: true, never auto-saved) still has the full metadata.
-  let linkedinCaption = meta.linkedinCaption
+  // Caption priority: user-edited override > original draft LINKEDIN_CAPTION: > current draft metadata
+  let linkedinCaption = linkedinCaptionOverride || meta.linkedinCaption
   if (!linkedinCaption) {
     const originalDraft = drafts?.find(d => d.is_original)
     if (originalDraft) {

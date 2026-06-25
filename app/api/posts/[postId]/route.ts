@@ -63,9 +63,10 @@ export async function GET(
     currentVersionId: currentDraft?.id ?? null,
     media: mediaRecords ?? [],
     // Pre-computed suggestions for MediaPanel text fields
-    suggestedTitle: (post as Record<string, unknown>).hook_idea as string | null
+    suggestedTitle:   (post as Record<string, unknown>).hook_idea as string | null
       || getMetaField('CORE_INSIGHT'),
-    suggestedQuote: getMetaField('QUOTE'),
+    suggestedQuote:   getMetaField('QUOTE'),
+    suggestedCaption: getMetaField('LINKEDIN_CAPTION'),
   })
 }
 

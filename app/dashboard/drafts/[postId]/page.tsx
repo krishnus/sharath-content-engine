@@ -91,9 +91,7 @@ export default function DraftEditorPage() {
   const [generateError, setGenerateError]     = useState<string | null>(null)
   const [isApproving, setIsApproving]         = useState(false)
   const [approved, setApproved]               = useState(false)
-  const [publishedUrl, setPublishedUrl]         = useState<string | null>(null)
-  const [scheduledAt, setScheduledAt]           = useState<string | null>(null)
-  const [previewActive, setPreviewActive]       = useState(false)
+  const [publishedUrl, setPublishedUrl] = useState<string | null>(null)
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false)
   const [candidateRules, setCandidateRules]         = useState<CandidateRule[]>([])
   const [showCandidates, setShowCandidates]         = useState(false)
@@ -559,132 +557,99 @@ export default function DraftEditorPage() {
       {/* ── Main area: editor + sidebar ─────────────────────────── */}
       <div className="flex-1 overflow-hidden flex">
 
-        {/* Editor column */}
+        {/* ── Editor column ──────────────────────────────────────── */}
         <div className="flex-1 overflow-hidden flex flex-col min-w-0">
 
-        {showDiff ? (
-          /* Diff view */
-          <DiffView
-            original={originalContent}
-            edited={content}
-            className="flex-1 overflow-hidden"
-          />
-        ) : (
-          /* Editor */
-          <div className="flex-1 overflow-y-auto px-8 py-6">
-            {!content && !isGenerating && (
-              <div className="flex flex-col items-center justify-center h-48 text-center">
-                <p className="text-ink-500 text-sm mb-3">No draft yet.</p>
-                <button onClick={handleGenerate} className="btn-primary">
-                  <Zap size={15} /> Generate draft
-                </button>
-              </div>
-            )}
-            <textarea
-              ref={textareaRef}
-              value={content}
-              onChange={e => handleContentChange(e.target.value)}
-              className="editor-content w-full"
-              placeholder={isGenerating ? 'Generating...' : 'Draft will appear here...'}
-              disabled={isGenerating || approved}
-              spellCheck
+          {showDiff ? (
+            <DiffView
+              original={originalContent}
+              edited={content}
+              className="flex-1 overflow-hidden"
             />
-            {hasUnsavedChanges && (
-              <p className="text-xs text-ink-500 mt-2 text-right">Saving...</p>
-            )}
-          </div>
-        )}
+          ) : (
+            <div className="flex-1 overflow-y-auto px-8 py-6">
+              {!content && !isGenerating && (
+                <div className="flex flex-col items-center justify-center h-48 text-center">
+                  <p className="text-ink-500 text-sm mb-3">No draft yet.</p>
+                  <button onClick={handleGenerate} className="btn-primary">
+                    <Zap size={15} /> Generate draft
+                  </button>
+                </div>
+              )}
+              <textarea
+                ref={textareaRef}
+                value={content}
+                onChange={e => handleContentChange(e.target.value)}
+                className="editor-content w-full"
+                placeholder={isGenerating ? 'Generating...' : 'Draft will appear here...'}
+                disabled={isGenerating || approved}
+                spellCheck
+              />
+              {hasUnsavedChanges && (
+                <p className="text-xs text-ink-500 mt-2 text-right">Saving...</p>
+              )}
+            </div>
+          )}
 
-        {/* ── Hashtags ─────────────────────────────────────────── */}
-        {content && (
-          <div className="border-t border-ink-800 px-6 py-3 shrink-0 bg-ink-900">
-            <div className="flex items-start gap-3">
-              <div className="flex items-center gap-1.5 text-ink-500 mt-0.5 shrink-0">
-                <Hash size={13} />
-                <span className="text-xs">Hashtags</span>
-              </div>
-              <div className="flex flex-wrap gap-1.5 flex-1">
-                {hashtags.length > 0 ? (
-                  hashtags.map((tag, i) => (
-                    <span
-                      key={i}
-                      className="badge badge-draft text-xs cursor-default"
-                    >
-                      {tag}
-                      {!approved && (
-                        <button
-                          onClick={() => setHashtags(prev => prev.filter((_, idx) => idx !== i))}
-                          className="ml-1 text-ink-500 hover:text-red-400 transition-colors"
-                        >
-                          <X size={9} />
-                        </button>
-                      )}
+          {/* Hashtags */}
+          {content && (
+            <div className="border-t border-ink-800 px-6 py-3 shrink-0 bg-ink-900">
+              <div className="flex items-start gap-3">
+                <div className="flex items-center gap-1.5 text-ink-500 mt-0.5 shrink-0">
+                  <Hash size={13} />
+                  <span className="text-xs">Hashtags</span>
+                </div>
+                <div className="flex flex-wrap gap-1.5 flex-1">
+                  {hashtags.length > 0 ? (
+                    hashtags.map((tag, i) => (
+                      <span key={i} className="badge badge-draft text-xs cursor-default">
+                        {tag}
+                        {!approved && (
+                          <button
+                            onClick={() => setHashtags(prev => prev.filter((_, idx) => idx !== i))}
+                            className="ml-1 text-ink-500 hover:text-red-400 transition-colors"
+                          >
+                            <X size={9} />
+                          </button>
+                        )}
+                      </span>
+                    ))
+                  ) : (
+                    <span className="text-xs text-ink-600 italic">
+                      Hashtags will appear after generating a draft
                     </span>
-                  ))
-                ) : (
-                  <span className="text-xs text-ink-600 italic">
-                    Hashtags will appear after generating a draft
-                  </span>
-                )}
+                  )}
+                </div>
               </div>
             </div>
-          </div>
-        )}
-
-        {/* ── Publish Panel — shown after approval ─────────────── */}
-        {approved && (!publishedUrl || previewActive) && (
-          <div className="border-t border-ink-800 p-4 shrink-0">
-            <PublishPanel
-              postId={postId}
-              day={post?.day ?? 'monday'}
-              format={post?.format}
-              weekStart={post?.weeks?.week_start ?? new Date().toISOString().slice(0, 10)}
-              onPublished={(url) => { setPublishedUrl(url); setPreviewActive(false) }}
-              onScheduled={(at) => setScheduledAt(at)}
-              onPreviewActive={() => setPreviewActive(true)}
-            />
-          </div>
-        )}
-
-        {/* ── Published confirmation ───────────────────────────── */}
-        {publishedUrl && !previewActive && (
-          <div className="border-t border-ink-800 p-4 shrink-0 space-y-3">
-            <div className="card px-4 py-3 border-emerald-700/30 bg-emerald-900/10 flex items-center justify-between gap-3">
-              <p className="text-sm text-emerald-300 font-medium">Published to LinkedIn</p>
-              <div className="flex items-center gap-2 shrink-0">
-                <a href={publishedUrl} target="_blank" rel="noopener noreferrer" className="btn-secondary text-xs">
-                  View post
-                </a>
-                <button
-                  onClick={async () => {
-                    // Reset post status to approved in DB so preview flow works cleanly
-                    await fetch(`/api/posts/${postId}`, {
-                      method: 'PATCH',
-                      headers: { 'Content-Type': 'application/json' },
-                      body: JSON.stringify({ status: 'approved' }),
-                    })
-                    setPublishedUrl(null)
-                    setApproved(true)
-                  }}
-                  className="btn-ghost text-xs text-ink-400"
-                  title="Publish again or preview"
-                >
-                  Publish again
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
+          )}
         </div>{/* end editor column */}
 
-        {/* ── Media sidebar ─────────────────────────────────────── */}
-        {post && content && (
-          <div className="w-72 shrink-0 border-l border-ink-800 overflow-y-auto p-4 space-y-4 bg-ink-950/30">
-            <p className="text-xs font-semibold text-ink-400 uppercase tracking-wider">Media</p>
-            <MediaPanel
-              postId={postId}
-              format={post.format}
-            />
+        {/* ── Right sidebar: Publish + Media ─────────────────────── */}
+        {post && (
+          <div className="w-80 shrink-0 border-l border-ink-800 overflow-y-auto bg-ink-950/30">
+            <div className="p-4 space-y-4">
+
+              {/* Publish panel — always visible, gated when not approved */}
+              <PublishPanel
+                postId={postId}
+                day={post.day}
+                format={post.format}
+                weekStart={post.weeks?.week_start ?? new Date().toISOString().slice(0, 10)}
+                approved={approved}
+                onPublished={(url) => setPublishedUrl(url)}
+                onScheduled={() => {/* handled inside PublishPanel */}}
+              />
+
+              {/* Media panel — only for formats that produce media */}
+              {content && (
+                <MediaPanel
+                  postId={postId}
+                  format={post.format}
+                />
+              )}
+
+            </div>
           </div>
         )}
 
