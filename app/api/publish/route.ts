@@ -180,9 +180,8 @@ export async function POST(req: NextRequest) {
   // Images (quote_png) are included in preview too (posted as LOGGED_IN).
   // PDFs are skipped in preview mode (text-only preview is sufficient for review).
   const isImageMedia = mediaRecord?.media_type === 'quote_png'
-  const shouldPublishMedia = mediaRecord && (!preview || isImageMedia)
 
-  if (shouldPublishMedia) {
+  if (mediaRecord && (!preview || isImageMedia)) {
     // Download file from Supabase Storage
     const { data: fileData, error: dlError } = await supabase.storage
       .from(STORAGE_BUCKET)
