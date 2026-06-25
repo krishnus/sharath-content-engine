@@ -150,7 +150,7 @@ export async function POST(req: NextRequest) {
     let result: { success: boolean; postId?: string; url?: string; error?: string }
 
     // If the post has an image (quote_png), re-publish with the image at PUBLIC visibility
-    if (mediaRecord?.media_type === 'quote_png') {
+    if (mediaRecord && mediaRecord.media_type === 'quote_png') {
       const { data: fileData } = await supabase.storage
         .from(STORAGE_BUCKET)
         .download(mediaRecord.storage_path)
