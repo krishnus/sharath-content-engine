@@ -66,7 +66,7 @@ const S = StyleSheet.create({
   },
   metaRow: {
     flexDirection: 'row',
-    gap:           12,
+    columnGap:     12,
   },
   metaChip: {
     fontSize:        9,

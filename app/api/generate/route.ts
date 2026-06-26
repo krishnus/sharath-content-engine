@@ -171,10 +171,13 @@ async function saveDrafts(
   const hasOriginal = existing?.some((d: { is_original: boolean }) => d.is_original) ?? false
 
   if (!hasOriginal) {
+    // Save rawText (not meta.content) so getMetaField() in the posts route can extract
+    // LINKEDIN_CAPTION, QUOTE, CORE_INSIGHT etc. from the original draft at any time.
+    // Auto-save never touches version 1, so this metadata is preserved across edits.
     await supabase.from('drafts').insert({
       post_id:    postId,
       version:    1,
-      content:    meta.content,
+      content:    rawText,
       word_count: meta.wordCount,
       is_original: true,
     })

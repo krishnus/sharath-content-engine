@@ -28,9 +28,11 @@ const MEDIA_CONFIG: Record<string, { type: MediaType; label: string; icon: typeo
   market_insights:   { type: 'quote_png',    label: 'Quote Image',    icon: Image    },
 }
 
+// LinkedIn document posts support up to 3000 chars, so 700 is generous while still guiding brevity.
+// quote_png uses this for the on-image pull-quote (hard visual limit ~120 chars).
 const CAPTION_MAX: Record<MediaType, number> = {
-  article_pdf:  280,
-  carousel_pdf: 280,
+  article_pdf:  700,
+  carousel_pdf: 700,
   quote_png:    120,
 }
 
@@ -65,7 +67,8 @@ export default function MediaPanel({ postId, format }: MediaPanelProps) {
 
       // Pre-populate from AI-generated suggestions
       if (config.type === 'article_pdf' && data.suggestedTitle) {
-        setConfirmedText(data.suggestedTitle)
+        // Clamp to titleMax so the pre-populated value always fits in the PDF header
+        setConfirmedText(data.suggestedTitle.slice(0, 80))
       }
       if (config.type === 'quote_png' && data.suggestedQuote) {
         setConfirmedText(data.suggestedQuote)
@@ -210,7 +213,7 @@ export default function MediaPanel({ postId, format }: MediaPanelProps) {
   const captionMax      = CAPTION_MAX[config.type]
   const captionWords    = countWords(caption)
   const captionOverMax  = caption.length > captionMax
-  const titleMax        = 100
+  const titleMax        = 80
   const titleOver       = confirmedText.length > titleMax
   const isDocumentPost  = config.type === 'article_pdf' || config.type === 'carousel_pdf'
   const isArticle       = config.type === 'article_pdf'
@@ -260,7 +263,7 @@ export default function MediaPanel({ postId, format }: MediaPanelProps) {
               <div className="space-y-1.5">
                 <div className="flex items-center justify-between">
                   <label className="text-xs font-semibold text-ink-300">
-                    {isArticle ? 'LI Post Hook' : 'LI Post Caption'}
+                    {isArticle ? 'LinkedIn Post Text' : 'LinkedIn Post Caption'}
                   </label>
                   <button
                     onClick={regenerateCaptionAI}
@@ -278,9 +281,9 @@ export default function MediaPanel({ postId, format }: MediaPanelProps) {
                 <textarea
                   value={caption}
                   onChange={e => handleCaptionChange(e.target.value)}
-                  rows={5}
+                  rows={8}
                   placeholder={isArticle
-                    ? 'AI hook that goes as the LinkedIn post text…'
+                    ? 'The hook text that appears as the LinkedIn post text above the document…'
                     : 'Caption that accompanies the carousel on LinkedIn…'
                   }
                   className={cn(
@@ -372,7 +375,7 @@ export default function MediaPanel({ postId, format }: MediaPanelProps) {
                   )}
                 />
                 {titleOver && (
-                  <p className="text-xs text-red-400">Title will be truncated in the PDF at 100 chars</p>
+                  <p className="text-xs text-red-400">Title will be clipped in the PDF — keep it under 80 chars</p>
                 )}
               </div>
             )}

@@ -89,7 +89,8 @@ export async function POST(req: NextRequest) {
       // fall back to CORE_INSIGHT from the generated metadata, then a generic label
       const hookIdea = (post as unknown as { hook_idea: string | null }).hook_idea
       const rawTitle = customTitle || hookIdea || meta.coreInsight || 'Weekly Article'
-      const title = rawTitle.length > 100 ? rawTitle.slice(0, 97) + '...' : rawTitle
+      // Clamp to 80 chars — matches MediaPanel titleMax and fits cleanly in the PDF header
+      const title = (rawTitle || '').length > 80 ? rawTitle.slice(0, 80) : rawTitle
 
       fileBuffer = await generateArticlePDF({
         title,
