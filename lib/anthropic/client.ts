@@ -29,6 +29,7 @@ export function parseGenerationMetadata(rawOutput: string): {
   hashtags: string[]
   linkedinCaption: string | null
   quote: string | null
+  articleTitle: string | null
 } {
   const lines = rawOutput.split('\n')
 
@@ -74,5 +75,6 @@ export function parseGenerationMetadata(rawOutput: string): {
     hashtags,
     linkedinCaption: getMeta('LINKEDIN_CAPTION'),
     quote:           getMeta('QUOTE'),
+    articleTitle:    getMeta('ARTICLE_TITLE'),
   }
 }

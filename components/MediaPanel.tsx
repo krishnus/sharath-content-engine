@@ -43,6 +43,7 @@ export default function MediaPanel({ postId, format }: MediaPanelProps) {
   const [loading, setLoading]                 = useState(true)
   const [generating, setGenerating]           = useState(false)
   const [regenCaption, setRegenCaption]       = useState(false)
+  const [regenTitle,   setRegenTitle]         = useState(false)
   const [error, setError]                     = useState<string | null>(null)
 
   // LI Hook / Caption text (for article_pdf + carousel_pdf: 200-280 chars; for quote_png: max 120)
@@ -121,18 +122,17 @@ export default function MediaPanel({ postId, format }: MediaPanelProps) {
     setRegenCaption(true)
     setError(null)
     try {
+      const type = config?.type === 'quote_png' ? 'quote' : 'caption'
       const res = await fetch('/api/media/caption', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ postId }),
+        body: JSON.stringify({ postId, type }),
       })
       if (!res.ok) throw new Error('Regeneration failed')
       const { caption: newCaption } = await res.json()
       if (config?.type === 'quote_png') {
-        // For quote images, the regenerated text goes into the image card text field
         setConfirmedText(newCaption)
       } else {
-        // For document posts, it's the LinkedIn post hook / caption
         setCaption(newCaption)
         if (media) saveCaption(newCaption, media.id)
       }
@@ -140,6 +140,25 @@ export default function MediaPanel({ postId, format }: MediaPanelProps) {
       setError(err instanceof Error ? err.message : 'Failed to regenerate')
     } finally {
       setRegenCaption(false)
+    }
+  }
+
+  async function regenerateTitleAI() {
+    setRegenTitle(true)
+    setError(null)
+    try {
+      const res = await fetch('/api/media/caption', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ postId, type: 'title' }),
+      })
+      if (!res.ok) throw new Error('Title regeneration failed')
+      const { caption: newTitle } = await res.json()
+      setConfirmedText(newTitle.slice(0, titleMax))
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to regenerate title')
+    } finally {
+      setRegenTitle(false)
     }
   }
 
@@ -353,27 +372,41 @@ export default function MediaPanel({ postId, format }: MediaPanelProps) {
               <div className="space-y-1.5">
                 <div className="flex items-center justify-between">
                   <label className="text-xs font-semibold text-ink-300">Article Title</label>
-                  <span className={cn(
-                    'text-xs',
-                    titleOver ? 'text-red-400' : confirmedText.length > titleMax * 0.9 ? 'text-amber-400' : 'text-ink-600'
-                  )}>
-                    {confirmedText.length} / {titleMax}
-                  </span>
+                  <button
+                    onClick={regenerateTitleAI}
+                    disabled={regenTitle}
+                    title="Regenerate title with AI"
+                    className="flex items-center gap-1 text-xs text-ink-500 hover:text-gold-400 transition-colors disabled:opacity-50"
+                  >
+                    {regenTitle
+                      ? <Loader2 size={10} className="animate-spin" />
+                      : <Wand2 size={10} />
+                    }
+                    <span>Regen</span>
+                  </button>
                 </div>
-                <input
-                  type="text"
+                <textarea
                   value={confirmedText}
-                  onChange={e => setConfirmedText(e.target.value)}
-                  maxLength={titleMax}
-                  placeholder="Title displayed on the PDF cover…"
+                  onChange={e => setConfirmedText(e.target.value.slice(0, titleMax))}
+                  rows={3}
+                  placeholder="Article title as it appears on the PDF cover…"
                   className={cn(
                     'w-full bg-ink-800/40 border rounded-lg px-3 py-2 text-xs text-cream',
-                    'placeholder-ink-600 focus:outline-none focus:ring-1',
+                    'placeholder-ink-600 resize-none focus:outline-none focus:ring-1',
                     titleOver
                       ? 'border-red-700/50 focus:ring-red-700/40'
                       : 'border-ink-700 focus:ring-blue-700/50'
                   )}
                 />
+                <div className="flex items-center justify-between">
+                  <span className={cn(
+                    'text-xs',
+                    titleOver ? 'text-red-400' : confirmedText.length > titleMax * 0.9 ? 'text-amber-400' : 'text-ink-600'
+                  )}>
+                    {confirmedText.length} / {titleMax} chars
+                  </span>
+                  <span className="text-xs text-ink-600">{countWords(confirmedText)}w</span>
+                </div>
                 {titleOver && (
                   <p className="text-xs text-red-400">Title will be clipped in the PDF — keep it under 80 chars</p>
                 )}
@@ -435,7 +468,7 @@ export default function MediaPanel({ postId, format }: MediaPanelProps) {
               /* ── Generate button (no media yet) ─── */
               <button
                 onClick={generate}
-                disabled={generating || (isArticle && !confirmedText) || (isQuote && !confirmedText)}
+                disabled={generating || (isQuote && !confirmedText)}
                 className={cn(
                   'w-full flex items-center justify-center gap-2 py-2.5 rounded-lg border border-dashed',
                   'text-xs transition-all disabled:opacity-40',

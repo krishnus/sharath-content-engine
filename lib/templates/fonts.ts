@@ -61,5 +61,13 @@ const IAST: Record<string, string> = {
 const IAST_RE = new RegExp(Object.keys(IAST).join('|'), 'g')
 
 export function normalizeIAST(text: string): string {
-  return text.replace(IAST_RE, ch => IAST[ch] ?? ch)
+  return text
+    .replace(IAST_RE, ch => IAST[ch] ?? ch)
+    // Typographic characters Montserrat may not have glyphs for — convert to ASCII equivalents
+    .replace(/[“”]/g, '"')   // curly double quotes
+    .replace(/[‘’]/g, "'")   // curly single quotes / apostrophes
+    .replace(/—/g, '--')           // em dash
+    .replace(/–/g, '-')            // en dash
+    .replace(/…/g, '...')          // ellipsis
+    .replace(/ /g, ' ')            // non-breaking space
 }

@@ -149,7 +149,7 @@ export async function POST(req: NextRequest) {
 
     let result: { success: boolean; postId?: string; url?: string; error?: string }
 
-    // If the post has an image (quote_png), re-publish with the image at PUBLIC visibility
+    // Re-publish the correct media type at PUBLIC visibility
     if (mediaRecord && mediaRecord.media_type === 'quote_png') {
       const { data: fileData } = await supabase.storage
         .from(STORAGE_BUCKET)
@@ -157,6 +157,17 @@ export async function POST(req: NextRequest) {
       if (fileData) {
         const fileBuffer = Buffer.from(await fileData.arrayBuffer())
         result = await postImageToLinkedIn(publishText, fileBuffer, tokenRow.access_token, authorUrn, 'PUBLIC')
+      } else {
+        result = await postTextToLinkedIn(publishText, tokenRow.access_token, authorUrn, 'PUBLIC')
+      }
+    } else if (mediaRecord && (mediaRecord.media_type === 'article_pdf' || mediaRecord.media_type === 'carousel_pdf')) {
+      // Re-upload the PDF as a public document post (preview was text-only)
+      const { data: fileData } = await supabase.storage
+        .from(STORAGE_BUCKET)
+        .download(mediaRecord.storage_path)
+      if (fileData) {
+        const fileBuffer = Buffer.from(await fileData.arrayBuffer())
+        result = await postDocumentToLinkedIn(publishText, mediaRecord.file_name, fileBuffer, tokenRow.access_token, authorUrn)
       } else {
         result = await postTextToLinkedIn(publishText, tokenRow.access_token, authorUrn, 'PUBLIC')
       }

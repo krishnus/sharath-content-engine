@@ -25,7 +25,7 @@ const S = StyleSheet.create({
     fontSize:        11,
     color:           '#1A1A1A',
     paddingTop:      0,
-    paddingBottom:   40,
+    paddingBottom:   50,   // 50pt > footer height (~43pt) so content never overlaps the fixed footer
     paddingLeft:     0,
     paddingRight:    0,
   },
@@ -146,6 +146,7 @@ const S = StyleSheet.create({
     backgroundColor: BRAND_BLUE,
     marginHorizontal: 0,
     marginTop:        24,
+    marginBottom:     12,   // clearance above the fixed footer (footer height ~43pt, page paddingBottom 50pt)
     paddingHorizontal: 40,
     paddingVertical:  18,
     flexDirection:    'row',
@@ -166,19 +167,30 @@ const S = StyleSheet.create({
 
 const DEVANAGARI_RE = /[ऀ-ॿ]+/
 
+// Strip **bold** and *italic* markdown markers — render as plain text in the PDF.
+// Keeps the text semantically intact while removing markup Montserrat can't express stylistically.
+function stripInlineMarkdown(text: string): string {
+  return text
+    .replace(/\*\*([^*]+)\*\*/g, '$1')
+    .replace(/\*([^*]+)\*/g, '$1')
+    .replace(/`([^`]+)`/g, '$1')
+}
+
 // Split a string into alternating Latin / Devanagari segments for mixed-font rendering.
-// Latin segments are passed through normalizeIAST() so Montserrat glyphs always exist.
+// Latin segments pass through normalizeIAST() so Montserrat glyphs always exist.
+// Empty segments from the split are filtered to avoid react-pdf null-child errors.
 function renderMixedScript(text: string, baseStyle: object, devStyle: object, keyBase: number): React.ReactNode {
-  if (!DEVANAGARI_RE.test(text)) {
-    return <Text key={keyBase} style={baseStyle}>{normalizeIAST(text)}</Text>
+  const cleaned = stripInlineMarkdown(text)
+  if (!DEVANAGARI_RE.test(cleaned)) {
+    return <Text key={keyBase} style={baseStyle}>{normalizeIAST(cleaned)}</Text>
   }
-  const parts = text.split(/([ऀ-ॿ]+)/)
+  const parts = cleaned.split(/([ऀ-ॿ]+)/).filter(p => p.length > 0)
   return (
     <Text key={keyBase} style={baseStyle}>
       {parts.map((part, i) =>
         DEVANAGARI_RE.test(part)
           ? <Text key={i} style={devStyle}>{part}</Text>
-          : normalizeIAST(part)
+          : <Text key={i}>{normalizeIAST(part)}</Text>
       )}
     </Text>
   )
@@ -196,14 +208,32 @@ function parseContent(text: string): React.ReactNode[] {
     const line = lines[i]
     if (!line.trim()) continue
 
-    // Heading
+    // Strip metadata lines (including ARTICLE_TITLE from new prompt)
+    if (/^(WORD_COUNT|CORE_INSIGHT|CALLBACK_USED|THREAD_PLANTED|REFERENCES|HASHTAGS|LINKEDIN_CAPTION|QUOTE|ARTICLE_TITLE):/.test(line)) {
+      continue
+    }
+
+    // Heading: ## or ALL-CAPS: pattern
     if (/^#{1,3}\s/.test(line) || /^[A-Z][^a-z]{5,}:$/.test(line)) {
       const t = line.replace(/^#{1,3}\s/, '').replace(/:$/, '')
       nodes.push(renderMixedScript(t, S.heading, { ...S.heading, ...devStyle }, key++))
       continue
     }
 
-    // Bullet
+    // Numbered list: "1. item"
+    if (/^\d+\.\s/.test(line)) {
+      const match = line.match(/^(\d+)\.\s/)!
+      const rest  = line.slice(match[0].length)
+      nodes.push(
+        <View key={key++} style={S.bulletRow}>
+          <Text style={S.bullet}>{match[1]}.</Text>
+          {renderMixedScript(rest, S.bulletText, { ...S.bulletText, ...devStyle }, key++)}
+        </View>
+      )
+      continue
+    }
+
+    // Bullet: "- item" or "• item"
     if (/^[-•]\s/.test(line)) {
       nodes.push(
         <View key={key++} style={S.bulletRow}>
@@ -211,11 +241,6 @@ function parseContent(text: string): React.ReactNode[] {
           {renderMixedScript(line.replace(/^[-•]\s/, ''), S.bulletText, { ...S.bulletText, ...devStyle }, key++)}
         </View>
       )
-      continue
-    }
-
-    // Strip metadata lines
-    if (/^(WORD_COUNT|CORE_INSIGHT|CALLBACK_USED|THREAD_PLANTED|REFERENCES|HASHTAGS|LINKEDIN_CAPTION|QUOTE):/.test(line)) {
       continue
     }
 

@@ -287,6 +287,9 @@ export function buildGeneratePostPrompt(params: GeneratePostPromptParams): strin
     (params.format === 'long_form_article' || params.format === 'carousel')
       ? `After that, on a new line starting with "LINKEDIN_CAPTION:", write a compelling 200–280 character LinkedIn caption that introduces this document post. It must stop the scroll, hint at the value inside, and end with a reason to open the document. No hashtags in the caption.`
       : `After that, on a new line starting with "QUOTE:", output a single memorable quotable line from the post — maximum 120 characters. It should stand alone as a visual pull-quote. No hashtags. No author attribution.`,
+    params.format === 'long_form_article'
+      ? `After that, on a new line starting with "ARTICLE_TITLE:", write a compelling article title — maximum 80 characters. 5–10 words. Specific, evocative, and directly tied to the article's central idea. NOT generic (e.g. not "Leadership Lessons" or "Coaching Wisdom"). Must stand alone as the headline on the PDF cover.`
+      : '',
   ].filter(Boolean)
 
   return lines.join('\n')

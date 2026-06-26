@@ -88,9 +88,10 @@ export async function POST(req: NextRequest) {
       // Title: use the planned hook_idea (article angle set during planning),
       // fall back to CORE_INSIGHT from the generated metadata, then a generic label
       const hookIdea = (post as unknown as { hook_idea: string | null }).hook_idea
-      const rawTitle = customTitle || hookIdea || meta.coreInsight || 'Weekly Article'
-      // Clamp to 80 chars — matches MediaPanel titleMax and fits cleanly in the PDF header
-      const title = (rawTitle || '').length > 80 ? rawTitle.slice(0, 80) : rawTitle
+      // Priority: user-confirmed title > AI-generated ARTICLE_TITLE > week plan hook_idea > CORE_INSIGHT
+      const rawTitle = customTitle || meta.articleTitle || hookIdea || meta.coreInsight || 'Weekly Article'
+      // Truncate at the last word boundary before 80 chars to avoid mid-word cuts
+      const title = truncateAtWord(rawTitle || '', 80)
 
       fileBuffer = await generateArticlePDF({
         title,
@@ -193,6 +194,13 @@ export async function POST(req: NextRequest) {
     signedUrl:       signedUrl?.signedUrl ?? null,
     linkedinCaption: linkedinCaption ?? null,
   })
+}
+
+// ── Truncate at the last word boundary before max chars ───────────────
+function truncateAtWord(str: string, max: number): string {
+  if (str.length <= max) return str
+  const lastSpace = str.lastIndexOf(' ', max)
+  return lastSpace > max * 0.5 ? str.slice(0, lastSpace) : str.slice(0, max)
 }
 
 // ── Fallback: pick the most quotable sentence ──────────────────────────

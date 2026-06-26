@@ -11,7 +11,7 @@ export async function POST(req: NextRequest) {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorised' }, { status: 401 })
 
-  const { postId } = await req.json() as { postId: string }
+  const { postId, type } = await req.json() as { postId: string; type?: 'caption' | 'quote' | 'title' }
 
   const { data: post } = await supabase
     .from('posts')
@@ -29,9 +29,24 @@ export async function POST(req: NextRequest) {
   if (!content.trim()) return NextResponse.json({ error: 'No content found' }, { status: 400 })
 
   const format = post.format as string
-  const isQuote = format === 'text_post' || format === 'market_insights'
+  const isQuote = type === 'quote' || (!type && (format === 'text_post' || format === 'market_insights'))
+  const isTitle = type === 'title'
 
-  const prompt = isQuote
+  const prompt = isTitle
+    ? `Write a compelling article title for this LinkedIn long-form article.
+Rules:
+- Maximum 80 characters
+- 5–10 words
+- Specific and evocative — tied to the article's central idea
+- NOT generic (avoid "Leadership Lessons", "Coaching Wisdom", "A Story About X")
+- Must work as a standalone headline on a PDF cover
+- Voice: Sharath Kumar R N — IIT engineer, 28 years global banking, Vedic-grounded executive coach
+
+ARTICLE CONTENT:
+${content.slice(0, 3000)}
+
+Return ONLY the title text, nothing else.`
+    : isQuote
     ? `Extract or write the single most powerful, self-contained quote from this LinkedIn post.
 Rules:
 - Maximum 120 characters
