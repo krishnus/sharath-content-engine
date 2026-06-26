@@ -296,6 +296,11 @@ function ArticleDocument({ title, content, pillar, quarter, weekNumber, dateStr 
           </View>
         </View>
 
+        {/* Empty row at start of pages 2+ — gives breathing room after the repeated header */}
+        <View fixed render={({ pageNumber }) => (
+          <View style={{ height: pageNumber > 1 ? 20 : 0 }} />
+        )} />
+
         {/* Body */}
         <View style={S.body}>
           {parseContent(content)}
