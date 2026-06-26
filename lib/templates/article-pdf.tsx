@@ -274,7 +274,9 @@ export type ArticlePDFProps = {
   dateStr:     string
 }
 
-function ArticleDocument({ title, content, pillar, quarter, weekNumber, dateStr }: ArticlePDFProps) {
+function ArticleDocument({
+  title, content, pillar, quarter, weekNumber, dateStr, includeCTA = true,
+}: ArticlePDFProps & { includeCTA?: boolean }) {
   const pillarLabel = pillar.split('_').map(w => w[0].toUpperCase() + w.slice(1)).join(' ')
 
   return (
@@ -306,13 +308,15 @@ function ArticleDocument({ title, content, pillar, quarter, weekNumber, dateStr 
           {parseContent(content)}
         </View>
 
-        {/* CTA block at end */}
-        <View style={S.cta}>
-          <View>
-            <Text style={S.ctaText}>Coach Sharath — Executive &amp; Life Coaching</Text>
-            <Text style={S.ctaSub}>coachsharath.com</Text>
+        {/* CTA block — omitted when it would land alone on the final page */}
+        {includeCTA && (
+          <View style={S.cta}>
+            <View>
+              <Text style={S.ctaText}>Coach Sharath — Executive &amp; Life Coaching</Text>
+              <Text style={S.ctaSub}>coachsharath.com</Text>
+            </View>
           </View>
-        </View>
+        )}
 
         {/* Footer with page number */}
         <View style={S.footer} fixed>
@@ -329,6 +333,20 @@ function ArticleDocument({ title, content, pillar, quarter, weekNumber, dateStr 
   )
 }
 
+// Count /Type /Page (not /Pages) entries in a PDF buffer.
+// Standard PDF structure guarantees each page object has exactly one such entry.
+function countPdfPages(buf: Buffer): number {
+  const latin = buf.toString('latin1')
+  return (latin.match(/\/Type\s*\/Page(?!s)/g) ?? []).length || 1
+}
+
 export async function generateArticlePDF(props: ArticlePDFProps): Promise<Buffer> {
-  return renderToBuffer(<ArticleDocument {...props} />) as Promise<Buffer>
+  // Render both variants in parallel — react-pdf isolates each renderToBuffer call
+  const [withCTA, withoutCTA] = await Promise.all([
+    renderToBuffer(<ArticleDocument {...props} includeCTA={true}  />) as Promise<Buffer>,
+    renderToBuffer(<ArticleDocument {...props} includeCTA={false} />) as Promise<Buffer>,
+  ])
+
+  // If the CTA forces a new page (nothing but the blue block on the last page), drop it
+  return countPdfPages(withCTA) > countPdfPages(withoutCTA) ? withoutCTA : withCTA
 }
