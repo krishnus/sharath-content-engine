@@ -66,12 +66,9 @@ export async function GET(
     })),
     currentVersionId: currentDraft?.id ?? null,
     media: mediaRecords ?? [],
-    // Pre-computed suggestions for MediaPanel text fields.
-    // ARTICLE_TITLE (AI-generated short title) takes priority; hook_idea (from week plan) second;
-    // CORE_INSIGHT last (it's a long sentence summary, not a title — only used as last resort).
-    suggestedTitle:   getMetaField('ARTICLE_TITLE')
-      ?? ((post as Record<string, unknown>).hook_idea as string | null)
-      ?? getMetaField('CORE_INSIGHT'),
+    // Only pre-populate title from AI-generated ARTICLE_TITLE (available after generation).
+    // hook_idea is the week-plan brief, not a title — showing it pre-generation is misleading.
+    suggestedTitle:   getMetaField('ARTICLE_TITLE'),
     suggestedQuote:   getMetaField('QUOTE'),
     suggestedCaption: getMetaField('LINKEDIN_CAPTION'),
   })

@@ -89,6 +89,8 @@ const S = StyleSheet.create({
     lineHeight:   1.65,
     fontSize:     11,
     color:        '#1A1A1A',
+    orphans:      3,    // min lines kept at bottom of page before break
+    widows:       3,    // min lines kept at top of page after break
   },
   heading: {
     fontSize:     13,
@@ -179,18 +181,25 @@ function stripInlineMarkdown(text: string): string {
 // Split a string into alternating Latin / Devanagari segments for mixed-font rendering.
 // Latin segments pass through normalizeIAST() so Montserrat glyphs always exist.
 // Empty segments from the split are filtered to avoid react-pdf null-child errors.
+//
+// Block-layout props (orphans, widows, marginBottom, marginTop) are stripped from the
+// inner Devanagari <Text> style — yoga crashes with a null xCoordinate when block-level
+// properties appear on inline nested Text nodes.
 function renderMixedScript(text: string, baseStyle: object, devStyle: object, keyBase: number): React.ReactNode {
   const cleaned = stripInlineMarkdown(text)
   if (!DEVANAGARI_RE.test(cleaned)) {
     return <Text key={keyBase} style={baseStyle}>{normalizeIAST(cleaned)}</Text>
   }
+  // Strip block-layout props that must not appear on inline nested Text children
+  const { orphans: _o, widows: _w, marginBottom: _mb, marginTop: _mt, ...inlineDevStyle } =
+    devStyle as Record<string, unknown>
   const parts = cleaned.split(/([ऀ-ॿ]+)/).filter(p => p.length > 0)
   return (
     <Text key={keyBase} style={baseStyle}>
       {parts.map((part, i) =>
         DEVANAGARI_RE.test(part)
-          ? <Text key={i} style={devStyle}>{part}</Text>
-          : <Text key={i}>{normalizeIAST(part)}</Text>
+          ? <Text key={i} style={inlineDevStyle as object}>{part}</Text>
+          : normalizeIAST(part)
       )}
     </Text>
   )
@@ -210,6 +219,12 @@ function parseContent(text: string): React.ReactNode[] {
 
     // Strip metadata lines (including ARTICLE_TITLE from new prompt)
     if (/^(WORD_COUNT|CORE_INSIGHT|CALLBACK_USED|THREAD_PLANTED|REFERENCES|HASHTAGS|LINKEDIN_CAPTION|QUOTE|ARTICLE_TITLE):/.test(line)) {
+      continue
+    }
+
+    // Skip em-dash separator lines — they mark logical section breaks but must not
+    // appear as the first or last line of a page. The paragraph margins already provide spacing.
+    if (/^[\s—–\-*·]+$/.test(line) && line.trim().length <= 5) {
       continue
     }
 
@@ -290,7 +305,7 @@ function ArticleDocument({ title, content, pillar, quarter, weekNumber, dateStr 
         <View style={S.cta}>
           <View>
             <Text style={S.ctaText}>Coach Sharath — Executive &amp; Life Coaching</Text>
-            <Text style={S.ctaSub}>coachsharath.com · Follow for weekly insights</Text>
+            <Text style={S.ctaSub}>coachsharath.com</Text>
           </View>
         </View>
 

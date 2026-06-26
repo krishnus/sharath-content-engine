@@ -99,6 +99,7 @@ export default function DraftEditorPage() {
   const [candidateRules, setCandidateRules]         = useState<CandidateRule[]>([])
   const [showCandidates, setShowCandidates]         = useState(false)
   const [rulesSavedCount, setRulesSavedCount]       = useState<number | null>(null)
+  const [mediaRefreshKey, setMediaRefreshKey]       = useState(0)
 
   const textareaRef  = useRef<HTMLTextAreaElement>(null)
   const saveTimerRef = useRef<ReturnType<typeof setTimeout>>()
@@ -206,6 +207,10 @@ export default function DraftEditorPage() {
       setContent(clean)
       setOriginalContent(clean)
       setHashtags(tags)
+      // saveDrafts runs server-side before the stream closes, so rawText (with
+      // LINKEDIN_CAPTION + ARTICLE_TITLE) is already in the DB when we get here.
+      // Incrementing the key forces MediaPanel to remount and re-fetch.
+      setMediaRefreshKey(k => k + 1)
 
     } catch (err) {
       setGenerateError(err instanceof Error ? err.message : 'Generation failed')
@@ -261,7 +266,7 @@ export default function DraftEditorPage() {
     } finally {
       setIsApproving(false)
     }
-  }, [content, postId, router])
+  }, [content, postId])
 
   const { min, max } = getWordCountRange(post?.format ?? '')
   const wcStatus =
@@ -305,14 +310,10 @@ export default function DraftEditorPage() {
         <CandidateRulesModal
           candidates={candidateRules}
           sourcePostId={postId}
-          onClose={() => {
-            setShowCandidates(false)
-            router.push('/dashboard')
-          }}
+          onClose={() => setShowCandidates(false)}
           onSaved={(count) => {
             setRulesSavedCount(count)
             setShowCandidates(false)
-            router.push('/dashboard')
           }}
         />
       )}
@@ -646,6 +647,7 @@ export default function DraftEditorPage() {
               {/* Media panel — only for formats that produce media */}
               {content && (
                 <MediaPanel
+                  key={mediaRefreshKey}
                   postId={postId}
                   format={post.format}
                 />
