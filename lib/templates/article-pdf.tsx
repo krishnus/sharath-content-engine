@@ -288,7 +288,7 @@ function ArticleDocument({ title, content, pillar, quarter, weekNumber, dateStr 
             </View>
           </View>
           <View style={S.goldRule} />
-          <Text style={S.articleTitle}>{title}</Text>
+          <Text style={S.articleTitle}>{normalizeIAST(title)}</Text>
           <View style={S.metaRow}>
             <Text style={S.metaChip}>{pillarLabel}</Text>
             <Text style={S.metaSep}>·</Text>

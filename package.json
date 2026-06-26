@@ -7,7 +7,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "postinstall": "node scripts/patch-fontkit.cjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.27.0",
