@@ -18,12 +18,17 @@ export async function POST(req: NextRequest) {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorised' }, { status: 401 })
 
-  const { postId, mediaType, customTitle, customQuote, linkedinCaptionOverride } = await req.json() as {
+  const {
+    postId, mediaType, customTitle, customQuote, linkedinCaptionOverride,
+    showHeaderStrip, showFooterStrip,
+  } = await req.json() as {
     postId: string
     mediaType: MediaType
-    customTitle?: string            // user-confirmed title override for article_pdf
-    customQuote?: string            // user-confirmed quote override for quote_png
-    linkedinCaptionOverride?: string // user-edited caption for the LinkedIn post
+    customTitle?: string
+    customQuote?: string
+    linkedinCaptionOverride?: string
+    showHeaderStrip?: boolean       // article_pdf: blue band behind the post title
+    showFooterStrip?: boolean       // article_pdf: blue band in the footer
   }
 
   // ── Fetch post + current draft ────────────────────────────────────────
@@ -95,11 +100,13 @@ export async function POST(req: NextRequest) {
 
       fileBuffer = await generateArticlePDF({
         title,
-        content:     currentDraft.content,
+        content:          currentDraft.content,
         pillar,
-        quarter:     week.quarter ?? 'Q1',
-        weekNumber:  week.week_number,
-        dateStr:     weekDateStr,
+        quarter:          week.quarter ?? 'Q1',
+        weekNumber:       week.week_number,
+        dateStr:          weekDateStr,
+        showHeaderStrip:  showHeaderStrip !== false,   // default true
+        showFooterStrip:  showFooterStrip !== false,   // default true
       })
       fileName  = `article-wk${week.week_number}.pdf`
       mimeType  = 'application/pdf'

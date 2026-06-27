@@ -19,31 +19,38 @@ Font.register({
   src: FONT_PATHS.devanagari,
 })
 
+// Footer text colours — match the old CTA block so the brand feel is preserved
+const FOOTER_NAME_COLOR = BRAND_GOLD       // "Coach Sharath — Executive & Life Coaching"
+const FOOTER_SUB_COLOR  = '#A8C8E8'        // "coachsharath.com" and page number
+const FOOTER_STRIP_BG   = BRAND_BLUE
+
+// Off-strip (white bg) equivalents — readable on paper
+const FOOTER_NAME_PLAIN = '#333333'
+const FOOTER_SUB_PLAIN  = '#888888'
+
 const S = StyleSheet.create({
   page: {
-    fontFamily:      'Montserrat',
-    fontSize:        11,
-    color:           '#1A1A1A',
-    paddingTop:      0,
-    paddingBottom:   50,   // 50pt > footer height (~43pt) so content never overlaps the fixed footer
-    paddingLeft:     0,
-    paddingRight:    0,
+    fontFamily:    'Montserrat',
+    fontSize:      11,
+    color:         '#1A1A1A',
+    paddingTop:    0,
+    paddingBottom: 64,   // clear the new two-line footer (~54pt max) with a safe buffer
+    paddingLeft:   0,
+    paddingRight:  0,
   },
   // ── Header band ──────────────────────────────────────────────────────
-  header: {
-    backgroundColor: BRAND_BLUE,
+  headerBase: {
     paddingHorizontal: 40,
-    paddingTop: 28,
-    paddingBottom: 22,
+    paddingTop:        28,
+    paddingBottom:     22,
   },
   logoRow: {
     flexDirection: 'row',
     alignItems:    'center',
     marginBottom:  14,
   },
-  logoBox: {
-    backgroundColor: '#FFFFFF',
-    borderRadius:    4,
+  logoBoxBase: {
+    borderRadius:      4,
     paddingHorizontal: 8,
     paddingVertical:   4,
   },
@@ -57,27 +64,21 @@ const S = StyleSheet.create({
     backgroundColor: BRAND_GOLD,
     marginBottom:    14,
   },
-  articleTitle: {
-    fontWeight:  700,
-    fontSize:    20,
-    color:       '#FFFFFF',
-    lineHeight:  1.3,
+  articleTitleBase: {
+    fontWeight:   700,
+    fontSize:     20,
+    lineHeight:   1.3,
     marginBottom: 10,
   },
   metaRow: {
     flexDirection: 'row',
     columnGap:     12,
   },
-  metaChip: {
-    fontSize:        9,
-    color:           BRAND_GOLD,
-    fontWeight:      600,
-    letterSpacing:   0.5,
-    textTransform:   'uppercase',
-  },
-  metaSep: {
-    fontSize: 9,
-    color:    '#4A7AB5',
+  metaChipBase: {
+    fontSize:      9,
+    fontWeight:    600,
+    letterSpacing: 0.5,
+    textTransform: 'uppercase',
   },
   // ── Body ─────────────────────────────────────────────────────────────
   body: {
@@ -89,8 +90,8 @@ const S = StyleSheet.create({
     lineHeight:   1.65,
     fontSize:     11,
     color:        '#1A1A1A',
-    orphans:      3,    // min lines kept at bottom of page before break
-    widows:       3,    // min lines kept at top of page after break
+    orphans:      3,
+    widows:       3,
   },
   heading: {
     fontSize:     13,
@@ -105,10 +106,10 @@ const S = StyleSheet.create({
     paddingLeft:   8,
   },
   bullet: {
-    color:        BRAND_GOLD,
-    fontWeight:   700,
-    marginRight:  8,
-    fontSize:     11,
+    color:       BRAND_GOLD,
+    fontWeight:  700,
+    marginRight: 8,
+    fontSize:    11,
   },
   bulletText: {
     flex:       1,
@@ -116,61 +117,55 @@ const S = StyleSheet.create({
     fontSize:   11,
   },
   // ── Footer ───────────────────────────────────────────────────────────
+  // Outer wrapper: absolute-positioned, full-width anchor
   footer: {
-    position:        'absolute',
-    bottom:          0,
-    left:            0,
-    right:           0,
-    paddingHorizontal: 40,
-    paddingBottom:   14,
-    paddingTop:      10,
+    position: 'absolute',
+    bottom:   0,
+    left:     0,
+    right:    0,
   },
+  // Gold rule shown only when footer strip is OFF
   footerRule: {
     height:          1,
     backgroundColor: BRAND_GOLD,
-    marginBottom:    8,
     opacity:         0.4,
+    marginLeft:      40,
+    marginRight:     40,
   },
-  footerRow: {
+  // Blue-band inner: used when footer strip ON
+  footerBandStrip: {
+    backgroundColor:   FOOTER_STRIP_BG,
+    paddingHorizontal: 40,
+    paddingTop:        12,
+    paddingBottom:     14,
+  },
+  // Plain inner: used when footer strip OFF
+  footerBandPlain: {
+    paddingHorizontal: 40,
+    paddingTop:        10,
+    paddingBottom:     12,
+  },
+  // Top row: name on left, page number on right
+  footerTopRow: {
     flexDirection:  'row',
     justifyContent: 'space-between',
+    alignItems:     'center',
+    marginBottom:   2,
   },
-  footerText: {
-    fontSize: 8,
-    color:    '#888888',
-  },
-  footerPageNum: {
-    fontSize: 8,
-    color:    '#888888',
-  },
-  // ── CTA strip (last page) ─────────────────────────────────────────────
-  cta: {
-    backgroundColor: BRAND_BLUE,
-    marginHorizontal: 0,
-    marginTop:        24,
-    marginBottom:     12,   // clearance above the fixed footer (footer height ~43pt, page paddingBottom 50pt)
-    paddingHorizontal: 40,
-    paddingVertical:  18,
-    flexDirection:    'row',
-    alignItems:       'center',
-    justifyContent:   'space-between',
-  },
-  ctaText: {
-    color:      BRAND_GOLD,
-    fontWeight: 600,
+  footerNameBase: {
     fontSize:   10,
+    fontWeight: 600,
   },
-  ctaSub: {
-    color:    '#A8C8E8',
+  footerSubBase: {
+    fontSize: 8,
+  },
+  footerPageNumBase: {
     fontSize: 9,
-    marginTop: 2,
   },
 })
 
 const DEVANAGARI_RE = /[ऀ-ॿ]+/
 
-// Strip **bold** and *italic* markdown markers — render as plain text in the PDF.
-// Keeps the text semantically intact while removing markup Montserrat can't express stylistically.
 function stripInlineMarkdown(text: string): string {
   return text
     .replace(/\*\*([^*]+)\*\*/g, '$1')
@@ -178,19 +173,11 @@ function stripInlineMarkdown(text: string): string {
     .replace(/`([^`]+)`/g, '$1')
 }
 
-// Split a string into alternating Latin / Devanagari segments for mixed-font rendering.
-// Latin segments pass through normalizeIAST() so Montserrat glyphs always exist.
-// Empty segments from the split are filtered to avoid react-pdf null-child errors.
-//
-// Block-layout props (orphans, widows, marginBottom, marginTop) are stripped from the
-// inner Devanagari <Text> style — yoga crashes with a null xCoordinate when block-level
-// properties appear on inline nested Text nodes.
 function renderMixedScript(text: string, baseStyle: object, devStyle: object, keyBase: number): React.ReactNode {
   const cleaned = stripInlineMarkdown(text)
   if (!DEVANAGARI_RE.test(cleaned)) {
     return <Text key={keyBase} style={baseStyle}>{normalizeIAST(cleaned)}</Text>
   }
-  // Strip block-layout props that must not appear on inline nested Text children
   const { orphans: _o, widows: _w, marginBottom: _mb, marginTop: _mt, ...inlineDevStyle } =
     devStyle as Record<string, unknown>
   const parts = cleaned.split(/([ऀ-ॿ]+)/).filter(p => p.length > 0)
@@ -205,7 +192,6 @@ function renderMixedScript(text: string, baseStyle: object, devStyle: object, ke
   )
 }
 
-// ── Content parser ─────────────────────────────────────────────────────────
 function parseContent(text: string): React.ReactNode[] {
   const lines = text.split('\n')
   const nodes: React.ReactNode[] = []
@@ -217,25 +203,20 @@ function parseContent(text: string): React.ReactNode[] {
     const line = lines[i]
     if (!line.trim()) continue
 
-    // Strip metadata lines (including ARTICLE_TITLE from new prompt)
     if (/^(WORD_COUNT|CORE_INSIGHT|CALLBACK_USED|THREAD_PLANTED|REFERENCES|HASHTAGS|LINKEDIN_CAPTION|QUOTE|ARTICLE_TITLE):/.test(line)) {
       continue
     }
 
-    // Skip em-dash separator lines — they mark logical section breaks but must not
-    // appear as the first or last line of a page. The paragraph margins already provide spacing.
     if (/^[\s—–\-*·]+$/.test(line) && line.trim().length <= 5) {
       continue
     }
 
-    // Heading: ## or ALL-CAPS: pattern
     if (/^#{1,3}\s/.test(line) || /^[A-Z][^a-z]{5,}:$/.test(line)) {
       const t = line.replace(/^#{1,3}\s/, '').replace(/:$/, '')
       nodes.push(renderMixedScript(t, S.heading, { ...S.heading, ...devStyle }, key++))
       continue
     }
 
-    // Numbered list: "1. item"
     if (/^\d+\.\s/.test(line)) {
       const match = line.match(/^(\d+)\.\s/)!
       const rest  = line.slice(match[0].length)
@@ -248,7 +229,6 @@ function parseContent(text: string): React.ReactNode[] {
       continue
     }
 
-    // Bullet: "- item" or "• item"
     if (/^[-•]\s/.test(line)) {
       nodes.push(
         <View key={key++} style={S.bulletRow}>
@@ -266,39 +246,62 @@ function parseContent(text: string): React.ReactNode[] {
 }
 
 export type ArticlePDFProps = {
-  title:       string
-  content:     string
-  pillar:      string
-  quarter:     string
-  weekNumber:  number
-  dateStr:     string
+  title:            string
+  content:          string
+  pillar:           string
+  quarter:          string
+  weekNumber:       number
+  dateStr:          string
+  showHeaderStrip?: boolean   // default true — blue band behind Post Title
+  showFooterStrip?: boolean   // default true — blue band in footer
 }
 
 function ArticleDocument({
-  title, content, pillar, quarter, weekNumber, dateStr, includeCTA = true,
-}: ArticlePDFProps & { includeCTA?: boolean }) {
+  title, content, pillar, quarter, weekNumber, dateStr,
+  showHeaderStrip = true,
+  showFooterStrip = true,
+}: ArticlePDFProps) {
   const pillarLabel = pillar.split('_').map(w => w[0].toUpperCase() + w.slice(1)).join(' ')
+
+  // Header: base padding + conditional blue background
+  const headerStyle = {
+    ...S.headerBase,
+    ...(showHeaderStrip ? { backgroundColor: BRAND_BLUE } : {}),
+  }
+  // Logo box: white background only when header has blue strip (for contrast)
+  const logoBoxStyle = {
+    ...S.logoBoxBase,
+    ...(showHeaderStrip ? { backgroundColor: '#FFFFFF' } : {}),
+  }
+  const titleStyle  = { ...S.articleTitleBase,  color: showHeaderStrip ? '#FFFFFF'    : BRAND_BLUE  }
+  const chipStyle   = { ...S.metaChipBase,       color: showHeaderStrip ? BRAND_GOLD   : '#666666'   }
+  const sepColor    = showHeaderStrip ? '#4A7AB5' : '#AAAAAA'
+
+  // Footer text colours
+  const nameColor   = showFooterStrip ? FOOTER_NAME_COLOR : FOOTER_NAME_PLAIN
+  const subColor    = showFooterStrip ? FOOTER_SUB_COLOR  : FOOTER_SUB_PLAIN
 
   return (
     <Document title={title} author="Coach Sharath">
       <Page size="A4" style={S.page} wrap>
+
         {/* Header */}
-        <View style={S.header} fixed>
+        <View style={headerStyle} fixed>
           <View style={S.logoRow}>
-            <View style={S.logoBox}>
+            <View style={logoBoxStyle}>
               <Image src={LOGO_PATH} style={S.logo} />
             </View>
           </View>
           <View style={S.goldRule} />
-          <Text style={S.articleTitle}>{normalizeIAST(title)}</Text>
+          <Text style={titleStyle}>{normalizeIAST(title)}</Text>
           <View style={S.metaRow}>
-            <Text style={S.metaChip}>{pillarLabel}</Text>
-            <Text style={S.metaSep}>·</Text>
-            <Text style={S.metaChip}>{dateStr}</Text>
+            <Text style={chipStyle}>{pillarLabel}</Text>
+            <Text style={{ ...S.metaChipBase, color: sepColor }}>·</Text>
+            <Text style={chipStyle}>{dateStr}</Text>
           </View>
         </View>
 
-        {/* Empty row at start of pages 2+ — gives breathing room after the repeated header */}
+        {/* Empty row at start of pages 2+ */}
         <View fixed render={({ pageNumber }) => (
           <View style={{ height: pageNumber > 1 ? 20 : 0 }} />
         )} />
@@ -308,45 +311,35 @@ function ArticleDocument({
           {parseContent(content)}
         </View>
 
-        {/* CTA block — omitted when it would land alone on the final page */}
-        {includeCTA && (
-          <View style={S.cta}>
-            <View>
-              <Text style={S.ctaText}>Coach Sharath — Executive &amp; Life Coaching</Text>
-              <Text style={S.ctaSub}>coachsharath.com</Text>
-            </View>
-          </View>
-        )}
-
-        {/* Footer with page number */}
+        {/* Footer — blue band (optional) with brand name, URL and page number */}
         <View style={S.footer} fixed>
-          <View style={S.footerRule} />
-          <View style={S.footerRow}>
-            <Text style={S.footerText}>coachsharath.com</Text>
-            <Text style={S.footerPageNum} render={({ pageNumber, totalPages }) =>
-              `${pageNumber} / ${totalPages}`
-            } />
+          {/* Thin gold rule separates footer from content when no blue strip */}
+          {!showFooterStrip && <View style={S.footerRule} />}
+
+          <View style={showFooterStrip ? S.footerBandStrip : S.footerBandPlain}>
+            {/* Row 1: brand name (left) + page number (right) */}
+            <View style={S.footerTopRow}>
+              <Text style={{ ...S.footerNameBase, color: nameColor }}>
+                Coach Sharath — Executive &amp; Life Coaching
+              </Text>
+              <Text
+                style={{ ...S.footerPageNumBase, color: subColor }}
+                render={({ pageNumber, totalPages }) => `${pageNumber} / ${totalPages}`}
+              />
+            </View>
+
+            {/* Row 2: website URL */}
+            <Text style={{ ...S.footerSubBase, color: subColor }}>
+              coachsharath.com
+            </Text>
           </View>
         </View>
+
       </Page>
     </Document>
   )
 }
 
-// Count /Type /Page (not /Pages) entries in a PDF buffer.
-// Standard PDF structure guarantees each page object has exactly one such entry.
-function countPdfPages(buf: Buffer): number {
-  const latin = buf.toString('latin1')
-  return (latin.match(/\/Type\s*\/Page(?!s)/g) ?? []).length || 1
-}
-
 export async function generateArticlePDF(props: ArticlePDFProps): Promise<Buffer> {
-  // Render both variants in parallel — react-pdf isolates each renderToBuffer call
-  const [withCTA, withoutCTA] = await Promise.all([
-    renderToBuffer(<ArticleDocument {...props} includeCTA={true}  />) as Promise<Buffer>,
-    renderToBuffer(<ArticleDocument {...props} includeCTA={false} />) as Promise<Buffer>,
-  ])
-
-  // If the CTA forces a new page (nothing but the blue block on the last page), drop it
-  return countPdfPages(withCTA) > countPdfPages(withoutCTA) ? withoutCTA : withCTA
+  return renderToBuffer(<ArticleDocument {...props} />) as Promise<Buffer>
 }

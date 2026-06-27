@@ -53,6 +53,10 @@ export default function MediaPanel({ postId, format }: MediaPanelProps) {
   // Confirmed text: article title (article_pdf) or quote text (quote_png)
   const [confirmedText, setConfirmedText]     = useState('')
 
+  // article_pdf style toggles — blue strip on/off for header and footer
+  const [showHeaderStrip, setShowHeaderStrip] = useState(true)
+  const [showFooterStrip, setShowFooterStrip] = useState(true)
+
   useEffect(() => {
     if (!config) { setLoading(false); return }
     loadExistingMedia()
@@ -167,10 +171,14 @@ export default function MediaPanel({ postId, format }: MediaPanelProps) {
     setGenerating(true)
     setError(null)
     try {
-      const body: Record<string, string> = { postId, mediaType: config.type }
+      const body: Record<string, string | boolean> = { postId, mediaType: config.type }
       if (config.type === 'article_pdf'  && confirmedText)  body.customTitle = confirmedText
       if (config.type === 'quote_png'    && confirmedText)  body.customQuote = confirmedText
       if (caption)                                          body.linkedinCaptionOverride = caption
+      if (config.type === 'article_pdf') {
+        body.showHeaderStrip = showHeaderStrip
+        body.showFooterStrip = showFooterStrip
+      }
 
       const res = await fetch('/api/media/generate', {
         method: 'POST',
@@ -410,6 +418,49 @@ export default function MediaPanel({ postId, format }: MediaPanelProps) {
                 {titleOver && (
                   <p className="text-xs text-red-400">Title will be clipped in the PDF — keep it under 80 chars</p>
                 )}
+              </div>
+            )}
+
+            {/* ── Blue strip toggles (article PDF only) ─── */}
+            {isArticle && (
+              <div className="space-y-2">
+                <p className="text-xs font-semibold text-ink-400 uppercase tracking-wide">PDF Style</p>
+                <div className="flex flex-col gap-2">
+                  <label className="flex items-center gap-2.5 cursor-pointer group">
+                    <div
+                      onClick={() => setShowHeaderStrip(v => !v)}
+                      className={cn(
+                        'w-8 h-4 rounded-full transition-colors cursor-pointer relative shrink-0',
+                        showHeaderStrip ? 'bg-blue-600' : 'bg-ink-700'
+                      )}
+                    >
+                      <div className={cn(
+                        'absolute top-0.5 w-3 h-3 rounded-full bg-white shadow transition-all',
+                        showHeaderStrip ? 'left-4' : 'left-0.5'
+                      )} />
+                    </div>
+                    <span className="text-xs text-ink-300 group-hover:text-cream transition-colors">
+                      Blue strip — Post Title
+                    </span>
+                  </label>
+                  <label className="flex items-center gap-2.5 cursor-pointer group">
+                    <div
+                      onClick={() => setShowFooterStrip(v => !v)}
+                      className={cn(
+                        'w-8 h-4 rounded-full transition-colors cursor-pointer relative shrink-0',
+                        showFooterStrip ? 'bg-blue-600' : 'bg-ink-700'
+                      )}
+                    >
+                      <div className={cn(
+                        'absolute top-0.5 w-3 h-3 rounded-full bg-white shadow transition-all',
+                        showFooterStrip ? 'left-4' : 'left-0.5'
+                      )} />
+                    </div>
+                    <span className="text-xs text-ink-300 group-hover:text-cream transition-colors">
+                      Blue strip — Footer
+                    </span>
+                  </label>
+                </div>
               </div>
             )}
 
