@@ -213,17 +213,17 @@ const S = StyleSheet.create({
   },
   closingQuestion: {
     color:        WHITE,
-    fontSize:     22,
+    fontSize:     36,
     fontWeight:   400,
-    lineHeight:   1.55,
+    lineHeight:   1.45,
     textAlign:    'center',
-    marginBottom: 40,
+    marginBottom: 32,
   },
   closingGoldRule: {
     height:          2,
-    width:           40,
+    width:           60,
     backgroundColor: GOLD,
-    marginBottom:    30,
+    marginBottom:    32,
   },
   closingFollow: {
     color:         WHITE,
@@ -232,12 +232,12 @@ const S = StyleSheet.create({
     fontWeight:    400,
     textAlign:     'center',
     textTransform: 'uppercase',
-    letterSpacing: 0.6,
-    marginBottom:  8,
+    letterSpacing: 0.8,
+    marginBottom:  10,
   },
   closingSub: {
     color:        GOLD,
-    fontSize:     12,
+    fontSize:     14,
     fontWeight:   400,
     textAlign:    'center',
     marginBottom: 44,
@@ -342,7 +342,7 @@ function CarouselDocument({ theme, titleSlide, slides, pillar, useSwansLogo }: C
                 .split('\n')
                 .map(l => l.replace(/^[-•*\d.]\s*/, '').trim())
                 .filter(l => l.length > 0)
-                .slice(0, 3)
+                .slice(0, 2)
                 .map((line, j) => (
                   <Text key={j} style={S.bodyLine}>{normalizeIAST(line)}</Text>
                 ))}
