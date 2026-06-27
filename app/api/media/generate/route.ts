@@ -114,7 +114,7 @@ export async function POST(req: NextRequest) {
 
     } else if (mediaType === 'carousel_pdf') {
       const { titleSlide, slides } = parseCarouselSlides(currentDraft.content)
-      pageCount = slides.length + 2   // title + content slides + CTA
+      pageCount = slides.length + 1   // cover + content slides (last = closing slide)
 
       fileBuffer = await generateCarouselPDF({
         theme:         week.theme ?? 'Weekly Insights',

@@ -3,7 +3,7 @@ import React from 'react'
 import {
   Document, Page, Text, View, Image, Font, StyleSheet, renderToBuffer,
 } from '@react-pdf/renderer'
-import { BRAND_BLUE, BRAND_GOLD, FONT_PATHS, LOGO_PATH, SWANS_LOGO_PATH, normalizeIAST } from './fonts'
+import { FONT_PATHS, LOGO_PATH, SWANS_LOGO_PATH, normalizeIAST } from './fonts'
 
 Font.register({
   family: 'Montserrat',
@@ -13,169 +13,244 @@ Font.register({
     { src: FONT_PATHS.bold,     fontWeight: 700 },
   ],
 })
-
 Font.register({ family: 'NotoDevanagari', src: FONT_PATHS.devanagari })
 
 // 1080×1080 pt square (LinkedIn carousel optimal size)
 const SIZE = 1080
 
-// Footer text colours — same as article PDF footer
-const FOOTER_NAME_COLOR = BRAND_GOLD    // "Executive & Life Coaching"
-const FOOTER_SUB_COLOR  = '#A8C8E8'     // "coachsharath.com"
+// ── Design Tokens ──────────────────────────────────────────────────────────
+const NAVY     = '#091e3a'   // deep navy — primary background (all slides)
+const NAVY_ALT = '#0d2d52'   // slightly lighter navy — closing slide variation
+const GOLD     = '#c8a04a'   // gold accent
+const WHITE    = '#ffffff'
+
+// Pre-blended hex equivalents of rgba on navy background.
+// Used for border color where element-level opacity would bleed into children.
+// rgba(200,160,74,0.4) on #091e3a → #555240
+const BADGE_BORDER = '#555240'
+
+// ── Pillar → badge label ───────────────────────────────────────────────────
+function pillarToLabel(pillar: string): string {
+  switch (pillar) {
+    case 'financial_intelligence':  return 'FINANCE'
+    case 'vedic_leadership':        return 'VEDIC'
+    case 'coaching_transformation': return 'COACHING'
+    case 'banker_coach':            return 'COACHING'
+    case 'inner_work':              return 'INSIGHT'
+    default:                        return 'INSIGHT'
+  }
+}
 
 const S = StyleSheet.create({
-  // ── Title slide (slide 1) ────────────────────────────────────────────
-  titlePage: {
+  // ── Cover slide ──────────────────────────────────────────────────────────
+  coverPage: {
     width:           SIZE,
     height:          SIZE,
     fontFamily:      'Montserrat',
-    backgroundColor: BRAND_BLUE,
+    backgroundColor: NAVY,
     flexDirection:   'column',
   },
-  // Logo section at the top
-  titleLogoArea: {
-    paddingHorizontal: 80,
-    paddingTop:        60,
-    paddingBottom:     0,
+  coverLogoArea: {
+    paddingHorizontal: 64,
+    paddingTop:        64,
   },
+  // Logo container — white box so logo reads on dark background
   logoBox: {
-    backgroundColor:   '#FFFFFF',
+    backgroundColor:   WHITE,
     borderRadius:      4,
     paddingHorizontal: 8,
     paddingVertical:   4,
     alignSelf:         'flex-start',
   },
-  logoOnDark: {
-    width:     120,
-    height:    40,
+  logoImg: {
+    width:     110,
+    height:    36,
     objectFit: 'contain',
   },
-  // Vertically centered content zone between logo and footer
-  titleCenter: {
-    flex:            1,
-    paddingHorizontal: 80,
-    justifyContent:  'center',
+  // Content block — vertically centered between logo and cover footer
+  coverCenter: {
+    flex:              1,
+    paddingHorizontal: 64,
+    justifyContent:    'center',
   },
-  // Gold rule — spans the full content width (top and bottom of text block)
-  titleGoldRule: {
-    height:          3,
-    backgroundColor: BRAND_GOLD,
+  // Gold rule — 40pt wide, 2pt height (above title block)
+  coverGoldRuleTop: {
+    height:          2,
+    width:           40,
+    backgroundColor: GOLD,
+    marginBottom:    28,
   },
-  // Padding + text between the two gold rules
-  titleContent: {
-    paddingVertical: 44,
-    alignItems:      'center',
-  },
-  titleText: {
-    color:        '#FFFFFF',
-    fontSize:     52,
+  coverTitle: {
+    color:        WHITE,
+    fontSize:     28,
     fontWeight:   700,
-    lineHeight:   1.25,
-    marginBottom: 24,
-    textAlign:    'center',
+    lineHeight:   1.3,
+    marginBottom: 12,
   },
-  titleSub: {
-    color:      BRAND_GOLD,
-    fontSize:   24,
-    fontWeight: 600,
-    textAlign:  'center',
+  coverSubtitle: {
+    color:      GOLD,
+    fontSize:   14,
+    fontWeight: 400,
+    lineHeight: 1.5,
+    marginBottom: 28,
   },
-  // Separator between content area and footer on the title slide
-  titleFooterSep: {
-    height:          1,
-    backgroundColor: BRAND_GOLD,
-    opacity:         0.4,
-    marginHorizontal: 80,
+  // Gold rule — below subtitle
+  coverGoldRuleBottom: {
+    height:          2,
+    width:           40,
+    backgroundColor: GOLD,
   },
-  // Footer text area on title slide (page already blue — no extra background)
-  titleFooterText: {
-    paddingHorizontal: 80,
-    paddingTop:        16,
-    paddingBottom:     28,
+  // Cover footer — muted text bottom left
+  coverFooterArea: {
+    paddingHorizontal: 64,
+    paddingBottom:     44,
   },
-
-  // ── Shared footer text styles ────────────────────────────────────────
-  footerName: {
-    color:        FOOTER_NAME_COLOR,
-    fontSize:     15,
-    fontWeight:   600,
-    marginBottom: 5,
-  },
-  footerSub: {
-    color:    FOOTER_SUB_COLOR,
-    fontSize: 12,
+  coverFooterText: {
+    color:         WHITE,
+    opacity:       0.35,
+    fontSize:      10,
+    fontWeight:    400,
+    textTransform: 'uppercase',
+    letterSpacing: 0.8,
   },
 
-  // ── Content slide (slides 2+) ─────────────────────────────────────────
+  // ── Content slides (slides 2 to N-1) ────────────────────────────────────
   contentPage: {
     width:           SIZE,
     height:          SIZE,
     fontFamily:      'Montserrat',
-    backgroundColor: '#FFFFFF',
+    backgroundColor: NAVY,
     flexDirection:   'column',
   },
-  // Header: blue band, full headline at full width (no badge)
-  contentHeader: {
-    backgroundColor:   BRAND_BLUE,
+  contentLogoRow: {
     paddingHorizontal: 60,
-    paddingTop:        40,
-    paddingBottom:     40,
+    paddingTop:        52,
+    paddingBottom:     28,
   },
-  slideHeadline: {
-    color:      '#FFFFFF',
-    fontSize:   30,
-    fontWeight: 700,
-    lineHeight: 1.3,
+  // Sequence label badge: e.g. "COACHING 3 OF 10"
+  badgeWrapper: {
+    paddingHorizontal: 60,
+    marginBottom:      18,
   },
-  // Body: grows to fill remaining space
-  contentBody: {
+  badge: {
+    alignSelf:         'flex-start',
+    borderWidth:       1,
+    borderColor:       BADGE_BORDER,
+    borderRadius:      3,
+    paddingHorizontal: 10,
+    paddingVertical:   4,
+  },
+  badgeText: {
+    color:         GOLD,
+    fontSize:      10,
+    fontWeight:    600,
+    textTransform: 'uppercase',
+    letterSpacing: 1.5,
+  },
+  // Gold divider — 40pt wide, 2pt height — between badge and slide title
+  goldDivider: {
+    height:          2,
+    width:           40,
+    backgroundColor: GOLD,
+    marginLeft:      60,
+    marginBottom:    24,
+  },
+  // Slide title — weight 400 (intentionally not bold, never 700)
+  slideTitle: {
+    color:             WHITE,
+    fontSize:          20,
+    fontWeight:        400,
+    lineHeight:        1.35,
+    paddingHorizontal: 60,
+    marginBottom:      26,
+  },
+  // Body copy zone — fills space, max 3 lines rendered
+  bodyZone: {
     flex:              1,
     paddingHorizontal: 60,
-    paddingTop:        44,
-    paddingBottom:     36,
   },
-  // Footer: blue strip matching article PDF
-  contentFooterStrip: {
-    backgroundColor:   BRAND_BLUE,
+  bodyLine: {
+    color:      WHITE,
+    opacity:    0.72,
+    fontSize:   14,
+    fontWeight: 400,
+    lineHeight: 1.7,
+  },
+  // Footer row — URL left, slide count right
+  contentFooterRow: {
     paddingHorizontal: 60,
-    paddingTop:        18,
-    paddingBottom:     24,
+    paddingBottom:     46,
+    flexDirection:     'row',
+    justifyContent:    'space-between',
+    alignItems:        'center',
+  },
+  footerUrl: {
+    color:         WHITE,
+    opacity:       0.35,
+    fontSize:      10,
+    fontWeight:    400,
+    textTransform: 'uppercase',
+    letterSpacing: 0.8,
+  },
+  footerPageNum: {
+    color:      WHITE,
+    opacity:    0.35,
+    fontSize:   11,
+    fontWeight: 400,
   },
 
-  // ── CTA slide (last) ─────────────────────────────────────────────────
-  ctaPage: {
-    width:           SIZE,
-    height:          SIZE,
-    fontFamily:      'Montserrat',
-    backgroundColor: BRAND_BLUE,
-    flexDirection:   'column',
-    justifyContent:  'center',
-    alignItems:      'center',
-    padding:         80,
+  // ── Closing slide (reflection question + follow prompt) ──────────────────
+  closingPage: {
+    width:             SIZE,
+    height:            SIZE,
+    fontFamily:        'Montserrat',
+    backgroundColor:   NAVY_ALT,
+    flexDirection:     'column',
+    justifyContent:    'center',
+    alignItems:        'center',
+    paddingHorizontal: 80,
+    paddingVertical:   80,
   },
-  ctaGoldRule: {
-    height:          2,
-    backgroundColor: BRAND_GOLD,
-    width:           60,
-    marginBottom:    30,
-  },
-  ctaHeadline: {
-    color:        '#FFFFFF',
-    fontSize:     28,
-    fontWeight:   700,
-    textAlign:    'center',
-    marginBottom: 16,
-  },
-  ctaSub: {
-    color:        BRAND_GOLD,
-    fontSize:     16,
-    fontWeight:   600,
+  closingQuestion: {
+    color:        WHITE,
+    fontSize:     22,
+    fontWeight:   400,
+    lineHeight:   1.55,
     textAlign:    'center',
     marginBottom: 40,
   },
-  ctaLogoLg: {
-    width:     140,
-    height:    46,
+  closingGoldRule: {
+    height:          2,
+    width:           40,
+    backgroundColor: GOLD,
+    marginBottom:    30,
+  },
+  closingFollow: {
+    color:         WHITE,
+    opacity:       0.35,
+    fontSize:      11,
+    fontWeight:    400,
+    textAlign:     'center',
+    textTransform: 'uppercase',
+    letterSpacing: 0.6,
+    marginBottom:  8,
+  },
+  closingSub: {
+    color:        GOLD,
+    fontSize:     12,
+    fontWeight:   400,
+    textAlign:    'center',
+    marginBottom: 44,
+  },
+  closingLogoBox: {
+    backgroundColor:   WHITE,
+    borderRadius:      4,
+    paddingHorizontal: 10,
+    paddingVertical:   6,
+  },
+  closingLogoImg: {
+    width:     120,
+    height:    40,
     objectFit: 'contain',
   },
 })
@@ -186,133 +261,125 @@ export type CarouselSlide = {
 }
 
 export type CarouselPDFProps = {
-  theme:        string
-  titleSlide:   string           // Hook / title for slide 1
-  slides:       CarouselSlide[]  // Content slides
-  pillar:       string
-  quarter?:     string           // Retained for API compat; no longer rendered
-  weekNumber?:  number           // Retained for API compat; no longer rendered
-  useSwansLogo?: boolean         // Finance pillar
+  theme:         string
+  titleSlide:    string           // Hook / title for the cover slide
+  slides:        CarouselSlide[]  // Content slides (last item = closing slide)
+  pillar:        string
+  quarter?:      string           // Retained for API compat; no longer rendered
+  weekNumber?:   number           // Retained for API compat; no longer rendered
+  useSwansLogo?: boolean          // Finance pillar
 }
 
-// ── Dynamic font sizing based on content density ───────────────────────────
-function calcFontMetrics(text: string): { fontSize: number; lineHeight: number; bulletGap: number } {
-  const lines = text.split('\n').filter(l => l.trim())
-  // Bullet items take ~20% more vertical space due to bullet glyph height
-  const weighted = lines.reduce((sum, line) => sum + (/^[-•]\s/.test(line) ? 1.2 : 1.0), 0)
-  if (weighted <= 3)  return { fontSize: 32, lineHeight: 1.45, bulletGap: 20 }
-  if (weighted <= 5)  return { fontSize: 28, lineHeight: 1.5,  bulletGap: 16 }
-  if (weighted <= 7)  return { fontSize: 24, lineHeight: 1.55, bulletGap: 12 }
-  if (weighted <= 9)  return { fontSize: 20, lineHeight: 1.6,  bulletGap: 10 }
-  if (weighted <= 12) return { fontSize: 18, lineHeight: 1.65, bulletGap: 8  }
-  return                     { fontSize: 16, lineHeight: 1.7,  bulletGap: 6  }
-}
+function CarouselDocument({ theme, titleSlide, slides, pillar, useSwansLogo }: CarouselPDFProps) {
+  const logoSrc     = useSwansLogo ? SWANS_LOGO_PATH : LOGO_PATH
+  const label       = pillarToLabel(pillar)
 
-function CarouselDocument({ theme, titleSlide, slides, useSwansLogo }: CarouselPDFProps) {
-  const logoSrc = useSwansLogo ? SWANS_LOGO_PATH : LOGO_PATH
-
-  function renderBodyLines(text: string, slideIndex: number) {
-    const { fontSize, lineHeight, bulletGap } = calcFontMetrics(text)
-    const lines = text.split('\n').filter(l => l.trim())
-    return lines.map((line, i) => {
-      if (/^[-•]\s/.test(line)) {
-        return (
-          <View key={`${slideIndex}-${i}`} style={{ flexDirection: 'row', marginBottom: bulletGap }}>
-            <Text style={{ color: BRAND_GOLD, fontWeight: 700, fontSize: fontSize + 2, marginRight: 14, lineHeight }}>
-              •
-            </Text>
-            <Text style={{ flex: 1, fontSize, lineHeight, color: '#1A1A1A', fontFamily: 'Montserrat' }}>
-              {normalizeIAST(line.replace(/^[-•]\s/, ''))}
-            </Text>
-          </View>
-        )
-      }
-      return (
-        <Text
-          key={`${slideIndex}-${i}`}
-          style={{ fontSize, lineHeight, color: '#1A1A1A', marginBottom: bulletGap * 0.5, fontFamily: 'Montserrat' }}
-        >
-          {normalizeIAST(line)}
-        </Text>
-      )
-    })
-  }
-
-  // Shared footer text (shown on all slide types)
-  function FooterText() {
-    return (
-      <>
-        <Text style={S.footerName}>Executive &amp; Life Coaching</Text>
-        <Text style={S.footerSub}>coachsharath.com</Text>
-      </>
-    )
-  }
+  // Cover is slide 1. All slides[] items are 2 onwards.
+  const totalSlides  = slides.length + 1
+  // Content slides: everything except the last (closing) slide
+  const contentSlides = slides.slice(0, -1)
+  // Closing slide: last item — rendered as reflection + follow prompt
+  const closingSlide  = slides.length > 0 ? slides[slides.length - 1] : null
 
   return (
     <Document title={theme} author="Coach Sharath">
 
-      {/* Slide 1 — Title */}
-      <Page size={[SIZE, SIZE]} style={S.titlePage}>
-        {/* Logo */}
-        <View style={S.titleLogoArea}>
+      {/* ── Cover slide ─────────────────────────────────────────────────── */}
+      <Page size={[SIZE, SIZE]} style={S.coverPage}>
+        {/* Logo — top left */}
+        <View style={S.coverLogoArea}>
           <View style={S.logoBox}>
-            <Image src={logoSrc} style={S.logoOnDark} />
+            <Image src={logoSrc} style={S.logoImg} />
           </View>
         </View>
 
-        {/* Title + subtitle sandwiched between two gold rules — vertically centered */}
-        <View style={S.titleCenter}>
-          <View style={S.titleGoldRule} />
-          <View style={S.titleContent}>
-            <Text style={S.titleText}>{normalizeIAST(titleSlide)}</Text>
-            <Text style={S.titleSub}>{normalizeIAST(theme)}</Text>
-          </View>
-          <View style={S.titleGoldRule} />
+        {/* Title block — vertically centred, sandwiched between two gold rules */}
+        <View style={S.coverCenter}>
+          <View style={S.coverGoldRuleTop} />
+          <Text style={S.coverTitle}>{normalizeIAST(titleSlide)}</Text>
+          <Text style={S.coverSubtitle}>{normalizeIAST(theme)}</Text>
+          <View style={S.coverGoldRuleBottom} />
         </View>
 
-        {/* Footer — gold separator + brand text (page is already blue) */}
-        <View style={S.titleFooterSep} />
-        <View style={S.titleFooterText}>
-          <FooterText />
+        {/* Footer — muted, bottom left */}
+        <View style={S.coverFooterArea}>
+          <Text style={S.coverFooterText}>
+            Executive &amp; Life Coaching · coachsharath.com
+          </Text>
         </View>
       </Page>
 
-      {/* Content slides */}
-      {slides.map((slide, i) => (
-        <Page key={i} size={[SIZE, SIZE]} style={S.contentPage}>
-          {/* Header — full-width headline, no badge */}
-          <View style={S.contentHeader}>
-            <Text style={S.slideHeadline}>{normalizeIAST(slide.headline)}</Text>
-          </View>
+      {/* ── Content slides ────────────────────────────────────────────────── */}
+      {contentSlides.map((slide, i) => {
+        const slideNum = i + 2  // cover = 1, content starts at 2
+        return (
+          <Page key={i} size={[SIZE, SIZE]} style={S.contentPage}>
+            {/* Logo — top left */}
+            <View style={S.contentLogoRow}>
+              <View style={S.logoBox}>
+                <Image src={logoSrc} style={S.logoImg} />
+              </View>
+            </View>
 
-          {/* Body — dynamic font size fills available space */}
-          <View style={S.contentBody}>
-            {renderBodyLines(slide.body, i)}
-          </View>
+            {/* Sequence badge: e.g. "VEDIC 3 OF 10" */}
+            <View style={S.badgeWrapper}>
+              <View style={S.badge}>
+                <Text style={S.badgeText}>
+                  {label} {slideNum} OF {totalSlides}
+                </Text>
+              </View>
+            </View>
 
-          {/* Footer — blue strip */}
-          <View style={S.contentFooterStrip}>
-            <FooterText />
+            {/* Gold divider */}
+            <View style={S.goldDivider} />
+
+            {/* Slide title — never bold */}
+            <Text style={S.slideTitle}>{normalizeIAST(slide.headline)}</Text>
+
+            {/* Body copy — max 3 lines, no bullets */}
+            <View style={S.bodyZone}>
+              {slide.body
+                .split('\n')
+                .map(l => l.replace(/^[-•*\d.]\s*/, '').trim())
+                .filter(l => l.length > 0)
+                .slice(0, 3)
+                .map((line, j) => (
+                  <Text key={j} style={S.bodyLine}>{normalizeIAST(line)}</Text>
+                ))}
+            </View>
+
+            {/* Footer row — URL left, slide count right */}
+            <View style={S.contentFooterRow}>
+              <Text style={S.footerUrl}>coachsharath.com</Text>
+              <Text style={S.footerPageNum}>{slideNum} / {totalSlides}</Text>
+            </View>
+          </Page>
+        )
+      })}
+
+      {/* ── Closing slide ─────────────────────────────────────────────────── */}
+      {closingSlide && (
+        <Page size={[SIZE, SIZE]} style={S.closingPage}>
+          <Text style={S.closingQuestion}>
+            {normalizeIAST(closingSlide.headline)}
+          </Text>
+          <View style={S.closingGoldRule} />
+          <Text style={S.closingFollow}>Follow Coach Sharath</Text>
+          <Text style={S.closingSub}>
+            Executive coaching · Vedic wisdom · Financial intelligence
+          </Text>
+          <View style={S.closingLogoBox}>
+            <Image src={logoSrc} style={S.closingLogoImg} />
           </View>
         </Page>
-      ))}
-
-      {/* CTA slide */}
-      <Page size={[SIZE, SIZE]} style={S.ctaPage}>
-        <View style={S.ctaGoldRule} />
-        <Text style={S.ctaHeadline}>Follow for weekly insights</Text>
-        <Text style={S.ctaSub}>Executive coaching · Vedic wisdom · Financial intelligence</Text>
-        <View style={{ backgroundColor: '#FFFFFF', borderRadius: 4, paddingHorizontal: 10, paddingVertical: 6 }}>
-          <Image src={logoSrc} style={S.ctaLogoLg} />
-        </View>
-      </Page>
+      )}
 
     </Document>
   )
 }
 
 // ── Parse carousel content from structured LLM output ─────────────────────
-// Expects format: "SLIDE N | HEADLINE: ... BODY: ..."
+// Expects format: "SLIDE N | HEADLINE: ... | BODY: ..."
 export function parseCarouselSlides(content: string): { titleSlide: string; slides: CarouselSlide[] } {
   const lines = content.split('\n')
   const slides: CarouselSlide[] = []
@@ -335,7 +402,7 @@ export function parseCarouselSlides(content: string): { titleSlide: string; slid
       continue
     }
 
-    // Single-line format: "SLIDE N | HEADLINE: title | BODY: body text"
+    // Single-line: "SLIDE N | HEADLINE: title | BODY: body"
     const singleLine = line.match(/^SLIDE\s*\d+\s*\|\s*HEADLINE:\s*(.+?)\s*\|\s*BODY:\s*(.+)/i)
     if (singleLine) {
       flushSlide()
@@ -375,7 +442,7 @@ export function parseCarouselSlides(content: string): { titleSlide: string; slid
   flushSlide()
 
   if (!titleSlide && slides.length > 0) titleSlide = slides[0].headline
-  return { titleSlide, slides: slides.slice(1) }  // first slide is title, rest are content
+  return { titleSlide, slides: slides.slice(1) }  // first slide = cover, rest are content
 }
 
 export async function generateCarouselPDF(props: CarouselPDFProps): Promise<Buffer> {
