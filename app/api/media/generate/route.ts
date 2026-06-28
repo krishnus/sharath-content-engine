@@ -122,6 +122,7 @@ export async function POST(req: NextRequest) {
         slides,
         pillar,
         seriesLabel:   meta.seriesLabel ?? undefined,
+        seriesCount:   meta.seriesCount ?? undefined,
         quarter:       week.quarter ?? 'Q1',
         weekNumber:    week.week_number,
         useSwansLogo:  isFinancePillar,

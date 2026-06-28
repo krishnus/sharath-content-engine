@@ -254,20 +254,21 @@ export type CarouselPDFProps = {
   titleSlide:    string
   slides:        CarouselSlide[]   // last item is the closing slide
   pillar:        string
-  seriesLabel?:  string            // e.g. "TAX", "STEP", "INSIGHT" — from AI output
+  seriesLabel?:  string            // e.g. "TAX", "STEP", "INSIGHT" — from AI SERIES_LABEL
+  seriesCount?:  number            // from AI SERIES_COUNT — authoritative content slide count
   quarter?:      string            // retained for API compat, not rendered
   weekNumber?:   number            // retained for API compat, not rendered
   useSwansLogo?: boolean
 }
 
-function CarouselDocument({ theme, titleSlide, slides, pillar, seriesLabel, useSwansLogo }: CarouselPDFProps) {
+function CarouselDocument({ theme, titleSlide, slides, pillar, seriesLabel, seriesCount, useSwansLogo }: CarouselPDFProps) {
   const logoSrc       = useSwansLogo ? SWANS_LOGO_PATH : LOGO_PATH
-  // Badge label: from AI-generated SERIES_LABEL, else pillar fallback
+  // Badge label: from AI SERIES_LABEL, else pillar fallback
   const label         = (seriesLabel ?? pillarToLabel(pillar)).toUpperCase()
   const contentSlides = slides.slice(0, -1)   // everything except the closing slide
   const closingSlide  = slides.length > 0 ? slides[slides.length - 1] : null
-  // Badge counts only the content (insight) slides — cover and closing are excluded
-  const totalInsights = contentSlides.length
+  // Badge total: use AI's committed SERIES_COUNT; fall back to actual parsed count
+  const totalInsights = seriesCount ?? contentSlides.length
 
   return (
     <Document title={theme} author="Coach Sharath">
@@ -385,18 +386,25 @@ export function parseCarouselSlides(content: string): { titleSlide: string; slid
   }
 
   for (const line of lines) {
-    if (line.match(/^(WORD_COUNT|CORE_INSIGHT|CALLBACK_USED|THREAD_PLANTED|REFERENCES|HASHTAGS|LINKEDIN_CAPTION|QUOTE|SERIES_LABEL):/)) continue
+    if (line.match(/^(WORD_COUNT|CORE_INSIGHT|CALLBACK_USED|THREAD_PLANTED|REFERENCES|HASHTAGS|LINKEDIN_CAPTION|QUOTE|SERIES_LABEL|SERIES_COUNT|CONTENT_PLAN):/)) continue
 
-    const singleLine = line.match(/^SLIDE\s*\d+\s*\|\s*HEADLINE:\s*(.+?)\s*\|\s*BODY:\s*(.+)/i)
+    // (.*)  not (.+) — BODY may be empty on the closing slide
+    const singleLine = line.match(/^SLIDE\s*\d+\s*\|\s*HEADLINE:\s*(.+?)\s*\|\s*BODY:\s*(.*)/i)
     if (singleLine) {
       flushSlide()
       currentHeadline = singleLine[1].trim()
-      currentBodyLines = [singleLine[2].trim()]
+      const bodyText = singleLine[2].trim()
+      currentBodyLines = bodyText ? [bodyText] : []
       continue
     }
 
     const headlineOnly = line.match(/^(?:SLIDE\s*\d+\s*\|?\s*)?HEADLINE:\s*(.+)/i)
-    if (headlineOnly) { flushSlide(); currentHeadline = headlineOnly[1].trim(); continue }
+    if (headlineOnly) {
+      flushSlide()
+      // Strip trailing "| BODY:" suffix that the AI emits when body is empty
+      currentHeadline = headlineOnly[1].replace(/\s*\|\s*BODY:.*$/i, '').trim()
+      continue
+    }
 
     const bodyOnly = line.match(/^BODY:\s*(.+)/i)
     if (bodyOnly) { currentBodyLines.push(bodyOnly[1].trim()); continue }

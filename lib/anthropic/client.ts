@@ -31,6 +31,7 @@ export function parseGenerationMetadata(rawOutput: string): {
   quote: string | null
   articleTitle: string | null
   seriesLabel: string | null   // carousel only — e.g. "TAX", "STEP", "INSIGHT"
+  seriesCount: number | null   // carousel only — committed count of content slides
 } {
   const lines = rawOutput.split('\n')
 
@@ -78,5 +79,6 @@ export function parseGenerationMetadata(rawOutput: string): {
     quote:           getMeta('QUOTE'),
     articleTitle:    getMeta('ARTICLE_TITLE'),
     seriesLabel:     getMeta('SERIES_LABEL'),
+    seriesCount:     (() => { const v = getMeta('SERIES_COUNT'); const n = v ? parseInt(v, 10) : NaN; return isNaN(n) ? null : n })(),
   }
 }
