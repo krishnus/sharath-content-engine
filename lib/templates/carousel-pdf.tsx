@@ -3,7 +3,7 @@ import React from 'react'
 import {
   Document, Page, Text, View, Image, Font, StyleSheet, renderToBuffer,
 } from '@react-pdf/renderer'
-import { FONT_PATHS, LOGO_PATH, SWANS_LOGO_PATH, normalizeIAST } from './fonts'
+import { FONT_PATHS, DARK_BG_LOGO_PATH, SWANS_LOGO_PATH, normalizeIAST } from './fonts'
 
 Font.register({
   family: 'Montserrat',
@@ -46,10 +46,12 @@ const S = StyleSheet.create({
   // width + height + overflow:'hidden' = hard 1080×1080 canvas enforced by yoga.
   // <Page> provides the PDF media box; this View provides the layout constraint.
   slideCanvas: {
-    width:      SIZE,
-    height:     SIZE,
-    overflow:   'hidden',
-    fontFamily: 'Montserrat',
+    minWidth:      SIZE,
+    maxWidth:      SIZE,   // yoga will not grow the canvas wider than this
+    minHeight:     SIZE,   // keeps cover/closing slides full height
+    maxHeight:     SIZE,   // hard ceiling — yoga cannot grow beyond this
+    overflow:      'hidden',
+    fontFamily:    'Montserrat',
     flexDirection: 'column',
   },
 
@@ -62,11 +64,7 @@ const S = StyleSheet.create({
     paddingRight:    80,
   },
   logoBox: {
-    backgroundColor:   WHITE,
-    borderRadius:      4,
-    paddingHorizontal: 8,
-    paddingVertical:   4,
-    alignSelf:         'flex-start',
+    alignSelf: 'flex-start',
   },
   logoImg: {
     width:     110,
@@ -123,6 +121,7 @@ const S = StyleSheet.create({
   // Zone A — logo + badge + divider + title, pinned to top
   zoneTop: {
     flexShrink: 0,
+    maxHeight:  340,   // hard ceiling so Zone A cannot push B and C out of the canvas
   },
   logoMarginBottom: {
     marginBottom: 28,
@@ -232,10 +231,7 @@ const S = StyleSheet.create({
     marginBottom: 44,
   },
   closingLogoBox: {
-    backgroundColor:   WHITE,
-    borderRadius:      4,
-    paddingHorizontal: 10,
-    paddingVertical:   6,
+    alignSelf: 'center',
   },
   closingLogoImg: {
     width:     120,
@@ -262,7 +258,7 @@ export type CarouselPDFProps = {
 }
 
 function CarouselDocument({ theme, titleSlide, slides, pillar, seriesLabel, seriesCount, useSwansLogo }: CarouselPDFProps) {
-  const logoSrc       = useSwansLogo ? SWANS_LOGO_PATH : LOGO_PATH
+  const logoSrc       = useSwansLogo ? SWANS_LOGO_PATH : DARK_BG_LOGO_PATH
   // Badge label: from AI SERIES_LABEL, else pillar fallback
   const label         = (seriesLabel ?? pillarToLabel(pillar)).toUpperCase()
   const contentSlides = slides.slice(0, -1)   // everything except the closing slide
@@ -276,7 +272,7 @@ function CarouselDocument({ theme, titleSlide, slides, pillar, seriesLabel, seri
       {/* ── Cover slide ─────────────────────────────────────────────────── */}
       {/* <Page> sets PDF media box; wrap={false} on inner <View> prevents react-pdf
           from flowing content onto additional pages, keeping each slide exactly 1080×1080. */}
-      <Page size={[SIZE, SIZE]}>
+      <Page size={[SIZE, SIZE]} style={{ width: SIZE, height: SIZE }}>
         <View style={[S.slideCanvas, S.coverCanvas]} wrap={false}>
 
           {/* Zone A — logo */}
@@ -311,7 +307,7 @@ function CarouselDocument({ theme, titleSlide, slides, pillar, seriesLabel, seri
           .slice(0, 2)   // hard cap: max 2 lines
 
         return (
-          <Page key={i} size={[SIZE, SIZE]}>
+          <Page key={i} size={[SIZE, SIZE]} style={{ width: SIZE, height: SIZE }}>
             <View style={[S.slideCanvas, S.contentCanvas]} wrap={false}>
 
               {/* Zone A — logo + badge + divider + title */}
@@ -348,7 +344,7 @@ function CarouselDocument({ theme, titleSlide, slides, pillar, seriesLabel, seri
 
       {/* ── Closing slide ─────────────────────────────────────────────────── */}
       {closingSlide && (
-        <Page size={[SIZE, SIZE]}>
+        <Page size={[SIZE, SIZE]} style={{ width: SIZE, height: SIZE }}>
           <View style={[S.slideCanvas, S.closingCanvas]} wrap={false}>
             <Text style={S.closingQuestion}>
               {normalizeIAST(closingSlide.headline)}

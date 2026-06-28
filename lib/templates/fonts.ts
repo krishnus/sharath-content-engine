@@ -35,8 +35,9 @@ export const FONT_PATHS = {
   devanagari: path.join(FONTS_DIR, 'NotoSansDevanagari-Regular.ttf'),
 }
 
-export const LOGO_PATH = path.join(process.cwd(), 'public/brand/coach-sharath-logo.png')
-export const SWANS_LOGO_PATH = path.join(process.cwd(), 'public/brand/5swans-logo.png')
+export const LOGO_PATH            = path.join(process.cwd(), 'public/brand/coach-sharath-logo.png')
+export const DARK_BG_LOGO_PATH    = path.join(process.cwd(), 'public/brand/coach-sharath-logo-darkbackground.png')
+export const SWANS_LOGO_PATH      = path.join(process.cwd(), 'public/brand/5swans-logo.png')
 
 // ── IAST diacritical → ASCII safety net ──────────────────────────────────────
 // Montserrat has no glyphs for Latin Extended Additional (U+1E00–U+1EFF).
