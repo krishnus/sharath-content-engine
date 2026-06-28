@@ -67,8 +67,8 @@ const S = StyleSheet.create({
     alignSelf: 'flex-start',
   },
   logoImg: {
-    width:     160,   // 2.74:1 box matches trimmed dark logo (1026×374) — artwork fills the full width
-    height:    58,
+    width:     160,
+    height:    52,
     objectFit: 'contain',
   },
   // Title zone — flex:1 centres the block vertically between logo and footer
@@ -84,16 +84,16 @@ const S = StyleSheet.create({
   },
   coverTitle: {
     color:        WHITE,
-    fontSize:     28,
+    fontSize:     72,
     fontWeight:   700,
-    lineHeight:   1.3,
+    lineHeight:   1.2,
     marginBottom: 12,
   },
   coverSubtitle: {
     color:        GOLD,
-    fontSize:     14,
+    fontSize:     32,
     fontWeight:   400,
-    lineHeight:   1.5,
+    lineHeight:   1.4,
     marginBottom: 28,
   },
   coverGoldRuleBottom: {
@@ -137,23 +137,22 @@ const S = StyleSheet.create({
   },
   badgeText: {
     color:         GOLD,
-    fontSize:      10,
-    fontWeight:    600,
+    fontSize:      26,
+    fontWeight:    500,
     textTransform: 'uppercase',
     letterSpacing: 1.5,
   },
   goldDivider: {
-    height:          2,
-    width:           40,
+    height:          4,
+    width:           60,
     backgroundColor: GOLD,
-    marginBottom:    20,
+    marginBottom:    24,
   },
-  // Slide title — weight 400, intentionally not bold
   slideTitle: {
     color:      WHITE,
-    fontSize:   20,
-    fontWeight: 400,
-    lineHeight: 1.35,
+    fontSize:   56,
+    fontWeight: 500,
+    lineHeight: 1.25,
   },
   // Zone B — body copy, fills remaining height and centres content
   zoneMiddle: {
@@ -163,9 +162,9 @@ const S = StyleSheet.create({
   bodyLine: {
     color:      WHITE,
     opacity:    0.72,
-    fontSize:   14,
+    fontSize:   38,
     fontWeight: 400,
-    lineHeight: 1.7,
+    lineHeight: 1.65,
   },
   // Zone C — footer row, pinned to bottom
   zoneBottom: {
@@ -177,15 +176,15 @@ const S = StyleSheet.create({
   footerUrl: {
     color:         WHITE,
     opacity:       0.35,
-    fontSize:      10,
+    fontSize:      22,
     fontWeight:    400,
     textTransform: 'uppercase',
-    letterSpacing: 0.8,
+    letterSpacing: 1,
   },
   footerPageNum: {
     color:      WHITE,
     opacity:    0.35,
-    fontSize:   11,
+    fontSize:   22,
     fontWeight: 400,
   },
 
