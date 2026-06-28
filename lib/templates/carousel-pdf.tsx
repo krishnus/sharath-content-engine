@@ -67,8 +67,8 @@ const S = StyleSheet.create({
     alignSelf: 'flex-start',
   },
   logoImg: {
-    width:     150,   // 1.5:1 box → artwork fills at 150×100, matching the article PDF scale-up
-    height:    100,
+    width:     160,   // 2.74:1 box matches trimmed dark logo (1026×374) — artwork fills the full width
+    height:    58,
     objectFit: 'contain',
   },
   // Title zone — flex:1 centres the block vertically between logo and footer
@@ -234,8 +234,8 @@ const S = StyleSheet.create({
     alignSelf: 'center',
   },
   closingLogoImg: {
-    width:     160,
-    height:    107,  // 1.5:1 ratio — artwork fills the box
+    width:     180,
+    height:    66,   // 2.73:1 matches trimmed dark logo ratio
     objectFit: 'contain',
   },
 })
