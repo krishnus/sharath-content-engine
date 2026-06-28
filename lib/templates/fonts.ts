@@ -37,6 +37,7 @@ export const FONT_PATHS = {
 
 export const LOGO_PATH            = path.join(process.cwd(), 'public/brand/coach-sharath-logo.png')
 export const DARK_BG_LOGO_PATH    = path.join(process.cwd(), 'public/brand/coach-sharath-logo-darkbackground.png')
+export const LIGHT_BG_LOGO_PATH   = path.join(process.cwd(), 'public/brand/coach-sharath-logo-lightbackground.png')
 export const SWANS_LOGO_PATH      = path.join(process.cwd(), 'public/brand/5swans-logo.png')
 
 // ── IAST diacritical → ASCII safety net ──────────────────────────────────────

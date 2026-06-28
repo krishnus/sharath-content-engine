@@ -3,7 +3,7 @@ import React from 'react'
 import {
   Document, Page, Text, View, Image, Font, StyleSheet, renderToBuffer,
 } from '@react-pdf/renderer'
-import { BRAND_BLUE, BRAND_GOLD, FONT_PATHS, LOGO_PATH, normalizeIAST } from './fonts'
+import { BRAND_BLUE, BRAND_GOLD, FONT_PATHS, DARK_BG_LOGO_PATH, LIGHT_BG_LOGO_PATH, normalizeIAST } from './fonts'
 
 Font.register({
   family: 'Montserrat',
@@ -50,13 +50,12 @@ const S = StyleSheet.create({
     marginBottom:  14,
   },
   logoBoxBase: {
-    borderRadius:      4,
-    paddingHorizontal: 8,
-    paddingVertical:   4,
+    alignSelf: 'flex-start',
   },
+  // Sized for the light logo (927×375, ~2.47:1); dark variant overridden inline
   logo: {
     width:     100,
-    height:    32,
+    height:    40,
     objectFit: 'contain',
   },
   goldRule: {
@@ -268,11 +267,12 @@ function ArticleDocument({
     ...S.headerBase,
     ...(showHeaderStrip ? { backgroundColor: BRAND_BLUE } : {}),
   }
-  // Logo box: white background only when header has blue strip (for contrast)
-  const logoBoxStyle = {
-    ...S.logoBoxBase,
-    ...(showHeaderStrip ? { backgroundColor: '#FFFFFF' } : {}),
-  }
+  const logoBoxStyle = S.logoBoxBase
+  // Blue header → dark-background logo (1536×1024, 1.5:1); light header → light logo (927×375, 2.47:1)
+  const logoSrc     = showHeaderStrip ? DARK_BG_LOGO_PATH : LIGHT_BG_LOGO_PATH
+  const logoStyle   = showHeaderStrip
+    ? { ...S.logo, width: 80, height: 53 }   // 1.5:1 fills the dark logo canvas
+    : S.logo                                  // 2.47:1 ≈ light logo aspect ratio
   const titleStyle  = { ...S.articleTitleBase,  color: showHeaderStrip ? '#FFFFFF'    : BRAND_BLUE  }
   const chipStyle   = { ...S.metaChipBase,       color: showHeaderStrip ? BRAND_GOLD   : '#666666'   }
   const sepColor    = showHeaderStrip ? '#4A7AB5' : '#AAAAAA'
@@ -289,7 +289,7 @@ function ArticleDocument({
         <View style={headerStyle} fixed>
           <View style={S.logoRow}>
             <View style={logoBoxStyle}>
-              <Image src={LOGO_PATH} style={S.logo} />
+              <Image src={logoSrc} style={logoStyle} />
             </View>
           </View>
           <View style={S.goldRule} />

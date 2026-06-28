@@ -67,8 +67,8 @@ const S = StyleSheet.create({
     alignSelf: 'flex-start',
   },
   logoImg: {
-    width:     126,
-    height:    44,
+    width:     110,   // 1.5:1 matches the dark logo canvas (1536×1024); artwork fills the box
+    height:    74,
     objectFit: 'contain',
   },
   // Title zone — flex:1 centres the block vertically between logo and footer
@@ -234,8 +234,8 @@ const S = StyleSheet.create({
     alignSelf: 'center',
   },
   closingLogoImg: {
-    width:     140,
-    height:    52,
+    width:     130,
+    height:    87,   // 1.5:1 ratio — artwork fills the box
     objectFit: 'contain',
   },
 })
