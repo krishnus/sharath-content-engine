@@ -67,8 +67,8 @@ const S = StyleSheet.create({
     alignSelf: 'flex-start',
   },
   logoImg: {
-    width:     160,
-    height:    52,
+    width:     192,   // 160 × 1.2
+    height:    62,    // 52 × 1.2
     objectFit: 'contain',
   },
   // Title zone — flex:1 centres the block vertically between logo and footer
@@ -200,14 +200,14 @@ const S = StyleSheet.create({
   },
   closingQuestion: {
     color:        WHITE,
-    fontSize:     36,
+    fontSize:     90,   // 36 × 2.5 — matches slideTitle scale
     fontWeight:   400,
     lineHeight:   1.45,
     textAlign:    'center',
     marginBottom: 32,
   },
   closingGoldRule: {
-    height:          2,
+    height:          4,   // matches goldDivider
     width:           60,
     backgroundColor: GOLD,
     marginBottom:    32,
@@ -215,7 +215,7 @@ const S = StyleSheet.create({
   closingFollow: {
     color:         WHITE,
     opacity:       0.35,
-    fontSize:      11,
+    fontSize:      24,   // 11 × 2.2 — matches footerUrl scale
     fontWeight:    400,
     textAlign:     'center',
     textTransform: 'uppercase',
@@ -224,7 +224,7 @@ const S = StyleSheet.create({
   },
   closingSub: {
     color:        GOLD,
-    fontSize:     14,
+    fontSize:     32,   // 14 × 2.3 — matches coverSubtitle scale
     fontWeight:   400,
     textAlign:    'center',
     marginBottom: 44,
@@ -233,8 +233,8 @@ const S = StyleSheet.create({
     alignSelf: 'center',
   },
   closingLogoImg: {
-    width:     180,
-    height:    66,   // 2.73:1 matches trimmed dark logo ratio
+    width:     216,   // 180 × 1.2
+    height:    79,    // 66 × 1.2
     objectFit: 'contain',
   },
 })
