@@ -30,6 +30,7 @@ export function parseGenerationMetadata(rawOutput: string): {
   linkedinCaption: string | null
   quote: string | null
   articleTitle: string | null
+  seriesLabel: string | null   // carousel only — e.g. "TAX", "STEP", "INSIGHT"
 } {
   const lines = rawOutput.split('\n')
 
@@ -76,5 +77,6 @@ export function parseGenerationMetadata(rawOutput: string): {
     linkedinCaption: getMeta('LINKEDIN_CAPTION'),
     quote:           getMeta('QUOTE'),
     articleTitle:    getMeta('ARTICLE_TITLE'),
+    seriesLabel:     getMeta('SERIES_LABEL'),
   }
 }

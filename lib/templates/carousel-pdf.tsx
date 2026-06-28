@@ -254,25 +254,29 @@ export type CarouselPDFProps = {
   titleSlide:    string
   slides:        CarouselSlide[]   // last item is the closing slide
   pillar:        string
+  seriesLabel?:  string            // e.g. "TAX", "STEP", "INSIGHT" — from AI output
   quarter?:      string            // retained for API compat, not rendered
   weekNumber?:   number            // retained for API compat, not rendered
   useSwansLogo?: boolean
 }
 
-function CarouselDocument({ theme, titleSlide, slides, pillar, useSwansLogo }: CarouselPDFProps) {
+function CarouselDocument({ theme, titleSlide, slides, pillar, seriesLabel, useSwansLogo }: CarouselPDFProps) {
   const logoSrc       = useSwansLogo ? SWANS_LOGO_PATH : LOGO_PATH
-  const label         = pillarToLabel(pillar)
-  const totalSlides   = slides.length + 1   // cover + all content slides including closing
-  const contentSlides = slides.slice(0, -1)
+  // Badge label: from AI-generated SERIES_LABEL, else pillar fallback
+  const label         = (seriesLabel ?? pillarToLabel(pillar)).toUpperCase()
+  const contentSlides = slides.slice(0, -1)   // everything except the closing slide
   const closingSlide  = slides.length > 0 ? slides[slides.length - 1] : null
+  // Badge counts only the content (insight) slides — cover and closing are excluded
+  const totalInsights = contentSlides.length
 
   return (
     <Document title={theme} author="Coach Sharath">
 
       {/* ── Cover slide ─────────────────────────────────────────────────── */}
-      {/* <Page> sets PDF media box; inner <View> enforces 1080×1080 via yoga */}
+      {/* <Page> sets PDF media box; wrap={false} on inner <View> prevents react-pdf
+          from flowing content onto additional pages, keeping each slide exactly 1080×1080. */}
       <Page size={[SIZE, SIZE]}>
-        <View style={[S.slideCanvas, S.coverCanvas]}>
+        <View style={[S.slideCanvas, S.coverCanvas]} wrap={false}>
 
           {/* Zone A — logo */}
           <View style={[S.logoBox, S.logoMarginBottom]}>
@@ -297,7 +301,7 @@ function CarouselDocument({ theme, titleSlide, slides, pillar, useSwansLogo }: C
 
       {/* ── Content slides ─────────────────────────────────────────────────── */}
       {contentSlides.map((slide, i) => {
-        const slideNum = i + 2   // cover = 1, first content slide = 2
+        const insightNum = i + 1   // 1-indexed; cover and closing not counted
 
         const bodyLines = slide.body
           .split('\n')
@@ -307,7 +311,7 @@ function CarouselDocument({ theme, titleSlide, slides, pillar, useSwansLogo }: C
 
         return (
           <Page key={i} size={[SIZE, SIZE]}>
-            <View style={[S.slideCanvas, S.contentCanvas]}>
+            <View style={[S.slideCanvas, S.contentCanvas]} wrap={false}>
 
               {/* Zone A — logo + badge + divider + title */}
               <View style={S.zoneTop}>
@@ -316,7 +320,7 @@ function CarouselDocument({ theme, titleSlide, slides, pillar, useSwansLogo }: C
                 </View>
                 <View style={S.badge}>
                   <Text style={S.badgeText}>
-                    {label} {slideNum} OF {totalSlides}
+                    {label} {insightNum} OF {totalInsights}
                   </Text>
                 </View>
                 <View style={S.goldDivider} />
@@ -333,7 +337,7 @@ function CarouselDocument({ theme, titleSlide, slides, pillar, useSwansLogo }: C
               {/* Zone C — footer row */}
               <View style={S.zoneBottom}>
                 <Text style={S.footerUrl}>coachsharath.com</Text>
-                <Text style={S.footerPageNum}>{slideNum} / {totalSlides}</Text>
+                <Text style={S.footerPageNum}>{insightNum} / {totalInsights}</Text>
               </View>
 
             </View>
@@ -344,7 +348,7 @@ function CarouselDocument({ theme, titleSlide, slides, pillar, useSwansLogo }: C
       {/* ── Closing slide ─────────────────────────────────────────────────── */}
       {closingSlide && (
         <Page size={[SIZE, SIZE]}>
-          <View style={[S.slideCanvas, S.closingCanvas]}>
+          <View style={[S.slideCanvas, S.closingCanvas]} wrap={false}>
             <Text style={S.closingQuestion}>
               {normalizeIAST(closingSlide.headline)}
             </Text>
@@ -381,7 +385,7 @@ export function parseCarouselSlides(content: string): { titleSlide: string; slid
   }
 
   for (const line of lines) {
-    if (line.match(/^(WORD_COUNT|CORE_INSIGHT|CALLBACK_USED|THREAD_PLANTED|REFERENCES|HASHTAGS|LINKEDIN_CAPTION|QUOTE):/)) continue
+    if (line.match(/^(WORD_COUNT|CORE_INSIGHT|CALLBACK_USED|THREAD_PLANTED|REFERENCES|HASHTAGS|LINKEDIN_CAPTION|QUOTE|SERIES_LABEL):/)) continue
 
     const singleLine = line.match(/^SLIDE\s*\d+\s*\|\s*HEADLINE:\s*(.+?)\s*\|\s*BODY:\s*(.+)/i)
     if (singleLine) {
