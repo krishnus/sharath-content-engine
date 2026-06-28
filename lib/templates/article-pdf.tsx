@@ -271,7 +271,7 @@ function ArticleDocument({
   // Blue header → dark-background logo (1536×1024, 1.5:1); light header → light logo (927×375, 2.47:1)
   const logoSrc     = showHeaderStrip ? DARK_BG_LOGO_PATH : LIGHT_BG_LOGO_PATH
   const logoStyle   = showHeaderStrip
-    ? { ...S.logo, width: 80, height: 53 }   // 1.5:1 fills the dark logo canvas
+    ? { ...S.logo, width: 100, height: 67 }  // 1.5:1 box → renders at 100px wide, matching light logo
     : S.logo                                  // 2.47:1 ≈ light logo aspect ratio
   const titleStyle  = { ...S.articleTitleBase,  color: showHeaderStrip ? '#FFFFFF'    : BRAND_BLUE  }
   const chipStyle   = { ...S.metaChipBase,       color: showHeaderStrip ? BRAND_GOLD   : '#666666'   }
