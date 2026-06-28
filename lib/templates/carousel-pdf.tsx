@@ -67,8 +67,8 @@ const S = StyleSheet.create({
     alignSelf: 'flex-start',
   },
   logoImg: {
-    width:     110,
-    height:    36,
+    width:     126,
+    height:    44,
     objectFit: 'contain',
   },
   // Title zone — flex:1 centres the block vertically between logo and footer
@@ -234,8 +234,8 @@ const S = StyleSheet.create({
     alignSelf: 'center',
   },
   closingLogoImg: {
-    width:     120,
-    height:    40,
+    width:     140,
+    height:    52,
     objectFit: 'contain',
   },
 })
