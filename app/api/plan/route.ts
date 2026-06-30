@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { getAnthropicClient, MODEL } from '@/lib/anthropic/client'
 import { buildThemeProposalPrompt, buildWeekPlanPrompt } from '@/lib/anthropic/prompts'
-import { getForwardPlanWeeks, getQuarter } from '@/lib/utils/helpers'
+import { getForwardPlanWeeks } from '@/lib/utils/helpers'
 import type { PlanSlot } from '@/lib/supabase/types'
 
 export const runtime = 'nodejs'
@@ -119,8 +119,18 @@ export async function POST(req: NextRequest) {
       .eq('id', week.arc_id)
       .single()
 
-    const weekStartDate = new Date() // approximate — sufficient for quarter calc
-    const quarter = getQuarter(weekStartDate)
+    // Compute arc quarter from live_date (13-week quarters, arc-relative not calendar)
+    const { data: settingsRows } = await supabase
+      .from('system_settings')
+      .select('key, value')
+      .eq('key', 'live_date')
+    const liveDateStr = settingsRows?.[0]?.value
+    const daysSinceLive = liveDateStr
+      ? Math.max(0, Math.floor((Date.now() - new Date(liveDateStr).getTime()) / 86400000))
+      : 0
+    const arcQuarterIndex = Math.min(3, Math.floor(Math.floor(daysSinceLive / 7) / 13))
+    const quarter = (['Q1', 'Q2', 'Q3', 'Q4'] as const)[arcQuarterIndex]
+
     const quarterThemeKey = `${quarter.toLowerCase()}_theme` as keyof typeof arc
     const quarterTheme = arc ? String(arc[quarterThemeKey]) : ''
 

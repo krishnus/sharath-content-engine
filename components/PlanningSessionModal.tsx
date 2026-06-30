@@ -149,18 +149,30 @@ export default function PlanningSessionModal({
   useEffect(() => {
     async function checkAndPropose() {
       try {
-        const results = await Promise.all(
-          forwardWeeks.map(fw =>
-            fetch(`/api/weeks/status?weekNumber=${fw.weekNumber}&year=${fw.year}`)
-              .then(r => r.ok ? r.json() : { week: null })
-              .catch(() => ({ week: null }))
-          )
+        const settingsPromise = fetch('/api/settings')
+          .then(r => r.ok ? r.json() : null).catch(() => null)
+        const statusPromises = forwardWeeks.map(fw =>
+          fetch(`/api/weeks/status?weekNumber=${fw.weekNumber}&year=${fw.year}`)
+            .then(r => r.ok ? r.json() : { week: null })
+            .catch(() => ({ week: null }))
         )
-        setWeeks(prev => prev.map((w, i) => ({
-          ...w,
-          existing: results[i]?.week ?? null,
-        })))
-        const firstNewIndex = results.findIndex(r => !r?.week || r.week.status !== 'confirmed')
+        const [settingsRes, ...results] = await Promise.all([settingsPromise, ...statusPromises])
+        // Use arc-relative quarter from settings (13-week quarters from live_date).
+        // Falls back to calendar quarter if settings unavailable.
+        const arcQ: string | null = settingsRes?.derived?.arcQuarter ?? null
+
+        setWeeks(prev => prev.map((w, i) => {
+          const q = arcQ ?? w.quarter
+          return {
+            ...w,
+            quarter: q,
+            quarterTheme: QUARTER_THEMES[q] ?? w.quarterTheme,
+            existing: results[i]?.week ?? null,
+          }
+        }))
+        const firstNewIndex = results.findIndex(
+          (r: { week: { status: string } | null }) => !r?.week || r.week.status !== 'confirmed'
+        )
         if (firstNewIndex >= 0) {
           setCurrentWeekIndex(firstNewIndex)
           proposeThemesForWeek(firstNewIndex)
