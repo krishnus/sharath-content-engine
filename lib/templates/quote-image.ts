@@ -76,61 +76,35 @@ export async function generateQuoteImage(props: QuoteImageProps): Promise<Buffer
       },
       children: [
 
-        // ── Zone A — 5-Swans logo (280×280) + wordmark below, centred ──────
+        // ── Zone A — 5-Swans logo (280×280), centred ────────────────────
         {
           type: 'div',
           props: {
-            style: {
-              display:        'flex',
-              flexDirection:  'column' as const,
-              alignItems:     'center',
-            },
-            children: [
-              // Logo — doubled from 140 to 280
-              {
-                type: 'img',
-                props: {
-                  src:   assets.swansLogo,
-                  style: { width: 280, height: 280, objectFit: 'contain' as const },
-                },
+            style: { display: 'flex', justifyContent: 'center', alignItems: 'center' },
+            children: [{
+              type: 'img',
+              props: {
+                src:   assets.swansLogo,
+                style: { width: 280, height: 280, objectFit: 'contain' as const },
               },
-              // Wordmark — spans same 280px width as the logo.
-              // Light lavender (#A090D0) samples the logo's dominant purple-blue gradient.
-              // fontSize 52 + letterSpacing 6px ≈ 280px for "5-SWANS" in Montserrat 600.
-              {
-                type: 'div',
-                props: {
-                  style: {
-                    width:         280,
-                    marginTop:     14,
-                    fontSize:      52,
-                    fontWeight:    600,
-                    color:         '#A090D0',
-                    letterSpacing: '6px',
-                    textAlign:     'center' as const,
-                    fontFamily:    'Montserrat',
-                  },
-                  children: '5-SWANS',
-                },
-              },
-            ],
+            }],
           },
         },
 
-        // ── Zone B — gold divider + quote text, vertically centred ───────
+        // ── Zone B — gold line · quote · gold line, vertically centred ──
         {
           type: 'div',
           props: {
             style: {
               display:        'flex',
               flexDirection:  'column' as const,
-              justifyContent: 'center',
+              justifyContent: 'center',   // vertically centres the whole block
               flexGrow:       1,
               paddingTop:     48,
               paddingBottom:  48,
             },
             children: [
-              // Accent divider — echoes carousel goldDivider
+              // Gold line above
               {
                 type: 'div',
                 props: {
@@ -142,7 +116,7 @@ export async function generateQuoteImage(props: QuoteImageProps): Promise<Buffer
                   },
                 },
               },
-              // Quote text — no quotation mark glyphs; divider signals the quote
+              // Quote text
               {
                 type: 'div',
                 props: {
@@ -154,6 +128,18 @@ export async function generateQuoteImage(props: QuoteImageProps): Promise<Buffer
                     fontFamily: 'Montserrat',
                   },
                   children: displayQuote,
+                },
+              },
+              // Gold line below
+              {
+                type: 'div',
+                props: {
+                  style: {
+                    width:           60,
+                    height:          3,
+                    backgroundColor: '#C8A04A',
+                    marginTop:       32,
+                  },
                 },
               },
             ],
