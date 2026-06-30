@@ -62,6 +62,7 @@ export interface Post {
   target_audience: string | null
   target_word_count: number | null
   hook_idea: string | null
+  hashtags: string[]
   scheduled_at: string | null
   approved_at: string | null
   created_at: string

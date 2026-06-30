@@ -196,7 +196,11 @@ async function saveDrafts(
     .select('id')
     .single()
 
-  await supabase.from('posts').update({ status: 'draft' }).eq('id', postId)
+  // Persist status + hashtags together so they survive page reloads / regenerations
+  await supabase
+    .from('posts')
+    .update({ status: 'draft', hashtags: meta.hashtags })
+    .eq('id', postId)
 
   return { savedDraftId: newDraft?.id ?? '' }
 }

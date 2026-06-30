@@ -36,7 +36,7 @@ export async function POST(req: NextRequest) {
   const { data: post, error: postError } = await supabase
     .from('posts')
     .select(`
-      id, day, format, status, week_id,
+      id, day, format, status, week_id, hashtags,
       drafts ( id, content, is_original, version ),
       weeks ( id, week_start )
     `)
@@ -101,6 +101,15 @@ export async function POST(req: NextRequest) {
     publishText = mediaRecord.linkedin_caption
   } else {
     publishText = resolvePublishText(meta.content)
+  }
+
+  // Append hashtags from posts.hashtags (persisted on every generation).
+  // The prompts deliberately exclude hashtags from LINKEDIN_CAPTION and post body,
+  // so they must be appended here for all formats. Clamp to LI_MAX_CHARS just in case.
+  const postHashtags: string[] = (post.hashtags as string[] | null) ?? []
+  if (postHashtags.length > 0) {
+    const hashtagStr = postHashtags.join(' ')
+    publishText = (publishText + '\n\n' + hashtagStr).slice(0, LI_MAX_CHARS)
   }
 
   // ── Schedule only ─────────────────────────────────────────────────────

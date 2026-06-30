@@ -25,6 +25,7 @@ type PostData = {
   target_audience: string | null
   target_word_count: number | null
   hook_idea: string | null
+  hashtags: string[]
   week_id: string
   weeks: {
     id: string
@@ -103,8 +104,11 @@ export default function DraftEditorPage() {
   // Saturday market insights — market context that gates generation for market_insights posts
   const [satMarketContext, setSatMarketContext]     = useState('')
 
-  const textareaRef  = useRef<HTMLTextAreaElement>(null)
-  const saveTimerRef = useRef<ReturnType<typeof setTimeout>>()
+  const textareaRef   = useRef<HTMLTextAreaElement>(null)
+  const saveTimerRef  = useRef<ReturnType<typeof setTimeout>>()
+  // Ref so the debounced auto-save always reads the latest hashtags without
+  // requiring them as a useCallback dependency (avoids timer restarts on every tag change).
+  const hashtagsRef   = useRef<string[]>([])
 
   // Load real post data on mount
   useEffect(() => {
@@ -121,6 +125,9 @@ export default function DraftEditorPage() {
         setWordCount(countWords(clean))
         setVersions(json.versions ?? [])
         setActiveVersionId(json.currentVersionId ?? null)
+        // Hashtags are persisted on posts.hashtags — load from DB so they survive reloads
+        const dbHashtags: string[] = json.post?.hashtags ?? []
+        setHashtags(dbHashtags)
         setApproved(json.post?.status === 'approved' || json.post?.status === 'published' || json.post?.status === 'scheduled')
       if (json.post?.status === 'published' && json.post?.linkedin_url) {
         setPublishedUrl(json.post.linkedin_url)
@@ -136,6 +143,9 @@ export default function DraftEditorPage() {
 
   useEffect(() => { setWordCount(countWords(content)) }, [content])
 
+  // Keep ref in sync so debounced auto-save always has the current set
+  useEffect(() => { hashtagsRef.current = hashtags }, [hashtags])
+
   // Auto-save
   const handleContentChange = useCallback((value: string) => {
     setContent(value)
@@ -146,7 +156,8 @@ export default function DraftEditorPage() {
         await fetch('/api/drafts/save', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ postId, content: value }),
+          // Include current hashtags via ref so DB stays in sync if user edited them
+          body: JSON.stringify({ postId, content: value, hashtags: hashtagsRef.current }),
         })
         setHasUnsavedChanges(false)
       } catch { /* silent */ }
@@ -647,7 +658,16 @@ export default function DraftEditorPage() {
                         {tag}
                         {!approved && (
                           <button
-                            onClick={() => setHashtags(prev => prev.filter((_, idx) => idx !== i))}
+                            onClick={() => {
+                              const updated = hashtags.filter((_, idx) => idx !== i)
+                              setHashtags(updated)
+                              // Persist removal immediately — no content change, just hashtags
+                              fetch('/api/drafts/save', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ postId, hashtags: updated }),
+                              }).catch(() => {/* silent */})
+                            }}
                             className="ml-1 text-ink-500 hover:text-red-400 transition-colors"
                           >
                             <X size={9} />
