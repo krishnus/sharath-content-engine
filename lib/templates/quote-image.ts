@@ -57,17 +57,20 @@ export async function generateQuoteImage(props: QuoteImageProps): Promise<Buffer
   const displayQuote = normalizeIAST(quote.length > 180 ? quote.slice(0, 177) + '...' : quote)
 
   // ── 5-Swans finance quote — flat navy canvas, carousel-system design ──────
-  // Same navy (#091E3A) + gold (#C8A04A) palette as carousel and article PDF.
-  // Three zones: logo (A) · divider + quote (B) · footer row (C).
+  // Layout: outer is `position:relative, justifyContent:center` so the single
+  // in-flow child (logo + dividers + quote block) is vertically centred in the
+  // full 1080px canvas.  Zone C (footer) is absolutely anchored to the bottom
+  // so it doesn't shift the centre point of Zone B.
   const financeLayout = {
     type: 'div',
     props: {
       style: {
         width:           1080,
         height:          1080,
+        position:        'relative' as const,
         display:         'flex',
         flexDirection:   'column' as const,
-        justifyContent:  'space-between',
+        justifyContent:  'center',      // centres Zone B in the full canvas
         paddingTop:      80,
         paddingBottom:   80,
         paddingLeft:     80,
@@ -76,35 +79,30 @@ export async function generateQuoteImage(props: QuoteImageProps): Promise<Buffer
       },
       children: [
 
-        // ── Zone A — 5-Swans logo (280×280), centred ────────────────────
-        {
-          type: 'div',
-          props: {
-            style: { display: 'flex', justifyContent: 'center', alignItems: 'center' },
-            children: [{
-              type: 'img',
-              props: {
-                src:   assets.swansLogo,
-                style: { width: 280, height: 280, objectFit: 'contain' as const },
-              },
-            }],
-          },
-        },
-
-        // ── Zone B — gold line · quote · gold line, vertically centred ──
+        // ── Zone B — logo · gold line · quote · gold line (centred in canvas) ──
         {
           type: 'div',
           props: {
             style: {
-              display:        'flex',
-              flexDirection:  'column' as const,
-              justifyContent: 'center',   // vertically centres the whole block
-              flexGrow:       1,
-              paddingTop:     48,
-              paddingBottom:  48,
+              display:       'flex',
+              flexDirection: 'column' as const,
             },
             children: [
-              // Gold line above
+              // 5-Swans logo (280×280), centred horizontally
+              {
+                type: 'div',
+                props: {
+                  style: { display: 'flex', justifyContent: 'center', marginBottom: 48 },
+                  children: [{
+                    type: 'img',
+                    props: {
+                      src:   assets.swansLogo,
+                      style: { width: 280, height: 280, objectFit: 'contain' as const },
+                    },
+                  }],
+                },
+              },
+              // Gold line above quote
               {
                 type: 'div',
                 props: {
@@ -130,7 +128,7 @@ export async function generateQuoteImage(props: QuoteImageProps): Promise<Buffer
                   children: displayQuote,
                 },
               },
-              // Gold line below
+              // Gold line below quote
               {
                 type: 'div',
                 props: {
@@ -146,13 +144,22 @@ export async function generateQuoteImage(props: QuoteImageProps): Promise<Buffer
           },
         },
 
-        // ── Zone C — footer: hairline rule + two-column text row ─────────
+        // ── Zone C — footer: absolutely anchored at bottom ───────────────
+        // position:absolute keeps it out of the flex flow so it doesn't
+        // pull Zone B away from the true vertical centre of the canvas.
         {
           type: 'div',
           props: {
-            style: { display: 'flex', flexDirection: 'column' as const },
+            style: {
+              position: 'absolute' as const,
+              bottom:   80,
+              left:     80,
+              right:    80,
+              display:  'flex',
+              flexDirection: 'column' as const,
+            },
             children: [
-              // Hairline divider (rendered as a thin div — more reliable than CSS border in satori)
+              // Hairline divider
               {
                 type: 'div',
                 props: {
