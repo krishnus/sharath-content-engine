@@ -26,6 +26,7 @@ type PostData = {
   target_word_count: number | null
   hook_idea: string | null
   hashtags: string[]
+  scheduled_at: string | null
   week_id: string
   weeks: {
     id: string
@@ -232,6 +233,17 @@ export default function DraftEditorPage() {
       // LINKEDIN_CAPTION + ARTICLE_TITLE) is already in the DB when we get here.
       // Incrementing the key forces MediaPanel to remount and re-fetch.
       setMediaRefreshKey(k => k + 1)
+
+      // Refresh versions list — the new draft version was saved server-side
+      // during the stream; the client won't know about it until we refetch.
+      try {
+        const refreshRes = await fetch(`/api/posts/${postId}`)
+        if (refreshRes.ok) {
+          const refreshJson = await refreshRes.json()
+          setVersions(refreshJson.versions ?? [])
+          setActiveVersionId(refreshJson.currentVersionId ?? null)
+        }
+      } catch { /* non-critical — versions visible on next load */ }
 
     } catch (err) {
       setGenerateError(err instanceof Error ? err.message : 'Generation failed')
@@ -698,8 +710,16 @@ export default function DraftEditorPage() {
                 format={post.format}
                 weekStart={post.weeks?.week_start ?? new Date().toISOString().slice(0, 10)}
                 approved={approved}
+                postStatus={post.status}
+                scheduledAt={post.scheduled_at ?? undefined}
                 onPublished={(url) => setPublishedUrl(url)}
-                onScheduled={() => {/* handled inside PublishPanel */}}
+                onScheduled={() => {/* status tracked via postStatus prop */}}
+                onStatusReset={() => {
+                  // User cancelled the LinkedIn scheduled post and reset status here.
+                  // Reload post data so status/scheduled_at reflect the reset.
+                  setPost(p => p ? { ...p, status: 'approved', scheduled_at: null } : p)
+                  setApproved(true)
+                }}
               />
 
               {/* Media panel — only for formats that produce media */}

@@ -3,13 +3,13 @@
 import { useState } from 'react'
 import {
   Linkedin, Clock, Send, Eye, Loader2, CheckCircle2,
-  ExternalLink, AlertCircle, X, Trash2, Lock,
+  ExternalLink, AlertCircle, X, Trash2, Lock, RotateCcw,
 } from 'lucide-react'
 import { cn } from '@/lib/utils/helpers'
 
 const DEFAULT_TIMES: Record<string, string> = {
   monday: '07:30', tuesday: '07:30', wednesday: '07:30',
-  thursday: '07:30', friday: '08:30', saturday: '09:30',
+  thursday: '07:30', friday: '07:30', saturday: '07:30',
 }
 
 type Mode = 'schedule' | 'now' | 'preview'
@@ -22,21 +22,28 @@ export default function PublishPanel({
   format,
   weekStart,
   approved,
+  postStatus,
+  scheduledAt: scheduledAtFromDB,
   onPublished,
   onScheduled,
+  onStatusReset,
 }: {
   postId: string
   day: string
   format?: string
   weekStart: string
   approved: boolean
+  postStatus: string
+  scheduledAt?: string
   onPublished: (url: string) => void
   onScheduled: (scheduledAt: string) => void
+  onStatusReset: () => void
 }) {
   const isDocumentPost = DOCUMENT_FORMATS.includes(format ?? '')
 
   const [mode, setMode]                   = useState<Mode>('schedule')
   const [loading, setLoading]             = useState(false)
+  const [resetting, setResetting]         = useState(false)
   const [deleting, setDeleting]           = useState(false)
   const [error, setError]                 = useState<string | null>(null)
   const [done, setDone]                   = useState(false)
@@ -64,6 +71,15 @@ export default function PublishPanel({
     const ist = new Date(new Date(iso).getTime() + 5.5 * 60 * 60 * 1000)
     return ist.toISOString().slice(0, 16)
   })
+
+  // Format a UTC ISO string as "4 Jul, 07:30 IST" for display
+  function formatScheduledTime(isoUtc?: string): string {
+    if (!isoUtc) return ''
+    const ist = new Date(new Date(isoUtc).getTime() + 5.5 * 60 * 60 * 1000)
+    const date = ist.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })
+    const time = ist.toISOString().slice(11, 16)
+    return `${date} at ${time} IST`
+  }
 
   async function handleAction() {
     setLoading(true)
@@ -152,6 +168,30 @@ export default function PublishPanel({
     }
   }
 
+  // Reset status from 'scheduled' back to 'approved' — use when a scheduled
+  // post was cancelled directly on LinkedIn and SCE needs to reflect that.
+  async function handleStatusReset() {
+    setResetting(true)
+    setError(null)
+    try {
+      const res = await fetch(`/api/posts/${postId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'approved' }),
+      })
+      if (!res.ok) {
+        const json = await res.json()
+        throw new Error(json.error ?? 'Reset failed')
+      }
+      setDone(false)
+      onStatusReset()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to reset status')
+    } finally {
+      setResetting(false)
+    }
+  }
+
   // ── Section header ───────────────────────────────────────────────────────
   const SectionHeader = () => (
     <div className="flex items-center gap-2 px-4 py-2.5 bg-ink-800/40 border-b border-ink-800">
@@ -180,7 +220,51 @@ export default function PublishPanel({
     </div>
   ) : null
 
-  // ── Published / scheduled done states ────────────────────────────────────
+  // ── Persistent "scheduled on LinkedIn" state ─────────────────────────────
+  // Shown when postStatus is 'scheduled' and we haven't just scheduled in this session.
+  // This persists across page navigation — user always sees the current schedule state.
+  if (postStatus === 'scheduled' && !done) {
+    return (
+      <div className="border border-ink-800 rounded-xl overflow-hidden">
+        <SectionHeader />
+        <div className="p-4 space-y-3">
+          <div className="flex items-start gap-2 px-3 py-2.5 bg-blue-900/15 border border-blue-700/30 rounded-lg">
+            <Clock size={13} className="text-blue-400 shrink-0 mt-0.5" />
+            <div>
+              <p className="text-xs font-medium text-blue-300">
+                Scheduled on LinkedIn
+              </p>
+              {scheduledAtFromDB && (
+                <p className="text-xs text-ink-400 mt-0.5">
+                  {formatScheduledTime(scheduledAtFromDB)}
+                </p>
+              )}
+            </div>
+          </div>
+
+          <ErrorRow />
+
+          <p className="text-xs text-ink-500 leading-relaxed">
+            LinkedIn will publish this at the scheduled time. If you cancelled it on LinkedIn,
+            use the button below to reset the status here.
+          </p>
+
+          <button
+            onClick={handleStatusReset}
+            disabled={resetting}
+            className="w-full flex items-center justify-center gap-1.5 py-2 rounded-lg border border-ink-700 text-xs text-ink-400 hover:text-cream hover:border-ink-500 transition-colors disabled:opacity-40"
+          >
+            {resetting
+              ? <><Loader2 size={11} className="animate-spin" /> Resetting…</>
+              : <><RotateCcw size={11} /> Cancel & reset status</>
+            }
+          </button>
+        </div>
+      </div>
+    )
+  }
+
+  // ── Published done state ─────────────────────────────────────────────────
   if (done && doneMode === 'now' && publishedUrl) {
     return (
       <div className="border border-ink-800 rounded-xl overflow-hidden">
@@ -209,22 +293,36 @@ export default function PublishPanel({
     )
   }
 
+  // ── Scheduled done state (just scheduled in this session) ────────────────
   if (done && doneMode === 'schedule') {
     return (
       <div className="border border-ink-800 rounded-xl overflow-hidden">
         <SectionHeader />
         <div className="p-4 space-y-3">
-          <div className="flex items-center gap-2 px-3 py-2.5 bg-blue-900/15 border border-blue-700/30 rounded-lg">
-            <Clock size={13} className="text-blue-400 shrink-0" />
-            <p className="text-xs font-medium text-blue-300">
-              Scheduled for {new Date(scheduledAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })} at {scheduledAt.slice(11, 16)} IST
-            </p>
+          <div className="flex items-start gap-2 px-3 py-2.5 bg-blue-900/15 border border-blue-700/30 rounded-lg">
+            <CheckCircle2 size={13} className="text-blue-400 shrink-0 mt-0.5" />
+            <div>
+              <p className="text-xs font-medium text-blue-300">
+                Scheduled on LinkedIn
+              </p>
+              <p className="text-xs text-ink-400 mt-0.5">
+                {new Date(scheduledAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })} at {scheduledAt.slice(11, 16)} IST
+              </p>
+            </div>
           </div>
+          <p className="text-xs text-ink-500 leading-relaxed">
+            LinkedIn will publish this at the scheduled time. You can also find it in your LinkedIn Scheduled posts tab.
+          </p>
+          <ErrorRow />
           <button
-            onClick={() => setDone(false)}
-            className="w-full text-xs text-ink-500 hover:text-ink-300 transition-colors py-1"
+            onClick={handleStatusReset}
+            disabled={resetting}
+            className="w-full flex items-center justify-center gap-1.5 py-2 rounded-lg border border-ink-700 text-xs text-ink-400 hover:text-cream hover:border-ink-500 transition-colors disabled:opacity-40"
           >
-            Change schedule
+            {resetting
+              ? <><Loader2 size={11} className="animate-spin" /> Resetting…</>
+              : <><RotateCcw size={11} /> Cancel & reset status</>
+            }
           </button>
         </div>
       </div>
@@ -401,7 +499,7 @@ export default function PublishPanel({
               ? <><Eye size={14} /> Preview on LinkedIn</>
               : mode === 'now'
                 ? <><Send size={14} /> Publish now</>
-                : <><Clock size={14} /> Schedule post</>
+                : <><Clock size={14} /> Schedule on LinkedIn</>
           }
         </button>
       </div>

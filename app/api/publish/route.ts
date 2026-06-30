@@ -93,7 +93,6 @@ export async function POST(req: NextRequest) {
   }
 
   // ── Resolve publish text ──────────────────────────────────────────────
-  // For media posts, use the AI-drafted caption if available; otherwise smart-truncate
   const meta = parseGenerationMetadata(currentDraft.content)
   let publishText: string
 
@@ -103,24 +102,13 @@ export async function POST(req: NextRequest) {
     publishText = resolvePublishText(meta.content)
   }
 
-  // Append hashtags from posts.hashtags (persisted on every generation).
-  // The prompts deliberately exclude hashtags from LINKEDIN_CAPTION and post body,
-  // so they must be appended here for all formats. Clamp to LI_MAX_CHARS just in case.
   const postHashtags: string[] = (post.hashtags as string[] | null) ?? []
   if (postHashtags.length > 0) {
     const hashtagStr = postHashtags.join(' ')
     publishText = (publishText + '\n\n' + hashtagStr).slice(0, LI_MAX_CHARS)
   }
 
-  // ── Schedule only ─────────────────────────────────────────────────────
-  if (!publishNow && !preview && scheduledAt) {
-    await supabase.from('posts')
-      .update({ status: 'scheduled', scheduled_at: scheduledAt })
-      .eq('id', postId)
-    return NextResponse.json({ scheduled: true, scheduledAt })
-  }
-
-  // ── Get LinkedIn token ────────────────────────────────────────────────
+  // ── Get LinkedIn token (needed for both schedule and immediate publish) ─
   const tokenQuery = userId
     ? supabase.from('linkedin_tokens').select('*').eq('user_id', userId).single()
     : supabase.from('linkedin_tokens').select('*').limit(1).single()
@@ -152,13 +140,23 @@ export async function POST(req: NextRequest) {
     )
   }
 
+  // Validate scheduled time is at least 10 minutes in the future
+  if (scheduledAt && !publishNow && !preview) {
+    const scheduledMs = new Date(scheduledAt).getTime()
+    if (scheduledMs < Date.now() + 10 * 60 * 1000) {
+      return NextResponse.json(
+        { error: 'Scheduled time must be at least 10 minutes in the future.' },
+        { status: 400 }
+      )
+    }
+  }
+
   // ── Promote preview → PUBLIC ──────────────────────────────────────────
   if (promotePreview && linkedinPostId) {
     await deleteLinkedInPost(linkedinPostId, tokenRow.access_token)
 
     let result: { success: boolean; postId?: string; url?: string; error?: string }
 
-    // Re-publish the correct media type at PUBLIC visibility
     if (mediaRecord && mediaRecord.media_type === 'quote_png') {
       const { data: fileData } = await supabase.storage
         .from(STORAGE_BUCKET)
@@ -170,7 +168,6 @@ export async function POST(req: NextRequest) {
         result = await postTextToLinkedIn(publishText, tokenRow.access_token, authorUrn, 'PUBLIC')
       }
     } else if (mediaRecord && (mediaRecord.media_type === 'article_pdf' || mediaRecord.media_type === 'carousel_pdf')) {
-      // Re-upload the PDF as a public document post (preview was text-only)
       const { data: fileData } = await supabase.storage
         .from(STORAGE_BUCKET)
         .download(mediaRecord.storage_path)
@@ -197,12 +194,12 @@ export async function POST(req: NextRequest) {
   }
 
   // ── Publish with media (PDF document or image) ────────────────────────
-  // Images (quote_png) are included in preview too (posted as LOGGED_IN).
-  // PDFs are skipped in preview mode (text-only preview is sufficient for review).
   const isImageMedia = mediaRecord?.media_type === 'quote_png'
+  // For scheduled posts with image media: upload the image now, schedule the post
+  // For document posts: always immediate (can't schedule PDF uploads via LinkedIn API)
+  const isScheduling = !publishNow && !preview && !!scheduledAt
 
   if (mediaRecord && (!preview || isImageMedia)) {
-    // Download file from Supabase Storage
     const { data: fileData, error: dlError } = await supabase.storage
       .from(STORAGE_BUCKET)
       .download(mediaRecord.storage_path)
@@ -219,6 +216,7 @@ export async function POST(req: NextRequest) {
     let result: { success: boolean; postId?: string; url?: string; error?: string }
 
     if (mediaRecord.media_type === 'article_pdf' || mediaRecord.media_type === 'carousel_pdf') {
+      // Document posts: schedule not supported by LinkedIn API — publish immediately
       result = await postDocumentToLinkedIn(
         publishText, mediaRecord.file_name, fileBuffer,
         tokenRow.access_token, authorUrn
@@ -226,7 +224,8 @@ export async function POST(req: NextRequest) {
     } else {
       const imgVisibility = preview ? 'LOGGED_IN' : 'PUBLIC'
       result = await postImageToLinkedIn(
-        publishText, fileBuffer, tokenRow.access_token, authorUrn, imgVisibility
+        publishText, fileBuffer, tokenRow.access_token, authorUrn, imgVisibility,
+        isScheduling ? scheduledAt : undefined
       )
     }
 
@@ -235,6 +234,17 @@ export async function POST(req: NextRequest) {
         await supabase.from('posts').update({ status: 'publish_failed' }).eq('id', postId)
       }
       return NextResponse.json({ error: result.error }, { status: 502 })
+    }
+
+    if (isScheduling && !preview) {
+      await supabase.from('linkedin_posts').insert({
+        post_id: postId, linkedin_post_id: result.postId!,
+        linkedin_url: null, published_at: new Date().toISOString(),
+      })
+      await supabase.from('posts')
+        .update({ status: 'scheduled', scheduled_at: scheduledAt })
+        .eq('id', postId)
+      return NextResponse.json({ scheduled: true, linkedinPostId: result.postId, scheduledAt })
     }
 
     if (!preview) {
@@ -255,15 +265,29 @@ export async function POST(req: NextRequest) {
     })
   }
 
-  // ── Text-only publish (no media attached, or preview mode) ────────────
+  // ── Text-only publish (no media attached, or preview mode for PDF posts) ─
   const visibility = preview ? 'LOGGED_IN' : 'PUBLIC'
-  const result = await postTextToLinkedIn(publishText, tokenRow.access_token, authorUrn, visibility)
+  const result = await postTextToLinkedIn(
+    publishText, tokenRow.access_token, authorUrn, visibility,
+    isScheduling ? scheduledAt : undefined
+  )
 
   if (!result.success) {
     if (!preview) {
       await supabase.from('posts').update({ status: 'publish_failed' }).eq('id', postId)
     }
     return NextResponse.json({ error: result.error }, { status: 502 })
+  }
+
+  if (isScheduling) {
+    await supabase.from('linkedin_posts').insert({
+      post_id: postId, linkedin_post_id: result.postId!,
+      linkedin_url: null, published_at: new Date().toISOString(),
+    })
+    await supabase.from('posts')
+      .update({ status: 'scheduled', scheduled_at: scheduledAt })
+      .eq('id', postId)
+    return NextResponse.json({ scheduled: true, linkedinPostId: result.postId, scheduledAt })
   }
 
   if (!preview) {
@@ -322,8 +346,25 @@ async function postTextToLinkedIn(
   accessToken: string,
   authorUrn: string,
   visibility: 'PUBLIC' | 'LOGGED_IN' | 'CONNECTIONS',
+  scheduledAt?: string,
 ): Promise<{ success: boolean; postId?: string; url?: string; error?: string }> {
   try {
+    const body: Record<string, unknown> = {
+      author:     authorUrn,
+      commentary: content,
+      visibility,
+      distribution: {
+        feedDistribution:               'MAIN_FEED',
+        targetEntities:                 [],
+        thirdPartyDistributionChannels: [],
+      },
+      lifecycleState:            scheduledAt ? 'DRAFT' : 'PUBLISHED',
+      isReshareDisabledByAuthor: false,
+    }
+    if (scheduledAt) {
+      body.scheduledPublishAt = new Date(scheduledAt).getTime()
+    }
+
     const res = await fetch('https://api.linkedin.com/rest/posts', {
       method: 'POST',
       headers: {
@@ -332,18 +373,7 @@ async function postTextToLinkedIn(
         'LinkedIn-Version':         '202604',
         'X-Restli-Protocol-Version': '2.0.0',
       },
-      body: JSON.stringify({
-        author:     authorUrn,
-        commentary: content,
-        visibility,
-        distribution: {
-          feedDistribution:               'MAIN_FEED',
-          targetEntities:                 [],
-          thirdPartyDistributionChannels: [],
-        },
-        lifecycleState:            'PUBLISHED',
-        isReshareDisabledByAuthor: false,
-      }),
+      body: JSON.stringify(body),
     })
 
     if (!res.ok) {
@@ -356,7 +386,8 @@ async function postTextToLinkedIn(
     return {
       success: true,
       postId:  liPostId,
-      url:     liPostId ? `https://www.linkedin.com/feed/update/${liPostId}/` : undefined,
+      // Scheduled posts aren't publicly accessible until they publish
+      url: scheduledAt ? undefined : (liPostId ? `https://www.linkedin.com/feed/update/${liPostId}/` : undefined),
     }
   } catch (err) {
     return { success: false, error: err instanceof Error ? err.message : 'Unknown error' }
@@ -365,6 +396,8 @@ async function postTextToLinkedIn(
 
 
 // ── Document post (PDF) ────────────────────────────────────────────────────
+// LinkedIn does not support scheduling document posts via the REST API —
+// document uploads must be published immediately.
 async function postDocumentToLinkedIn(
   caption: string,
   fileName: string,
@@ -401,9 +434,7 @@ async function postDocumentToLinkedIn(
     // Step 2: Upload the binary
     const uploadRes = await fetch(uploadUrl, {
       method: 'PUT',
-      headers: {
-        'Content-Type': 'application/octet-stream',
-      },
+      headers: { 'Content-Type': 'application/octet-stream' },
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       body: fileBuffer as any,
     })
@@ -466,6 +497,7 @@ async function postImageToLinkedIn(
   accessToken: string,
   authorUrn: string,
   visibility: 'PUBLIC' | 'LOGGED_IN' | 'CONNECTIONS' = 'PUBLIC',
+  scheduledAt?: string,
 ): Promise<{ success: boolean; postId?: string; url?: string; error?: string }> {
   try {
     // Step 1: Initialize image upload
@@ -493,12 +525,10 @@ async function postImageToLinkedIn(
     const uploadUrl  = initData.uploadUrl as string
     const imageUrn   = initData.image as string
 
-    // Step 2: Upload the image
+    // Step 2: Upload the image (happens immediately even for scheduled posts)
     const uploadRes = await fetch(uploadUrl, {
       method: 'PUT',
-      headers: {
-        'Content-Type': 'image/png',
-      },
+      headers: { 'Content-Type': 'image/png' },
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       body: imageBuffer as any,
     })
@@ -507,7 +537,24 @@ async function postImageToLinkedIn(
       return { success: false, error: `Image upload failed (${uploadRes.status}): ${await uploadRes.text()}` }
     }
 
-    // Step 3: Create the post
+    // Step 3: Create the post (DRAFT + scheduledPublishAt for scheduled posts)
+    const body: Record<string, unknown> = {
+      author:     authorUrn,
+      commentary: caption,
+      visibility,
+      distribution: {
+        feedDistribution:               'MAIN_FEED',
+        targetEntities:                 [],
+        thirdPartyDistributionChannels: [],
+      },
+      content: { media: { id: imageUrn } },
+      lifecycleState:            scheduledAt ? 'DRAFT' : 'PUBLISHED',
+      isReshareDisabledByAuthor: false,
+    }
+    if (scheduledAt) {
+      body.scheduledPublishAt = new Date(scheduledAt).getTime()
+    }
+
     const postRes = await fetch('https://api.linkedin.com/rest/posts', {
       method: 'POST',
       headers: {
@@ -516,23 +563,7 @@ async function postImageToLinkedIn(
         'LinkedIn-Version':         '202604',
         'X-Restli-Protocol-Version': '2.0.0',
       },
-      body: JSON.stringify({
-        author:     authorUrn,
-        commentary: caption,
-        visibility,
-        distribution: {
-          feedDistribution:               'MAIN_FEED',
-          targetEntities:                 [],
-          thirdPartyDistributionChannels: [],
-        },
-        content: {
-          media: {
-            id: imageUrn,
-          },
-        },
-        lifecycleState:            'PUBLISHED',
-        isReshareDisabledByAuthor: false,
-      }),
+      body: JSON.stringify(body),
     })
 
     if (!postRes.ok) {
@@ -545,7 +576,7 @@ async function postImageToLinkedIn(
     return {
       success: true,
       postId:  liPostId,
-      url:     liPostId ? `https://www.linkedin.com/feed/update/${liPostId}/` : undefined,
+      url: scheduledAt ? undefined : (liPostId ? `https://www.linkedin.com/feed/update/${liPostId}/` : undefined),
     }
   } catch (err) {
     return { success: false, error: err instanceof Error ? err.message : 'Unknown error' }

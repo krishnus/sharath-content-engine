@@ -17,9 +17,11 @@ export async function GET(req: NextRequest) {
   const supabase = createServiceClient()
   const now = new Date().toISOString()
 
-  const { data: duePosts, error } = await supabase
+  // Left-join linkedin_posts so we can filter out posts already handed to LinkedIn
+  // as native scheduled posts (they have a linkedin_posts record even before publishing).
+  const { data: allDue, error } = await supabase
     .from('posts')
-    .select('id, scheduled_at')
+    .select('id, scheduled_at, linkedin_posts!left(id)')
     .eq('status', 'scheduled')
     .lte('scheduled_at', now)
     .limit(10)
@@ -29,7 +31,17 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
 
-  if (!duePosts?.length) {
+  // Only process legacy DB-only scheduled posts (no linkedin_posts row).
+  // Posts submitted as LinkedIn-native scheduled drafts already have a linkedin_posts
+  // record — LinkedIn publishes those automatically; cron must not double-publish.
+  const duePosts = (allDue ?? []).filter(p => {
+    const lp = p.linkedin_posts
+    if (!lp) return true
+    if (Array.isArray(lp)) return lp.length === 0
+    return false
+  })
+
+  if (!duePosts.length) {
     return NextResponse.json({ published: 0, message: 'No posts due' })
   }
 

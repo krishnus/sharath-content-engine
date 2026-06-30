@@ -102,8 +102,11 @@ export async function PATCH(
     )
   }
 
-  const updates: Record<string, string> = {}
+  const updates: Record<string, string | null> = {}
   if (body.status) updates.status = body.status
+  // Clear scheduled_at when reverting from scheduled state so the cron doesn't
+  // accidentally pick it up and attempt a double-publish.
+  if (body.status === 'approved') updates.scheduled_at = null
 
   const { data, error } = await supabase
     .from('posts')
