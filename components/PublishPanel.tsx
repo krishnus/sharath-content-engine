@@ -81,13 +81,15 @@ export default function PublishPanel({
     return `${date} at ${time} IST`
   }
 
+  const effectiveMode: Mode = mode
+
   async function handleAction() {
     setLoading(true)
     setError(null)
     try {
       const body =
-        mode === 'preview' ? { postId, publishNow: true, preview: true } :
-        mode === 'now'     ? { postId, publishNow: true } :
+        effectiveMode === 'preview' ? { postId, publishNow: true, preview: true } :
+        effectiveMode === 'now'     ? { postId, publishNow: true } :
         {
           postId,
           publishNow:  false,
@@ -102,10 +104,10 @@ export default function PublishPanel({
       const json = await res.json()
       if (!res.ok) throw new Error(json.error ?? `Failed (${res.status})`)
 
-      if (mode === 'preview') {
+      if (effectiveMode === 'preview') {
         setPreviewUrl(json.url)
         setPreviewPostId(json.linkedinPostId ?? null)
-      } else if (mode === 'now') {
+      } else if (effectiveMode === 'now') {
         setPublishedUrl(json.url)
         setDoneMode('now')
         setDone(true)
@@ -455,20 +457,20 @@ export default function PublishPanel({
         )}
 
         {/* Mode content */}
-        {mode === 'preview' && !isDocumentPost && (
+        {effectiveMode === 'preview' && !isDocumentPost && (
           <p className="text-xs text-ink-500 leading-relaxed">
             Posts as <code className="text-ink-300 bg-ink-800 px-1 rounded text-xs">LOGGED_IN</code> —
             only reachable via direct link, never distributed in feeds.
           </p>
         )}
 
-        {isDocumentPost && (
-          <p className="text-xs text-ink-500">
-            Preview unavailable for document posts — LinkedIn document uploads are always public.
+        {isDocumentPost && effectiveMode === 'schedule' && (
+          <p className="text-xs text-ink-500 leading-relaxed">
+            SCE publishes document posts at 8:00 AM IST via scheduled publisher. Set time before 8:00 AM IST.
           </p>
         )}
 
-        {mode === 'schedule' && (
+        {effectiveMode === 'schedule' && (
           <div className="space-y-1.5">
             <label className="text-xs font-medium text-ink-400">Publish time (IST)</label>
             <input
@@ -493,11 +495,11 @@ export default function PublishPanel({
         >
           {loading
             ? <><Loader2 size={14} className="animate-spin" />
-                {mode === 'preview' ? 'Creating preview…' : mode === 'now' ? 'Publishing…' : 'Scheduling…'}
+                {effectiveMode === 'preview' ? 'Creating preview…' : effectiveMode === 'now' ? 'Publishing…' : 'Scheduling…'}
               </>
-            : mode === 'preview'
+            : effectiveMode === 'preview'
               ? <><Eye size={14} /> Preview on LinkedIn</>
-              : mode === 'now'
+              : effectiveMode === 'now'
                 ? <><Send size={14} /> Publish now</>
                 : <><Clock size={14} /> Schedule on LinkedIn</>
           }

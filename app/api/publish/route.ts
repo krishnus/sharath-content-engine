@@ -193,13 +193,27 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ published: true, url: result.url })
   }
 
-  // ── Publish with media (PDF document or image) ────────────────────────
-  const isImageMedia = mediaRecord?.media_type === 'quote_png'
-  // For scheduled posts with image media: upload the image now, schedule the post
-  // For document posts: always immediate (can't schedule PDF uploads via LinkedIn API)
+  const isDocumentMedia = mediaRecord?.media_type === 'article_pdf' || mediaRecord?.media_type === 'carousel_pdf'
+  const isImageMedia    = mediaRecord?.media_type === 'quote_png'
+  // Scheduling is only meaningful for text and image posts.
+  // LinkedIn's API does not support scheduling document (PDF) uploads —
+  // postDocumentToLinkedIn always publishes immediately.
   const isScheduling = !publishNow && !preview && !!scheduledAt
 
-  if (mediaRecord && (!preview || isImageMedia)) {
+  // ── Document post (PDF) — Vercel Cron scheduling, immediate LinkedIn publish ──
+  // LinkedIn REST API does not support scheduling document uploads (lifecycleState:'DRAFT'
+  // is unsupported for PDFs). Instead: save to DB when scheduling; Vercel Cron picks it
+  // up at 2:30 AM UTC (8:00 AM IST) and calls this route again with publishNow:true.
+  if (isDocumentMedia && mediaRecord) {
+    // Schedule path: just persist to DB, no LinkedIn API call yet.
+    if (isScheduling) {
+      await supabase.from('posts')
+        .update({ status: 'scheduled', scheduled_at: scheduledAt })
+        .eq('id', postId)
+      return NextResponse.json({ scheduled: true, scheduledAt })
+    }
+
+    // Publish path (manual "Now" or Vercel Cron): upload and post to LinkedIn.
     const { data: fileData, error: dlError } = await supabase.storage
       .from(STORAGE_BUCKET)
       .download(mediaRecord.storage_path)
@@ -212,22 +226,50 @@ export async function POST(req: NextRequest) {
     }
 
     const fileBuffer = Buffer.from(await fileData.arrayBuffer())
+    const result = await postDocumentToLinkedIn(
+      publishText, mediaRecord.file_name, fileBuffer,
+      tokenRow.access_token, authorUrn
+    )
 
-    let result: { success: boolean; postId?: string; url?: string; error?: string }
+    if (!result.success) {
+      await supabase.from('posts').update({ status: 'publish_failed' }).eq('id', postId)
+      return NextResponse.json({ error: result.error }, { status: 502 })
+    }
 
-    if (mediaRecord.media_type === 'article_pdf' || mediaRecord.media_type === 'carousel_pdf') {
-      // Document posts: schedule not supported by LinkedIn API — publish immediately
-      result = await postDocumentToLinkedIn(
-        publishText, mediaRecord.file_name, fileBuffer,
-        tokenRow.access_token, authorUrn
-      )
-    } else {
-      const imgVisibility = preview ? 'LOGGED_IN' : 'PUBLIC'
-      result = await postImageToLinkedIn(
-        publishText, fileBuffer, tokenRow.access_token, authorUrn, imgVisibility,
-        isScheduling ? scheduledAt : undefined
+    await supabase.from('linkedin_posts').insert({
+      post_id: postId, linkedin_post_id: result.postId!,
+      linkedin_url: result.url ?? null, published_at: new Date().toISOString(),
+    })
+    await supabase.from('posts').update({ status: 'published' }).eq('id', postId)
+
+    return NextResponse.json({
+      published:      true,
+      url:            result.url,
+      linkedinPostId: result.postId,
+      hasMedia:       true,
+      mediaType:      mediaRecord.media_type,
+    })
+  }
+
+  // ── Image post (quote_png) — supports scheduling ───────────────────────
+  if (isImageMedia && mediaRecord && (!preview || isImageMedia)) {
+    const { data: fileData, error: dlError } = await supabase.storage
+      .from(STORAGE_BUCKET)
+      .download(mediaRecord.storage_path)
+
+    if (dlError || !fileData) {
+      return NextResponse.json(
+        { error: `Could not download media file: ${dlError?.message}` },
+        { status: 500 }
       )
     }
+
+    const fileBuffer = Buffer.from(await fileData.arrayBuffer())
+    const imgVisibility = preview ? 'LOGGED_IN' : 'PUBLIC'
+    const result = await postImageToLinkedIn(
+      publishText, fileBuffer, tokenRow.access_token, authorUrn, imgVisibility,
+      isScheduling ? scheduledAt : undefined
+    )
 
     if (!result.success) {
       if (!preview) {
@@ -236,7 +278,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: result.error }, { status: 502 })
     }
 
-    if (isScheduling && !preview) {
+    if (isScheduling) {
       await supabase.from('linkedin_posts').insert({
         post_id: postId, linkedin_post_id: result.postId!,
         linkedin_url: null, published_at: new Date().toISOString(),
@@ -265,7 +307,7 @@ export async function POST(req: NextRequest) {
     })
   }
 
-  // ── Text-only publish (no media attached, or preview mode for PDF posts) ─
+  // ── Text-only publish (no media attached, or preview of a document post) ─
   const visibility = preview ? 'LOGGED_IN' : 'PUBLIC'
   const result = await postTextToLinkedIn(
     publishText, tokenRow.access_token, authorUrn, visibility,
