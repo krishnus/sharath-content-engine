@@ -10,7 +10,7 @@ import {
   CheckCircle2, Send, PenLine, Database,
 } from 'lucide-react'
 import Link from 'next/link'
-import { cn, PILLAR_LABELS, FORMAT_LABELS, getQuarter } from '@/lib/utils/helpers'
+import { cn, PILLAR_LABELS, FORMAT_LABELS } from '@/lib/utils/helpers'
 import SaturdayInsightsModal from '@/components/SaturdayInsightsModal'
 
 // Parse YYYY-MM-DD safely without UTC shift
@@ -83,6 +83,25 @@ const QUARTER_THEMES: Record<string, string> = {
   Q4: 'The Integration — wisdom, legacy, what the whole journey means',
 }
 
+// Arc-quarter colours mirror the Story Arc page for visual consistency
+const QUARTER_COLORS: Record<string, string> = {
+  Q1: 'text-violet-400',
+  Q2: 'text-amber-400',
+  Q3: 'text-emerald-400',
+  Q4: 'text-blue-400',
+}
+
+// Compute arc-relative quarter for any week given the live_date.
+// Each arc quarter = 13 weeks from live_date (not calendar quarters).
+function getArcQuarter(weekStartStr: string, liveDateStr: string | null): string {
+  if (!liveDateStr) return 'Q1'
+  const liveMs = new Date(`${liveDateStr}T00:00:00`).getTime()
+  const weekMs = new Date(`${weekStartStr}T00:00:00`).getTime()
+  const daysSinceLive = Math.max(0, Math.floor((weekMs - liveMs) / 86400000))
+  const idx = Math.min(3, Math.floor(Math.floor(daysSinceLive / 7) / 13))
+  return (['Q1', 'Q2', 'Q3', 'Q4'] as const)[idx]
+}
+
 // ── Style maps ──────────────────────────────────────────────────────────
 const PILLAR_TAG: Record<string, string> = {
   vedic_leadership:        'bg-violet-900/50 text-violet-300',
@@ -118,6 +137,7 @@ export default function CalendarPage() {
   const [windowOffset, setWindowOffset]     = useState(0)
   const [weeks, setWeeks]                   = useState<WeekSlot[]>([])
   const [arcThemes, setArcThemes]           = useState<Record<string, string>>({})
+  const [liveDate, setLiveDate]             = useState<string | null>(null)
   const [loading, setLoading]               = useState(true)
   const [error, setError]                   = useState<string | null>(null)
   const [refreshKey, setRefreshKey]         = useState(0)
@@ -169,6 +189,7 @@ export default function CalendarPage() {
       }))
       setWeeks(normalised)
       setArcThemes(json.arcThemes ?? {})
+      setLiveDate(json.liveDate ?? null)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load calendar')
     } finally {
@@ -207,7 +228,7 @@ export default function CalendarPage() {
     setCustomTheme('')
     setUseCustom(false)
 
-    const q = week.quarter ?? getQuarter(parseDateStr(week.week_start))
+    const q = week.quarter ?? getArcQuarter(week.week_start, liveDate)
     try {
       const res = await fetch('/api/plan', {
         method: 'POST',
@@ -217,7 +238,7 @@ export default function CalendarPage() {
           weekNumber:   week.week_number,
           year:         week.year,
           quarter:      q,
-          quarterTheme: QUARTER_THEMES[q] ?? '',
+          quarterTheme: arcThemes[q] ?? QUARTER_THEMES[q] ?? '',
         }),
       })
       if (!res.ok) throw new Error(`Theme proposal failed (${res.status})`)
@@ -238,7 +259,7 @@ export default function CalendarPage() {
     setPickerStep('generating')
     setPickerError(null)
     try {
-      const q = pickerWeek.quarter ?? getQuarter(parseDateStr(pickerWeek.week_start))
+      const q = pickerWeek.quarter ?? getArcQuarter(pickerWeek.week_start, liveDate)
       // Create or upsert the week
       const createRes = await fetch('/api/weeks', {
         method: 'POST',
@@ -415,6 +436,8 @@ export default function CalendarPage() {
                 prevWeekNumber={getPrevWeekNumber(wi)}
                 todayStr={todayStr}
                 genPlanLoading={genPlanLoading}
+                liveDate={liveDate}
+                arcThemes={arcThemes}
                 onOpenPicker={openThemePicker}
                 onGeneratePlan={generatePlanForWeek}
                 onClickPost={(post, postDate) => setDrawer({ post, week, postDate })}
@@ -471,6 +494,8 @@ export default function CalendarPage() {
           useCustom={useCustom}
           error={pickerError}
           incomingThread={getIncomingThread(displayWeeks.findIndex(w => w.week_start === pickerWeek.week_start))}
+          liveDate={liveDate}
+          arcThemes={arcThemes}
           onSelectTheme={t => { setSelectedTheme(t); setUseCustom(false) }}
           onCustomTheme={v => { setCustomTheme(v); setUseCustom(v.trim().length > 0); setSelectedTheme(null) }}
           onRefreshProposals={() => openThemePicker(pickerWeek)}
@@ -493,7 +518,7 @@ export default function CalendarPage() {
 // ── WeekBlock ────────────────────────────────────────────────────────────
 function WeekBlock({
   week, weekIndex, incomingThread, prevWeekNumber, todayStr,
-  genPlanLoading, onOpenPicker, onGeneratePlan, onClickPost, onSaturdayModal,
+  genPlanLoading, liveDate, arcThemes, onOpenPicker, onGeneratePlan, onClickPost, onSaturdayModal,
 }: {
   week: WeekSlot
   weekIndex: number
@@ -501,11 +526,16 @@ function WeekBlock({
   prevWeekNumber: number
   todayStr: string
   genPlanLoading: string | null
+  liveDate: string | null
+  arcThemes: Record<string, string>
   onOpenPicker: (week: WeekSlot) => void
   onGeneratePlan: (week: WeekSlot) => void
   onClickPost: (post: SlotPost, postDate: Date) => void
   onSaturdayModal: (data: SatModalData) => void
 }) {
+  // Arc-relative quarter for this week (used for display and passed to DayCell)
+  const arcQ = week.quarter ?? getArcQuarter(week.week_start, liveDate)
+
   // Classify week state
   const hasTheme  = !!week.theme
   const hasPosts  = week.posts.length > 0
@@ -534,6 +564,12 @@ function WeekBlock({
           <span className="text-xs font-semibold text-cream">Wk {week.week_number}</span>
           <span className="text-xs text-ink-400">
             {format(weekMonday, 'd MMM')}–{format(weekSaturday, 'd MMM')}
+          </span>
+          <span className={cn('text-[10px] font-semibold leading-none', QUARTER_COLORS[arcQ] ?? 'text-ink-500')}>
+            {arcQ}
+          </span>
+          <span className="text-[9px] text-ink-600 leading-none truncate">
+            {(arcThemes[arcQ] ?? QUARTER_THEMES[arcQ] ?? '').split(' — ')[0].replace('The ', '')}
           </span>
           {isCurrent && (
             <span className="text-xs bg-blue-900/60 text-blue-400 px-1.5 py-0.5 rounded mt-0.5 w-fit">
@@ -623,6 +659,7 @@ function WeekBlock({
               locked={locked}
               hasTheme={hasTheme}
               week={week}
+              arcQ={arcQ}
               onClick={() => { if (post) onClickPost(post, postDate) }}
               onSaturdayModal={onSaturdayModal}
             />
@@ -635,7 +672,7 @@ function WeekBlock({
 
 // ── DayCell ──────────────────────────────────────────────────────────────
 function DayCell({
-  dayName, post, postDate, isToday, locked, hasTheme, week, onClick, onSaturdayModal,
+  dayName, post, postDate, isToday, locked, hasTheme, week, arcQ, onClick, onSaturdayModal,
 }: {
   dayName: string
   post: SlotPost | null
@@ -644,6 +681,7 @@ function DayCell({
   locked: boolean
   hasTheme: boolean
   week: WeekSlot
+  arcQ: string
   onClick: () => void
   onSaturdayModal: (data: SatModalData) => void
 }) {
@@ -674,7 +712,7 @@ function DayCell({
             postId:          post.id,
             weekId:          week.id!,
             weekTheme:       week.theme ?? '',
-            quarter:         week.quarter ?? getQuarter(postDate),
+            quarter:         week.quarter ?? arcQ,
             openThread:      week.open_thread,
             targetWordCount: post.target_word_count ?? 220,
           })
@@ -799,7 +837,7 @@ function PostDrawer({ entry, onClose }: { entry: DrawerPost; onClose: () => void
 // ── ThemePickerModal ──────────────────────────────────────────────────────
 function ThemePickerModal({
   week, step, proposals, selectedTheme, customTheme, useCustom, error,
-  incomingThread, onSelectTheme, onCustomTheme, onRefreshProposals, onConfirm, onClose,
+  incomingThread, liveDate, arcThemes, onSelectTheme, onCustomTheme, onRefreshProposals, onConfirm, onClose,
 }: {
   week: WeekSlot
   step: 'loading' | 'proposals' | 'generating' | 'done'
@@ -809,6 +847,8 @@ function ThemePickerModal({
   useCustom: boolean
   error: string | null
   incomingThread: string | null
+  liveDate: string | null
+  arcThemes: Record<string, string>
   onSelectTheme: (t: ThemeOption) => void
   onCustomTheme: (v: string) => void
   onRefreshProposals: () => void
@@ -819,7 +859,7 @@ function ThemePickerModal({
   const confirmed = useCustom ? customTheme.trim().length > 0 : selectedTheme !== null
 
   const weekMonday = parseDateStr(week.week_start)
-  const q = week.quarter ?? getQuarter(weekMonday)
+  const q = week.quarter ?? getArcQuarter(week.week_start, liveDate)
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
@@ -832,7 +872,11 @@ function ThemePickerModal({
             <p className="text-xs text-ink-500 uppercase tracking-wider font-medium">Week {week.week_number}</p>
             <h2 className="font-display text-lg text-cream mt-0.5">Choose theme</h2>
             <p className="text-xs text-ink-400 mt-0.5">
-              {q} · {format(weekMonday, 'd MMM')} – {format(addDays(weekMonday, 5), 'd MMM yyyy')}
+              <span className={QUARTER_COLORS[q] ?? ''}>{q}</span>
+              {' · '}
+              {(arcThemes[q] ?? QUARTER_THEMES[q] ?? '').split(' — ')[0]}
+              {' · '}
+              {format(weekMonday, 'd MMM')} – {format(addDays(weekMonday, 5), 'd MMM yyyy')}
             </p>
           </div>
           <button onClick={onClose} className="btn-ghost p-1.5 mt-0.5"><X size={15} /></button>

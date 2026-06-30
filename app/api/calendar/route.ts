@@ -71,13 +71,12 @@ export async function GET(req: NextRequest) {
     }
   })
 
-  // Arc themes for the centre week's year (for theme proposal calls)
+  // Arc themes + live_date fetched in parallel (for theme proposals and arc-quarter display)
   const centreYear = slots[3].year
-  const { data: arc } = await supabase
-    .from('annual_arcs')
-    .select('q1_theme, q2_theme, q3_theme, q4_theme')
-    .eq('year', centreYear)
-    .maybeSingle()
+  const [{ data: arc }, { data: settingsRow }] = await Promise.all([
+    supabase.from('annual_arcs').select('q1_theme, q2_theme, q3_theme, q4_theme').eq('year', centreYear).maybeSingle(),
+    supabase.from('system_settings').select('value').eq('key', 'live_date').maybeSingle(),
+  ])
 
   const arcThemes: Record<string, string> = {
     Q1: arc?.q1_theme ?? 'The Awakening',
@@ -85,6 +84,7 @@ export async function GET(req: NextRequest) {
     Q3: arc?.q3_theme ?? 'The Becoming',
     Q4: arc?.q4_theme ?? 'The Integration',
   }
+  const liveDate: string | null = settingsRow?.value ?? null
 
-  return NextResponse.json({ weeks: result, arcThemes })
+  return NextResponse.json({ weeks: result, arcThemes, liveDate })
 }
