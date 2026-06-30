@@ -15,6 +15,8 @@ Font.register({
 })
 Font.register({ family: 'NotoDevanagari', src: FONT_PATHS.devanagari })
 
+Font.registerHyphenationCallback(word => [word])
+
 // ── Canvas: exactly 1080×1080 pt (1:1 square) ──────────────────────────────
 // <Page size={[SIZE, SIZE]}> sets the PDF media box.
 // The root <View> inside each page uses width+height+overflow:'hidden' so that

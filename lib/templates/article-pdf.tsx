@@ -19,6 +19,8 @@ Font.register({
   src: FONT_PATHS.devanagari,
 })
 
+Font.registerHyphenationCallback(word => [word])
+
 const ARTICLE_STRIP_BG  = '#091e3a'        // matches carousel NAVY — header + footer band
 
 // Footer text colours
