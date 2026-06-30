@@ -57,10 +57,14 @@ export async function generateQuoteImage(props: QuoteImageProps): Promise<Buffer
   const displayQuote = normalizeIAST(quote.length > 180 ? quote.slice(0, 177) + '...' : quote)
 
   // ── 5-Swans finance quote — flat navy canvas, carousel-system design ──────
-  // Layout: outer is `position:relative, justifyContent:center` so the single
-  // in-flow child (logo + dividers + quote block) is vertically centred in the
-  // full 1080px canvas.  Zone C (footer) is absolutely anchored to the bottom
-  // so it doesn't shift the centre point of Zone B.
+  // Layout strategy:
+  //   Zone A (logo): position:absolute, top:80 — sits at the top without
+  //                  participating in the flex flow.
+  //   Zone B (gold line + quote + gold line): the ONLY in-flow flex child.
+  //                  Outer uses justifyContent:center so Zone B's midpoint
+  //                  lands exactly at y=540 (the geometric centre of 1080px).
+  //   Zone C (footer): position:absolute, bottom:80 — anchored to the bottom
+  //                    without displacing Zone B.
   const financeLayout = {
     type: 'div',
     props: {
@@ -70,16 +74,38 @@ export async function generateQuoteImage(props: QuoteImageProps): Promise<Buffer
         position:        'relative' as const,
         display:         'flex',
         flexDirection:   'column' as const,
-        justifyContent:  'center',      // centres Zone B in the full canvas
-        paddingTop:      80,
-        paddingBottom:   80,
+        justifyContent:  'center',   // centres the sole in-flow child (Zone B) at y=540
         paddingLeft:     80,
         paddingRight:    80,
         backgroundColor: '#091E3A',
       },
       children: [
 
-        // ── Zone B — logo · gold line · quote · gold line (centred in canvas) ──
+        // ── Zone A — 5-Swans logo, absolutely positioned at top ──────────
+        {
+          type: 'div',
+          props: {
+            style: {
+              position:       'absolute' as const,
+              top:            80,
+              left:           0,
+              right:          0,
+              display:        'flex',
+              justifyContent: 'center',
+            },
+            children: [{
+              type: 'img',
+              props: {
+                src:   assets.swansLogo,
+                style: { width: 280, height: 280, objectFit: 'contain' as const },
+              },
+            }],
+          },
+        },
+
+        // ── Zone B — gold line · quote · gold line, centred at y=540 ────
+        // This is the only in-flow child; justifyContent:center on the outer
+        // places Zone B's midpoint at exactly half the canvas height (540px).
         {
           type: 'div',
           props: {
@@ -88,20 +114,6 @@ export async function generateQuoteImage(props: QuoteImageProps): Promise<Buffer
               flexDirection: 'column' as const,
             },
             children: [
-              // 5-Swans logo (280×280), centred horizontally
-              {
-                type: 'div',
-                props: {
-                  style: { display: 'flex', justifyContent: 'center', marginBottom: 48 },
-                  children: [{
-                    type: 'img',
-                    props: {
-                      src:   assets.swansLogo,
-                      style: { width: 280, height: 280, objectFit: 'contain' as const },
-                    },
-                  }],
-                },
-              },
               // Gold line above quote
               {
                 type: 'div',

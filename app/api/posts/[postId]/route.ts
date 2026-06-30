@@ -41,16 +41,21 @@ export async function GET(
   const nonOriginals  = drafts?.filter((d: { is_original: boolean }) => !d.is_original) ?? []
   const currentDraft  = nonOriginals[nonOriginals.length - 1] ?? originalDraft
 
-  // Parse quote/caption suggestions from original draft (never auto-saved, keeps all metadata)
+  // Parse quote/caption suggestions — prefer the current (most recently generated) draft so
+  // that regenerating post content immediately reflects in MediaPanel without requiring a
+  // manual "Regen" click. Fall back to the original draft (never auto-saved, keeps all
+  // metadata) for posts that have been edited and had metadata stripped.
   const originalContent = originalDraft?.content ?? ''
+  const currentContent  = currentDraft?.content  ?? ''
   // Normalise lines so "**KEY:** value" parses the same as "KEY: value"
   const normLine = (l: string) => l.replace(/^\*+\s*/, '').replace(/\*+\s*:/g, ':')
-  const getMetaField = (key: string): string | null => {
-    const line = originalContent.split('\n').find((l: string) => normLine(l).startsWith(`${key}:`))
+  const findMeta = (content: string, key: string): string | null => {
+    const line = content.split('\n').find((l: string) => normLine(l).startsWith(`${key}:`))
     if (!line) return null
-    // Strip any trailing bold markers that appear after the colon (e.g. "**QUOTE:** text" → "text")
     return normLine(line).slice(key.length + 1).replace(/^\*+\s*/, '').trim() || null
   }
+  const getMetaField = (key: string): string | null =>
+    findMeta(currentContent, key) ?? findMeta(originalContent, key)
 
   return NextResponse.json({
     post,
