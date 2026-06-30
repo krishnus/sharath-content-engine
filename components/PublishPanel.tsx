@@ -222,9 +222,8 @@ export default function PublishPanel({
     </div>
   ) : null
 
-  // ── Persistent "scheduled on LinkedIn" state ─────────────────────────────
-  // Shown when postStatus is 'scheduled' and we haven't just scheduled in this session.
-  // This persists across page navigation — user always sees the current schedule state.
+  // ── Persistent "scheduled" state ─────────────────────────────────────────
+  // Shown when postStatus is 'scheduled' on mount (survives page navigation).
   if (postStatus === 'scheduled' && !done) {
     return (
       <div className="border border-ink-800 rounded-xl overflow-hidden">
@@ -233,9 +232,7 @@ export default function PublishPanel({
           <div className="flex items-start gap-2 px-3 py-2.5 bg-blue-900/15 border border-blue-700/30 rounded-lg">
             <Clock size={13} className="text-blue-400 shrink-0 mt-0.5" />
             <div>
-              <p className="text-xs font-medium text-blue-300">
-                Scheduled on LinkedIn
-              </p>
+              <p className="text-xs font-medium text-blue-300">Queued for publishing</p>
               {scheduledAtFromDB && (
                 <p className="text-xs text-ink-400 mt-0.5">
                   {formatScheduledTime(scheduledAtFromDB)}
@@ -247,8 +244,7 @@ export default function PublishPanel({
           <ErrorRow />
 
           <p className="text-xs text-ink-500 leading-relaxed">
-            LinkedIn will publish this at the scheduled time. If you cancelled it on LinkedIn,
-            use the button below to reset the status here.
+            SCE will publish this at 8:00 AM IST on the scheduled date.
           </p>
 
           <button
@@ -304,16 +300,14 @@ export default function PublishPanel({
           <div className="flex items-start gap-2 px-3 py-2.5 bg-blue-900/15 border border-blue-700/30 rounded-lg">
             <CheckCircle2 size={13} className="text-blue-400 shrink-0 mt-0.5" />
             <div>
-              <p className="text-xs font-medium text-blue-300">
-                Scheduled on LinkedIn
-              </p>
+              <p className="text-xs font-medium text-blue-300">Queued for publishing</p>
               <p className="text-xs text-ink-400 mt-0.5">
                 {new Date(scheduledAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })} at {scheduledAt.slice(11, 16)} IST
               </p>
             </div>
           </div>
           <p className="text-xs text-ink-500 leading-relaxed">
-            LinkedIn will publish this at the scheduled time. You can also find it in your LinkedIn Scheduled posts tab.
+            SCE will publish this at 8:00 AM IST on the scheduled date.
           </p>
           <ErrorRow />
           <button
@@ -464,9 +458,9 @@ export default function PublishPanel({
           </p>
         )}
 
-        {isDocumentPost && effectiveMode === 'schedule' && (
+        {effectiveMode === 'schedule' && (
           <p className="text-xs text-ink-500 leading-relaxed">
-            SCE publishes document posts at 8:00 AM IST via scheduled publisher. Set time before 8:00 AM IST.
+            SCE publishes at 8:00 AM IST on the scheduled date. Set time before 8:00 AM IST.
           </p>
         )}
 

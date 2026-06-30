@@ -140,17 +140,6 @@ export async function POST(req: NextRequest) {
     )
   }
 
-  // Validate scheduled time is at least 10 minutes in the future
-  if (scheduledAt && !publishNow && !preview) {
-    const scheduledMs = new Date(scheduledAt).getTime()
-    if (scheduledMs < Date.now() + 10 * 60 * 1000) {
-      return NextResponse.json(
-        { error: 'Scheduled time must be at least 10 minutes in the future.' },
-        { status: 400 }
-      )
-    }
-  }
-
   // ── Promote preview → PUBLIC ──────────────────────────────────────────
   if (promotePreview && linkedinPostId) {
     await deleteLinkedInPost(linkedinPostId, tokenRow.access_token)
@@ -195,25 +184,20 @@ export async function POST(req: NextRequest) {
 
   const isDocumentMedia = mediaRecord?.media_type === 'article_pdf' || mediaRecord?.media_type === 'carousel_pdf'
   const isImageMedia    = mediaRecord?.media_type === 'quote_png'
-  // Scheduling is only meaningful for text and image posts.
-  // LinkedIn's API does not support scheduling document (PDF) uploads —
-  // postDocumentToLinkedIn always publishes immediately.
-  const isScheduling = !publishNow && !preview && !!scheduledAt
 
-  // ── Document post (PDF) — Vercel Cron scheduling, immediate LinkedIn publish ──
-  // LinkedIn REST API does not support scheduling document uploads (lifecycleState:'DRAFT'
-  // is unsupported for PDFs). Instead: save to DB when scheduling; Vercel Cron picks it
-  // up at 2:30 AM UTC (8:00 AM IST) and calls this route again with publishNow:true.
+  // ── Universal schedule path — all formats use Vercel Cron ─────────────
+  // LinkedIn REST API returns 422 for scheduledPublishAt on posts with media
+  // attachments and is unreliable for scheduling in general. All scheduling
+  // goes through DB + Vercel Cron (2:30 AM UTC / 8:00 AM IST daily).
+  if (!publishNow && !preview && scheduledAt) {
+    await supabase.from('posts')
+      .update({ status: 'scheduled', scheduled_at: scheduledAt })
+      .eq('id', postId)
+    return NextResponse.json({ scheduled: true, scheduledAt })
+  }
+
+  // ── Document post (PDF) — publish immediately ──────────────────────────
   if (isDocumentMedia && mediaRecord) {
-    // Schedule path: just persist to DB, no LinkedIn API call yet.
-    if (isScheduling) {
-      await supabase.from('posts')
-        .update({ status: 'scheduled', scheduled_at: scheduledAt })
-        .eq('id', postId)
-      return NextResponse.json({ scheduled: true, scheduledAt })
-    }
-
-    // Publish path (manual "Now" or Vercel Cron): upload and post to LinkedIn.
     const { data: fileData, error: dlError } = await supabase.storage
       .from(STORAGE_BUCKET)
       .download(mediaRecord.storage_path)
@@ -251,8 +235,8 @@ export async function POST(req: NextRequest) {
     })
   }
 
-  // ── Image post (quote_png) — supports scheduling ───────────────────────
-  if (isImageMedia && mediaRecord && (!preview || isImageMedia)) {
+  // ── Image post (quote_png) — publish immediately ───────────────────────
+  if (isImageMedia && mediaRecord) {
     const { data: fileData, error: dlError } = await supabase.storage
       .from(STORAGE_BUCKET)
       .download(mediaRecord.storage_path)
@@ -267,8 +251,7 @@ export async function POST(req: NextRequest) {
     const fileBuffer = Buffer.from(await fileData.arrayBuffer())
     const imgVisibility = preview ? 'LOGGED_IN' : 'PUBLIC'
     const result = await postImageToLinkedIn(
-      publishText, fileBuffer, tokenRow.access_token, authorUrn, imgVisibility,
-      isScheduling ? scheduledAt : undefined
+      publishText, fileBuffer, tokenRow.access_token, authorUrn, imgVisibility
     )
 
     if (!result.success) {
@@ -276,17 +259,6 @@ export async function POST(req: NextRequest) {
         await supabase.from('posts').update({ status: 'publish_failed' }).eq('id', postId)
       }
       return NextResponse.json({ error: result.error }, { status: 502 })
-    }
-
-    if (isScheduling) {
-      await supabase.from('linkedin_posts').insert({
-        post_id: postId, linkedin_post_id: result.postId!,
-        linkedin_url: null, published_at: new Date().toISOString(),
-      })
-      await supabase.from('posts')
-        .update({ status: 'scheduled', scheduled_at: scheduledAt })
-        .eq('id', postId)
-      return NextResponse.json({ scheduled: true, linkedinPostId: result.postId, scheduledAt })
     }
 
     if (!preview) {
@@ -310,8 +282,7 @@ export async function POST(req: NextRequest) {
   // ── Text-only publish (no media attached, or preview of a document post) ─
   const visibility = preview ? 'LOGGED_IN' : 'PUBLIC'
   const result = await postTextToLinkedIn(
-    publishText, tokenRow.access_token, authorUrn, visibility,
-    isScheduling ? scheduledAt : undefined
+    publishText, tokenRow.access_token, authorUrn, visibility
   )
 
   if (!result.success) {
@@ -319,17 +290,6 @@ export async function POST(req: NextRequest) {
       await supabase.from('posts').update({ status: 'publish_failed' }).eq('id', postId)
     }
     return NextResponse.json({ error: result.error }, { status: 502 })
-  }
-
-  if (isScheduling) {
-    await supabase.from('linkedin_posts').insert({
-      post_id: postId, linkedin_post_id: result.postId!,
-      linkedin_url: null, published_at: new Date().toISOString(),
-    })
-    await supabase.from('posts')
-      .update({ status: 'scheduled', scheduled_at: scheduledAt })
-      .eq('id', postId)
-    return NextResponse.json({ scheduled: true, linkedinPostId: result.postId, scheduledAt })
   }
 
   if (!preview) {
@@ -388,25 +348,8 @@ async function postTextToLinkedIn(
   accessToken: string,
   authorUrn: string,
   visibility: 'PUBLIC' | 'LOGGED_IN' | 'CONNECTIONS',
-  scheduledAt?: string,
 ): Promise<{ success: boolean; postId?: string; url?: string; error?: string }> {
   try {
-    const body: Record<string, unknown> = {
-      author:     authorUrn,
-      commentary: content,
-      visibility,
-      distribution: {
-        feedDistribution:               'MAIN_FEED',
-        targetEntities:                 [],
-        thirdPartyDistributionChannels: [],
-      },
-      lifecycleState:            scheduledAt ? 'DRAFT' : 'PUBLISHED',
-      isReshareDisabledByAuthor: false,
-    }
-    if (scheduledAt) {
-      body.scheduledPublishAt = new Date(scheduledAt).getTime()
-    }
-
     const res = await fetch('https://api.linkedin.com/rest/posts', {
       method: 'POST',
       headers: {
@@ -415,7 +358,18 @@ async function postTextToLinkedIn(
         'LinkedIn-Version':         '202604',
         'X-Restli-Protocol-Version': '2.0.0',
       },
-      body: JSON.stringify(body),
+      body: JSON.stringify({
+        author:     authorUrn,
+        commentary: content,
+        visibility,
+        distribution: {
+          feedDistribution:               'MAIN_FEED',
+          targetEntities:                 [],
+          thirdPartyDistributionChannels: [],
+        },
+        lifecycleState:            'PUBLISHED',
+        isReshareDisabledByAuthor: false,
+      }),
     })
 
     if (!res.ok) {
@@ -428,8 +382,7 @@ async function postTextToLinkedIn(
     return {
       success: true,
       postId:  liPostId,
-      // Scheduled posts aren't publicly accessible until they publish
-      url: scheduledAt ? undefined : (liPostId ? `https://www.linkedin.com/feed/update/${liPostId}/` : undefined),
+      url:     liPostId ? `https://www.linkedin.com/feed/update/${liPostId}/` : undefined,
     }
   } catch (err) {
     return { success: false, error: err instanceof Error ? err.message : 'Unknown error' }
@@ -539,7 +492,6 @@ async function postImageToLinkedIn(
   accessToken: string,
   authorUrn: string,
   visibility: 'PUBLIC' | 'LOGGED_IN' | 'CONNECTIONS' = 'PUBLIC',
-  scheduledAt?: string,
 ): Promise<{ success: boolean; postId?: string; url?: string; error?: string }> {
   try {
     // Step 1: Initialize image upload
@@ -579,24 +531,7 @@ async function postImageToLinkedIn(
       return { success: false, error: `Image upload failed (${uploadRes.status}): ${await uploadRes.text()}` }
     }
 
-    // Step 3: Create the post (DRAFT + scheduledPublishAt for scheduled posts)
-    const body: Record<string, unknown> = {
-      author:     authorUrn,
-      commentary: caption,
-      visibility,
-      distribution: {
-        feedDistribution:               'MAIN_FEED',
-        targetEntities:                 [],
-        thirdPartyDistributionChannels: [],
-      },
-      content: { media: { id: imageUrn } },
-      lifecycleState:            scheduledAt ? 'DRAFT' : 'PUBLISHED',
-      isReshareDisabledByAuthor: false,
-    }
-    if (scheduledAt) {
-      body.scheduledPublishAt = new Date(scheduledAt).getTime()
-    }
-
+    // Step 3: Create the post
     const postRes = await fetch('https://api.linkedin.com/rest/posts', {
       method: 'POST',
       headers: {
@@ -605,7 +540,19 @@ async function postImageToLinkedIn(
         'LinkedIn-Version':         '202604',
         'X-Restli-Protocol-Version': '2.0.0',
       },
-      body: JSON.stringify(body),
+      body: JSON.stringify({
+        author:     authorUrn,
+        commentary: caption,
+        visibility,
+        distribution: {
+          feedDistribution:               'MAIN_FEED',
+          targetEntities:                 [],
+          thirdPartyDistributionChannels: [],
+        },
+        content: { media: { id: imageUrn } },
+        lifecycleState:            'PUBLISHED',
+        isReshareDisabledByAuthor: false,
+      }),
     })
 
     if (!postRes.ok) {
@@ -618,7 +565,7 @@ async function postImageToLinkedIn(
     return {
       success: true,
       postId:  liPostId,
-      url: scheduledAt ? undefined : (liPostId ? `https://www.linkedin.com/feed/update/${liPostId}/` : undefined),
+      url:     liPostId ? `https://www.linkedin.com/feed/update/${liPostId}/` : undefined,
     }
   } catch (err) {
     return { success: false, error: err instanceof Error ? err.message : 'Unknown error' }
