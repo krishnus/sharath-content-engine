@@ -227,7 +227,7 @@ export default function DraftEditorPage() {
     } finally {
       setIsGenerating(false)
     }
-  }, [post, postId])
+  }, [post, postId, satMarketContext])
 
   // Fix hook — rewrite just the opening paragraph to fit 210 chars
   const handleFixHook = useCallback(async () => {
