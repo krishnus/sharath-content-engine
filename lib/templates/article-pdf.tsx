@@ -19,10 +19,12 @@ Font.register({
   src: FONT_PATHS.devanagari,
 })
 
-// Footer text colours — match the old CTA block so the brand feel is preserved
+const ARTICLE_STRIP_BG  = '#091e3a'        // matches carousel NAVY — header + footer band
+
+// Footer text colours
 const FOOTER_NAME_COLOR = BRAND_GOLD       // "Coach Sharath — Executive & Life Coaching"
 const FOOTER_SUB_COLOR  = '#A8C8E8'        // "coachsharath.com" and page number
-const FOOTER_STRIP_BG   = BRAND_BLUE
+const FOOTER_STRIP_BG   = ARTICLE_STRIP_BG
 
 // Off-strip (white bg) equivalents — readable on paper
 const FOOTER_NAME_PLAIN = '#333333'
@@ -65,8 +67,8 @@ const S = StyleSheet.create({
   },
   articleTitleBase: {
     fontWeight:   700,
-    fontSize:     20,
-    lineHeight:   1.3,
+    fontSize:     34,
+    lineHeight:   1.2,
     marginBottom: 10,
   },
   metaRow: {
@@ -86,18 +88,41 @@ const S = StyleSheet.create({
   },
   paragraph: {
     marginBottom: 10,
-    lineHeight:   1.65,
-    fontSize:     11,
-    color:        '#1A1A1A',
+    lineHeight:   1.7,
+    fontSize:     17,
+    color:        '#2A2A2A',
     orphans:      3,
     widows:       3,
   },
   heading: {
-    fontSize:     13,
-    fontWeight:   600,
-    color:        BRAND_BLUE,
-    marginBottom: 6,
-    marginTop:    16,
+    fontSize:     19,
+    fontWeight:   500,
+    color:        '#0D2D52',
+    marginBottom: 10,
+    marginTop:    20,
+  },
+  pullQuote: {
+    fontSize:        22,
+    color:           '#0D2D52',
+    lineHeight:      1.5,
+    borderLeftWidth: 3,
+    borderLeftColor: '#C8A04A',
+    paddingLeft:     16,
+    marginTop:       16,
+    marginBottom:    16,
+  },
+  teachingBox: {
+    backgroundColor:   '#F7F2E8',
+    borderTopWidth:    1,
+    borderTopColor:    '#C8A04A',
+    borderBottomWidth: 1,
+    borderBottomColor: '#C8A04A',
+    paddingTop:        16,
+    paddingBottom:     16,
+    paddingLeft:       16,
+    paddingRight:      16,
+    marginTop:         20,
+    marginBottom:      20,
   },
   bulletRow: {
     flexDirection: 'row',
@@ -108,12 +133,12 @@ const S = StyleSheet.create({
     color:       BRAND_GOLD,
     fontWeight:  700,
     marginRight: 8,
-    fontSize:    11,
+    fontSize:    17,
   },
   bulletText: {
     flex:       1,
-    lineHeight: 1.6,
-    fontSize:   11,
+    lineHeight: 1.7,
+    fontSize:   17,
   },
   // ── Footer ───────────────────────────────────────────────────────────
   // Outer wrapper: absolute-positioned, full-width anchor
@@ -195,6 +220,7 @@ function parseContent(text: string): React.ReactNode[] {
   const lines = text.split('\n')
   const nodes: React.ReactNode[] = []
   let key = 0
+  let isFirstParagraph = true
 
   const devStyle = { fontFamily: 'NotoDevanagari' }
 
@@ -210,6 +236,7 @@ function parseContent(text: string): React.ReactNode[] {
       continue
     }
 
+    // Headings — do not consume isFirstParagraph
     if (/^#{1,3}\s/.test(line) || /^[A-Z][^a-z]{5,}:$/.test(line)) {
       const t = line.replace(/^#{1,3}\s/, '').replace(/:$/, '')
       nodes.push(renderMixedScript(t, S.heading, { ...S.heading, ...devStyle }, key++))
@@ -225,6 +252,7 @@ function parseContent(text: string): React.ReactNode[] {
           {renderMixedScript(rest, S.bulletText, { ...S.bulletText, ...devStyle }, key++)}
         </View>
       )
+      isFirstParagraph = false
       continue
     }
 
@@ -235,6 +263,37 @@ function parseContent(text: string): React.ReactNode[] {
           {renderMixedScript(line.replace(/^[-•]\s/, ''), S.bulletText, { ...S.bulletText, ...devStyle }, key++)}
         </View>
       )
+      isFirstParagraph = false
+      continue
+    }
+
+    // Sanskrit/Vedic teaching block — collect all consecutive non-blank lines starting
+    // from the first Devanagari line and wrap them in a warm-tinted box
+    if (DEVANAGARI_RE.test(line)) {
+      const blockLines: string[] = [line]
+      while (i + 1 < lines.length) {
+        const next = lines[i + 1].trim()
+        if (!next || /^#{1,3}\s/.test(next)) break
+        blockLines.push(lines[i + 1])
+        i++
+      }
+      const boxKey  = key++
+      const lineKeys = blockLines.map(() => key++)
+      nodes.push(
+        <View key={boxKey} style={S.teachingBox}>
+          {blockLines.map((bl, bi) =>
+            renderMixedScript(bl, S.paragraph, { ...S.paragraph, ...devStyle }, lineKeys[bi])
+          )}
+        </View>
+      )
+      isFirstParagraph = false
+      continue
+    }
+
+    // Opening hook — pull-quote treatment (gold left bar, navy text, larger size)
+    if (isFirstParagraph) {
+      isFirstParagraph = false
+      nodes.push(renderMixedScript(line, S.pullQuote, { ...S.pullQuote, ...devStyle }, key++))
       continue
     }
 
@@ -265,7 +324,7 @@ function ArticleDocument({
   // Header: base padding + conditional blue background
   const headerStyle = {
     ...S.headerBase,
-    ...(showHeaderStrip ? { backgroundColor: BRAND_BLUE } : {}),
+    ...(showHeaderStrip ? { backgroundColor: ARTICLE_STRIP_BG } : {}),
   }
   const logoBoxStyle = S.logoBoxBase
   // Blue header → dark-background logo (1536×1024, 1.5:1); light header → light logo (927×375, 2.47:1)
