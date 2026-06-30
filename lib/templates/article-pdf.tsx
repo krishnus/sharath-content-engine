@@ -124,6 +124,12 @@ const S = StyleSheet.create({
     marginTop:         20,
     marginBottom:      20,
   },
+  // Lines inside the teaching box — same size as paragraph but no bottom margin so they sit tight
+  teachingLine: {
+    lineHeight: 1.7,
+    fontSize:   17,
+    color:      '#2A2A2A',
+  },
   bulletRow: {
     flexDirection: 'row',
     marginBottom:  6,
@@ -267,22 +273,41 @@ function parseContent(text: string): React.ReactNode[] {
       continue
     }
 
-    // Sanskrit/Vedic teaching block — collect all consecutive non-blank lines starting
-    // from the first Devanagari line and wrap them in a warm-tinted box
+    // Sanskrit/Vedic teaching block — collect lines into one box, bridging across blank
+    // lines when the next non-blank line also contains Devanagari (consecutive teachings).
+    // wrap={false} keeps the entire box on one page — no orphaned top-border at page bottom.
     if (DEVANAGARI_RE.test(line)) {
-      const blockLines: string[] = [line]
-      while (i + 1 < lines.length) {
-        const next = lines[i + 1].trim()
-        if (!next || /^#{1,3}\s/.test(next)) break
-        blockLines.push(lines[i + 1])
-        i++
+      const rawLines: string[] = [line]
+      let j = i + 1
+
+      while (j < lines.length) {
+        const curr = lines[j].trim()
+
+        if (!curr) {
+          // Blank line — peek past it to see whether another Devanagari block follows
+          let peekJ = j + 1
+          while (peekJ < lines.length && !lines[peekJ].trim()) peekJ++
+          if (peekJ < lines.length && DEVANAGARI_RE.test(lines[peekJ])) {
+            j = peekJ   // bridge: skip blank(s) and continue collecting
+            continue
+          }
+          break         // no Devanagari ahead — end of teaching section
+        }
+
+        if (/^#{1,3}\s/.test(curr)) break   // heading ends the section
+
+        rawLines.push(lines[j])
+        j++
       }
-      const boxKey  = key++
-      const lineKeys = blockLines.map(() => key++)
+
+      i = j - 1   // outer for-loop will do i++, landing on the first unprocessed line
+
+      const boxKey   = key++
+      const lineKeys = rawLines.map(() => key++)
       nodes.push(
-        <View key={boxKey} style={S.teachingBox}>
-          {blockLines.map((bl, bi) =>
-            renderMixedScript(bl, S.paragraph, { ...S.paragraph, ...devStyle }, lineKeys[bi])
+        <View key={boxKey} style={S.teachingBox} wrap={false}>
+          {rawLines.map((bl, bi) =>
+            renderMixedScript(bl, S.teachingLine, { ...S.teachingLine, ...devStyle }, lineKeys[bi])
           )}
         </View>
       )
