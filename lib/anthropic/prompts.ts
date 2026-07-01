@@ -148,6 +148,7 @@ The story log stores post_id linking to linkedin_posts.linkedin_url for this pur
 // ============================================================
 export function buildNarrativeContext(context: {
   previousPostInsight?: string | null
+  previousPostTiming?: string | null
   openThread?: string | null
   narrativePosition: NarrativePosition
   quarter: string
@@ -156,7 +157,11 @@ export function buildNarrativeContext(context: {
   const parts: string[] = ['## NARRATIVE CONTEXT FOR THIS POST']
 
   if (context.previousPostInsight) {
-    parts.push(`**Previous post's core insight** (callback from this): "${context.previousPostInsight}"`)
+    const timing = context.previousPostTiming ? ` (published ${context.previousPostTiming})` : ''
+    parts.push(`**Previous post's core insight${timing}** (callback from this): "${context.previousPostInsight}"`)
+    if (context.previousPostTiming) {
+      parts.push(`**Timing rule:** When referencing the previous post, use the exact phrase "${context.previousPostTiming}" — never say "last week" if the post was published yesterday or a few days ago.`)
+    }
   }
 
   if (context.openThread) {
@@ -375,6 +380,8 @@ Return ONLY a valid JSON array of rule objects:
 ]
 
 Only include rules where the pattern is clear and generalisable — not one-off word choices.
+
+CRITICAL: Every rule MUST be evidenced by an actual edit. example_before must be real text from the ORIGINAL draft; example_after must be the replacement text from the EDITED version — and they must be different. Never generate a rule where example_before equals example_after. If you cannot find genuinely changed text to illustrate a rule, do NOT include that rule.
 
 ORIGINAL DRAFT:
 ${originalDraft}

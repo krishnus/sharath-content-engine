@@ -45,16 +45,35 @@ export async function POST(req: NextRequest) {
   // ── 2. Fetch narrative context ───────────────────────────────────
   const { data: prevStoryLog } = await supabase
     .from('story_log')
-    .select('core_insight, thread_planted, references_used')
+    .select('core_insight, thread_planted, references_used, posts(day, weeks(week_start))')
     .order('created_at', { ascending: false })
     .limit(1)
     .maybeSingle()
 
   const { data: week } = await supabase
     .from('weeks')
-    .select('open_thread')
+    .select('open_thread, week_start')
     .eq('id', body.weekId)
     .single()
+
+  // Timing = difference in days between the two posts' planned calendar dates
+  // (not approved_at — Sharath may batch-approve posts in one session)
+  type PrevPostJoin = { day: string; weeks: Array<{ week_start: string }> | { week_start: string } | null }
+  const rawPosts = prevStoryLog?.posts as Array<PrevPostJoin> | PrevPostJoin | null
+  const prevPost = Array.isArray(rawPosts) ? rawPosts[0] : rawPosts
+  const rawWeeks = prevPost?.weeks
+  const prevWeekStart = Array.isArray(rawWeeks) ? rawWeeks[0]?.week_start : rawWeeks?.week_start
+
+  const DAY_OFFSET: Record<string, number> = { monday: 0, tuesday: 1, wednesday: 2, thursday: 3, friday: 4, saturday: 5 }
+  let previousPostTiming: string | null = null
+  if (prevWeekStart && prevPost?.day && week?.week_start) {
+    const prevDate = new Date(`${prevWeekStart}T00:00:00`)
+    prevDate.setDate(prevDate.getDate() + (DAY_OFFSET[prevPost.day] ?? 0))
+    const curDate = new Date(`${week.week_start}T00:00:00`)
+    curDate.setDate(curDate.getDate() + (DAY_OFFSET[body.day] ?? 0))
+    const diffDays = Math.round((curDate.getTime() - prevDate.getTime()) / 86400000)
+    previousPostTiming = computeRelativeTiming(diffDays)
+  }
 
   // ── 3. Build system prompt ───────────────────────────────────────
   const voiceRulesBlock = buildVoiceRulesBlock(voiceRules ?? [])
@@ -74,6 +93,7 @@ export async function POST(req: NextRequest) {
   } else {
     const narrativeContext = buildNarrativeContext({
       previousPostInsight: prevStoryLog?.core_insight ?? null,
+      previousPostTiming,
       openThread:          week?.open_thread ?? null,
       narrativePosition:   body.narrativePosition,
       quarter:             body.quarter,
@@ -203,4 +223,14 @@ async function saveDrafts(
     .eq('id', postId)
 
   return { savedDraftId: newDraft?.id ?? '' }
+}
+
+
+function computeRelativeTiming(diffDays: number): string {
+  if (diffDays <= 0) return 'earlier'
+  if (diffDays === 1) return 'yesterday'
+  if (diffDays <= 6) return `${diffDays} days ago`
+  if (diffDays <= 13) return 'last week'
+  if (diffDays <= 20) return '2 weeks ago'
+  return `${Math.floor(diffDays / 7)} weeks ago`
 }

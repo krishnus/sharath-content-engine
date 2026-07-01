@@ -270,17 +270,30 @@ function WeekDot({ weekNumber, status, theme, isSelected, isCurrent, quarterColo
     status === 'in_progress' ? 'bg-gold-500' :
     status === 'planned'     ? 'bg-ink-600' :
     'bg-ink-800'
+
+  // Text colour matches the legend at the bottom of the timeline
+  const textColor =
+    status === 'published'   ? 'text-white/90' :
+    status === 'in_progress' ? 'text-ink-900' :
+    status === 'planned'     ? 'text-ink-200' :
+    'text-ink-600'
+
   return (
     <button
       onClick={onClick}
       title={theme ? `Wk ${weekNumber}: ${theme}` : `Week ${weekNumber}`}
       className={cn(
         'aspect-square rounded-sm transition-all duration-150 hover:opacity-80 hover:scale-110',
+        'flex items-center justify-center',
         bg,
         isSelected  && 'ring-2 ring-gold-400 ring-offset-1 ring-offset-ink-900',
         isCurrent   && !isSelected && 'ring-1 ring-gold-500/50',
       )}
-    />
+    >
+      <span className={cn('text-[8px] font-semibold leading-none select-none', textColor)}>
+        wk{weekNumber}
+      </span>
+    </button>
   )
 }
 

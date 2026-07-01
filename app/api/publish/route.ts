@@ -459,7 +459,7 @@ async function postDocumentToLinkedIn(
         content: {
           media: {
             id:    documentUrn,
-            title: fileName.replace(/\.(pdf|png|jpg)$/i, '').replace(/-/g, ' '),
+            title: (() => { const t = fileName.replace(/\.(pdf|png|jpg)$/i, '').replace(/-/g, ' '); return t.charAt(0).toUpperCase() + t.slice(1) })(),
           },
         },
         lifecycleState:            'PUBLISHED',

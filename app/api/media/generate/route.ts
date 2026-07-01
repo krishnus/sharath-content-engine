@@ -108,7 +108,7 @@ export async function POST(req: NextRequest) {
         showHeaderStrip:  showHeaderStrip !== false,   // default true
         showFooterStrip:  showFooterStrip !== false,   // default true
       })
-      fileName  = `article-wk${week.week_number}.pdf`
+      fileName  = `${toSlug(rawTitle, 4)}-by-CoachSharath.pdf`
       mimeType  = 'application/pdf'
       pageCount = undefined   // react-pdf doesn't expose page count at generation time
 
@@ -127,7 +127,7 @@ export async function POST(req: NextRequest) {
         weekNumber:    week.week_number,
         useSwansLogo:  isFinancePillar,
       })
-      fileName = `carousel-wk${week.week_number}.pdf`
+      fileName = `${toSlug(week.theme ?? 'weekly-insights', 4)}-by-CoachSharath.pdf`
       mimeType = 'application/pdf'
 
     } else if (mediaType === 'quote_png') {
@@ -139,7 +139,7 @@ export async function POST(req: NextRequest) {
         pillar,
         useSwansLogo: isFinancePillar,
       })
-      fileName = `quote-wk${week.week_number}.png`
+      fileName = `${toSlug(quote ?? '', 4)}-by-CoachSharath.png`
       mimeType = 'image/png'
 
     } else {
@@ -203,6 +203,20 @@ export async function POST(req: NextRequest) {
     signedUrl:       signedUrl?.signedUrl ?? null,
     linkedinCaption: linkedinCaption ?? null,
   })
+}
+
+// ── First-N-words slug for branding filenames ─────────────────────────
+// e.g. "The Weight of Unfinished Conversations" → "the-weight-of-unfinished"
+function toSlug(text: string, maxWords = 4): string {
+  const slug = text
+    .trim()
+    .replace(/[^a-zA-Z0-9\s]/g, '')
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, maxWords)
+    .map(w => w.toLowerCase())
+    .join('-')
+  return slug || 'untitled'
 }
 
 // ── Truncate at the last word boundary before max chars ───────────────

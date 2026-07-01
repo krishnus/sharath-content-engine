@@ -31,8 +31,9 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ candidateRules: [], storyLog: null, message: 'No edit diff found' })
   }
 
-  const original = drafts.find(d => d.is_original)
-  const current  = drafts.find(d => !d.is_original)
+  const original    = drafts.find(d => d.is_original)
+  const nonOriginals = drafts.filter(d => !d.is_original)
+  const current     = nonOriginals[nonOriginals.length - 1]
 
   if (!original || !current) {
     return NextResponse.json({ candidateRules: [], storyLog: null })
@@ -138,6 +139,13 @@ export async function POST(req: NextRequest) {
   } catch {
     console.error('Failed to parse candidate rules JSON:', diffRaw)
   }
+
+  // Drop any rule where before and after are identical — the AI observed a pattern, not an actual edit
+  candidateRules = candidateRules.filter(r =>
+    !r.example_before ||
+    !r.example_after ||
+    r.example_before.trim() !== r.example_after.trim()
+  )
 
   return NextResponse.json({ candidateRules, storyLog: storyLogData })
 }
