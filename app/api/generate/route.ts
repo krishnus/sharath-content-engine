@@ -42,19 +42,47 @@ export async function POST(req: NextRequest) {
     .eq('active', true)
     .order('approved_at', { ascending: true })
 
-  // ── 2. Fetch narrative context ───────────────────────────────────
-  const { data: prevStoryLog } = await supabase
-    .from('story_log')
-    .select('core_insight, thread_planted, references_used, posts(day, weeks(week_start))')
-    .order('created_at', { ascending: false })
-    .limit(1)
-    .maybeSingle()
+  // ── 2. Fetch narrative context + performance insights ───────────
+  const [prevStoryLogResult, weekResult, insightResult] = await Promise.all([
+    supabase
+      .from('story_log')
+      .select('core_insight, thread_planted, references_used, posts(day, weeks(week_start))')
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+    supabase
+      .from('weeks')
+      .select('open_thread, week_start')
+      .eq('id', body.weekId)
+      .single(),
+    supabase
+      .from('performance_insights')
+      .select('insights')
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+  ])
 
-  const { data: week } = await supabase
-    .from('weeks')
-    .select('open_thread, week_start')
-    .eq('id', body.weekId)
-    .single()
+  const prevStoryLog = prevStoryLogResult.data
+  const week         = weekResult.data
+
+  // Extract insights relevant to this post's pillar / format
+  let performanceInsights: string | null = null
+  if (insightResult.data?.insights) {
+    type InsightItem = { category: string; insight: string; recommendation: string; confidence: string }
+    const allInsights = insightResult.data.insights as InsightItem[]
+    const pillarKey  = body.pillar.replace(/_/g, ' ')
+    const formatKey  = body.format.replace(/_/g, ' ')
+    const relevant   = allInsights
+      .filter(i => {
+        const text = `${i.insight} ${i.recommendation}`.toLowerCase()
+        return text.includes(pillarKey) || text.includes(formatKey) || i.category === 'growth'
+      })
+      .slice(0, 3)
+    if (relevant.length > 0) {
+      performanceInsights = relevant.map(i => `• ${i.insight}\n  → ${i.recommendation}`).join('\n')
+    }
+  }
 
   // Timing = difference in days between the two posts' planned calendar dates
   // (not approved_at — Sharath may batch-approve posts in one session)
@@ -98,6 +126,7 @@ export async function POST(req: NextRequest) {
       narrativePosition:   body.narrativePosition,
       quarter:             body.quarter,
       recentReferences:    prevStoryLog?.references_used ?? undefined,
+      performanceInsights,
     })
 
     userPrompt = buildGeneratePostPrompt({

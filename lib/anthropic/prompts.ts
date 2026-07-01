@@ -153,6 +153,7 @@ export function buildNarrativeContext(context: {
   narrativePosition: NarrativePosition
   quarter: string
   recentReferences?: { vedic: string[]; banking: string[]; coaching: string[] }
+  performanceInsights?: string | null
 }): string {
   const parts: string[] = ['## NARRATIVE CONTEXT FOR THIS POST']
 
@@ -186,6 +187,10 @@ export function buildNarrativeContext(context: {
     if (refs.length > 0) {
       parts.push(`**References used recently (do not repeat):** ${refs.join(', ')}`)
     }
+  }
+
+  if (context.performanceInsights) {
+    parts.push(`## AUDIENCE-VALIDATED PERFORMANCE LEARNINGS\n(These patterns produced the highest engagement in previous posts — apply them where natural)\n\n${context.performanceInsights}`)
   }
 
   return parts.join('\n\n')
@@ -388,6 +393,84 @@ ${originalDraft}
 
 EDITED VERSION:
 ${editedDraft}`
+}
+
+
+// ============================================================
+// PERFORMANCE INSIGHT PROMPT
+// Analyses historical post performance and returns actionable
+// patterns for future content strategy.
+// ============================================================
+export function buildPerformanceInsightPrompt(data: {
+  posts: Array<{
+    pillar: string
+    format: string
+    day: string
+    narrative_position: string
+    week_theme: string
+    impressions: number
+    likes: number
+    comments: number
+    reposts: number
+    dm_note: string | null
+    engagement_rate: number
+    published_at: string
+  }>
+  byPillar: Array<{ pillar: string; avgEngagementRate: number; totalLikes: number; totalComments: number; count: number }>
+  byFormat: Array<{ format: string; avgEngagementRate: number; totalLikes: number; totalComments: number; count: number }>
+  byDay:    Array<{ day: string;    avgEngagementRate: number; totalLikes: number; totalComments: number; count: number }>
+}): string {
+  const postLines = data.posts.map(p =>
+    `- ${p.day} | ${p.pillar} | ${p.format} | ${p.narrative_position} | "${p.week_theme.slice(0, 40)}" | impr=${p.impressions} likes=${p.likes} cmts=${p.comments} reposts=${p.reposts} ER=${p.engagement_rate.toFixed(2)}%${p.dm_note ? ` | DM note: "${p.dm_note}"` : ''}`
+  ).join('\n')
+
+  const pillarLines = data.byPillar.map(r =>
+    `- ${r.pillar}: avg ER ${r.avgEngagementRate.toFixed(2)}%, ${r.totalLikes} likes, ${r.totalComments} comments across ${r.count} posts`
+  ).join('\n')
+
+  const formatLines = data.byFormat.map(r =>
+    `- ${r.format}: avg ER ${r.avgEngagementRate.toFixed(2)}%, ${r.totalLikes} likes, ${r.totalComments} comments across ${r.count} posts`
+  ).join('\n')
+
+  const dayLines = data.byDay.map(r =>
+    `- ${r.day}: avg ER ${r.avgEngagementRate.toFixed(2)}%, ${r.totalLikes} likes, ${r.totalComments} comments across ${r.count} posts`
+  ).join('\n')
+
+  return `You are analysing LinkedIn content performance for Sharath Kumar R N — an executive coach, former global banker, and founder.
+
+Content pillars: vedic_leadership, banker_coach, coaching_transformation, financial_intelligence, inner_work
+Formats: long_form_article (Mon/Wed, 900-1100 words), text_post (Tue/Fri, 180-250 words), carousel (Thu, 8-10 slides), market_insights (Sat, 180-250 words)
+Audiences: Category A (CXOs/senior leaders), Category B (professionals at crossroads), 5-Swans HNI, Bradford students
+
+Engagement rate = (likes + comments + reposts) / impressions × 100. Only computed when impressions > 0.
+
+## POST PERFORMANCE DATA
+${postLines || 'No posts with data yet.'}
+
+## BY PILLAR
+${pillarLines || 'No data.'}
+
+## BY FORMAT
+${formatLines || 'No data.'}
+
+## BY DAY OF WEEK
+${dayLines || 'No data.'}
+
+Identify the 4–6 most actionable patterns. Focus on: which pillars/formats/days drive the most engagement, which narrative positions get the most comments, what themes or angles resonate. Use DM notes as qualitative signal.
+
+Return ONLY a valid JSON array:
+
+[
+  {
+    "category": "pillar" | "format" | "timing" | "content" | "growth",
+    "insight": "Specific, numbered observation (include the actual metric)",
+    "recommendation": "One concrete change to make in future posts of this type",
+    "confidence": "high" | "medium" | "low"
+  }
+]
+
+Be specific — use the actual numbers. "Vedic Leadership posts average 3.2% ER vs 1.1% for Banker-Coach" is useful. "Some posts do better" is not.
+Only include insights where you have at least 2 data points. Mark single-data-point observations as confidence: "low".`
 }
 
 

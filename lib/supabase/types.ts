@@ -125,7 +125,27 @@ export interface PerformanceData {
   comments: number
   shares: number
   clicks: number
+  reposts: number
+  source: 'api' | 'manual'
+  dm_note: string | null
   fetched_at: string
+}
+
+export interface PerformanceInsight {
+  id: string
+  generated_at: string
+  period_start: string | null
+  period_end: string | null
+  insight_type: string
+  insights: Array<{
+    category: 'pillar' | 'format' | 'timing' | 'content' | 'growth'
+    insight: string
+    recommendation: string
+    confidence: 'high' | 'medium' | 'low'
+  }>
+  data_summary: Record<string, unknown>
+  post_count: number
+  created_at: string
 }
 
 // ============================================================
@@ -140,8 +160,9 @@ export interface Database {
       drafts:           { Row: Draft;          Insert: Omit<Draft, 'id' | 'created_at'>;                    Update: Partial<Draft> }
       story_log:        { Row: StoryLog;       Insert: Omit<StoryLog, 'id' | 'created_at'>;                 Update: Partial<StoryLog> }
       voice_rules:      { Row: VoiceRule;      Insert: Omit<VoiceRule, 'id' | 'created_at'>;                Update: Partial<VoiceRule> }
-      linkedin_posts:   { Row: LinkedInPost;   Insert: Omit<LinkedInPost, 'id'>;                            Update: Partial<LinkedInPost> }
-      performance_data: { Row: PerformanceData; Insert: Omit<PerformanceData, 'id'>;                        Update: Partial<PerformanceData> }
+      linkedin_posts:        { Row: LinkedInPost;        Insert: Omit<LinkedInPost, 'id'>;                               Update: Partial<LinkedInPost> }
+      performance_data:      { Row: PerformanceData;      Insert: Omit<PerformanceData, 'id'>;                           Update: Partial<PerformanceData> }
+      performance_insights:  { Row: PerformanceInsight;  Insert: Omit<PerformanceInsight, 'id' | 'created_at'>;         Update: Partial<PerformanceInsight> }
     }
   }
 }
