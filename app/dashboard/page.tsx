@@ -45,7 +45,7 @@ function calcBufferDays(weeks: ForwardWeek[], today: Date): number {
   for (const fw of weeks) {
     if (!fw.data) continue
     for (const post of fw.data.posts) {
-      if (post.status !== 'approved' && post.status !== 'published') continue
+      if (!['approved', 'scheduled', 'published'].includes(post.status)) continue
       // Derive the post's calendar date from week_start + day offset
       const weekMon = startOfISOWeek(new Date(fw.data.week_start))
       const dayOffset = DAY_ORDER[post.day] ?? 0
@@ -200,8 +200,8 @@ function WeekPanel({ forwardWeek, weekIndex, onRefresh, onStartSession, onOpenSa
 
   // FIX 1: count ALL posts (including Saturday) for both numerator and denominator.
   // Previously totalNonSat excluded Saturday, making a 6-post week show "6/5".
-  const approvedCount = posts.filter(p => p.status === 'approved' || p.status === 'published').length
-  const totalPosts    = posts.length  // ← was: posts.filter(p => p.day !== 'saturday').length
+  const approvedCount = posts.filter(p => ['approved', 'scheduled', 'published'].includes(p.status)).length
+  const totalPosts    = posts.length
 
   const sortedPosts = [...posts].sort((a,b) => (DAY_ORDER[a.day]??0)-(DAY_ORDER[b.day]??0))
 
@@ -219,7 +219,7 @@ function WeekPanel({ forwardWeek, weekIndex, onRefresh, onStartSession, onOpenSa
           {/* FIX 1: use totalPosts (all days) not totalNonSat */}
           {totalPosts > 0 && (
             <div className="text-right hidden sm:block">
-              <p className="text-xs text-ink-400">{approvedCount}/{totalPosts} approved</p>
+              <p className="text-xs text-ink-400">{approvedCount}/{totalPosts} ready</p>
               <div className="mt-1 h-1 w-20 bg-ink-700 rounded-full overflow-hidden">
                 <div className={cn('h-full rounded-full', approvedCount===totalPosts?'bg-emerald-400':approvedCount>0?'bg-amber-400':'bg-ink-600')} style={{width:`${(approvedCount/totalPosts)*100}%`}} />
               </div>

@@ -14,6 +14,13 @@ import PublishPanel from '@/components/PublishPanel'
 import MediaPanel from '@/components/MediaPanel'
 import CandidateRulesModal, { type CandidateRule } from '@/components/CandidateRulesModal'
 
+const REQUIRED_MEDIA: Record<string, string> = {
+  long_form_article: 'article_pdf',
+  carousel:          'carousel_pdf',
+  text_post:         'quote_png',
+  market_insights:   'quote_png',
+}
+
 // ── Types ─────────────────────────────────────────────────────────────
 type PostData = {
   id: string
@@ -102,6 +109,7 @@ export default function DraftEditorPage() {
   const [showCandidates, setShowCandidates]         = useState(false)
   const [rulesSavedCount, setRulesSavedCount]       = useState<number | null>(null)
   const [mediaRefreshKey, setMediaRefreshKey]       = useState(0)
+  const [hasRequiredMedia, setHasRequiredMedia]     = useState(false)
   // Saturday market insights — market context that gates generation for market_insights posts
   const [satMarketContext, setSatMarketContext]     = useState('')
 
@@ -130,9 +138,14 @@ export default function DraftEditorPage() {
         const dbHashtags: string[] = json.post?.hashtags ?? []
         setHashtags(dbHashtags)
         setApproved(json.post?.status === 'approved' || json.post?.status === 'published' || json.post?.status === 'scheduled')
-      if (json.post?.status === 'published' && json.post?.linkedin_url) {
-        setPublishedUrl(json.post.linkedin_url)
-      }
+        if (json.post?.status === 'published' && json.post?.linkedin_url) {
+          setPublishedUrl(json.post.linkedin_url)
+        }
+        const requiredType = REQUIRED_MEDIA[json.post?.format ?? '']
+        const mediaExists = requiredType
+          ? (json.media ?? []).some((m: { media_type: string }) => m.media_type === requiredType)
+          : true
+        setHasRequiredMedia(mediaExists)
       } catch (err) {
         setLoadError(err instanceof Error ? err.message : 'Failed to load post')
       } finally {
@@ -711,12 +724,11 @@ export default function DraftEditorPage() {
                 weekStart={post.weeks?.week_start ?? new Date().toISOString().slice(0, 10)}
                 approved={approved}
                 postStatus={post.status}
+                hasRequiredMedia={hasRequiredMedia}
                 scheduledAt={post.scheduled_at ?? undefined}
                 onPublished={(url) => setPublishedUrl(url)}
                 onScheduled={() => {/* status tracked via postStatus prop */}}
                 onStatusReset={() => {
-                  // User cancelled the LinkedIn scheduled post and reset status here.
-                  // Reload post data so status/scheduled_at reflect the reset.
                   setPost(p => p ? { ...p, status: 'approved', scheduled_at: null } : p)
                   setApproved(true)
                 }}
@@ -728,6 +740,7 @@ export default function DraftEditorPage() {
                   key={mediaRefreshKey}
                   postId={postId}
                   format={post.format}
+                  onMediaStatusChange={setHasRequiredMedia}
                 />
               )}
 

@@ -203,18 +203,15 @@ export default function CalendarPage() {
   const displayWeeks = weeks.slice(1)
   const contextWeek  = weeks[0] ?? null
 
-  // ── Stats bar — future posts only ──────────────────────────────────
-  const stats = { published: 0, approved: 0, draft: 0, planned: 0, unplanned: 0 }
+  // ── Stats bar — all posts in currently displayed weeks ─────────────
+  const stats = { published: 0, scheduled: 0, approved: 0, draft: 0, planned: 0 }
   for (const week of displayWeeks) {
-    for (const dayName of DAY_NAMES) {
-      const postDate = addDays(parseDateStr(week.week_start), DAY_OFFSET[dayName])
-      if (format(postDate, 'yyyy-MM-dd') < todayStr) continue   // past
-      const post = week.posts.find(p => p.day === dayName)
-      if (!post)                                                    stats.unplanned++
-      else if (post.status === 'published')                         stats.published++
-      else if (post.status === 'approved' || post.status === 'scheduled') stats.approved++
+    for (const post of week.posts) {
+      if (post.status === 'published')                                         stats.published++
+      else if (post.status === 'scheduled')                                    stats.scheduled++
+      else if (post.status === 'approved')                                     stats.approved++
       else if (post.status === 'edited' || (post.status === 'draft' && post.hasDraft)) stats.draft++
-      else                                                          stats.planned++
+      else                                                                     stats.planned++
     }
   }
 
@@ -357,14 +354,14 @@ export default function CalendarPage() {
         </div>
       </div>
 
-      {/* ── Stats bar (future posts only) ──────────────────────────── */}
+      {/* ── Stats bar — currently displayed weeks ──────────────────── */}
       <div className="shrink-0 grid grid-cols-5 divide-x divide-ink-800 border-b border-ink-800 bg-ink-900/50">
         {[
           { label: 'Published',  count: stats.published,  dot: 'bg-emerald-400' },
+          { label: 'Scheduled',  count: stats.scheduled,  dot: 'bg-sky-400' },
           { label: 'Approved',   count: stats.approved,   dot: 'bg-teal-400' },
           { label: 'In draft',   count: stats.draft,      dot: 'bg-amber-400' },
           { label: 'Planned',    count: stats.planned,    dot: 'bg-stone-500' },
-          { label: 'Unplanned',  count: stats.unplanned,  dot: 'bg-ink-600' },
         ].map(s => (
           <div key={s.label} className="flex items-center gap-2.5 px-5 py-2.5">
             <div className={cn('w-2 h-2 rounded-full shrink-0', s.dot)} />
@@ -543,8 +540,19 @@ function WeekBlock({
 
   // Progress counts
   const published = week.posts.filter(p => p.status === 'published').length
+  const scheduled = week.posts.filter(p => p.status === 'scheduled').length
   const approved  = week.posts.filter(p => p.status === 'approved').length
+  const inDraft   = week.posts.filter(p => p.status === 'edited' || (p.status === 'draft' && p.hasDraft)).length
+  const planned   = week.posts.filter(p => (p.status === 'draft' && !p.hasDraft) || p.status === 'awaiting_market_data').length
   const allDone   = hasPosts && published === week.posts.length
+
+  const progressSummary = [
+    published > 0 && `${published} published`,
+    scheduled > 0 && `${scheduled} scheduled`,
+    approved  > 0 && `${approved} approved`,
+    inDraft   > 0 && `${inDraft} in draft`,
+    planned   > 0 && `${planned} planned`,
+  ].filter(Boolean).join(' · ')
 
   // Current week: the week containing today
   const weekMonday = parseDateStr(week.week_start)
@@ -617,9 +625,7 @@ function WeekBlock({
             <Bookmark size={12} className="text-blue-400 shrink-0" />
             <span className="text-xs font-medium text-blue-300 flex-1 truncate">{week.theme}</span>
             <span className="text-xs text-blue-500 shrink-0 whitespace-nowrap">
-              {published > 0 && `${published} published · `}
-              {approved > 0 && `${approved} approved · `}
-              {week.posts.length - published - approved} in progress
+              {progressSummary}
             </span>
           </div>
         )}

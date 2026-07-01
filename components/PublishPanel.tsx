@@ -23,6 +23,7 @@ export default function PublishPanel({
   weekStart,
   approved,
   postStatus,
+  hasRequiredMedia,
   scheduledAt: scheduledAtFromDB,
   onPublished,
   onScheduled,
@@ -34,12 +35,14 @@ export default function PublishPanel({
   weekStart: string
   approved: boolean
   postStatus: string
+  hasRequiredMedia: boolean
   scheduledAt?: string
   onPublished: (url: string) => void
   onScheduled: (scheduledAt: string) => void
   onStatusReset: () => void
 }) {
   const isDocumentPost = DOCUMENT_FORMATS.includes(format ?? '')
+  const mediaLabel = isDocumentPost ? 'PDF' : 'Quote Image'
 
   const [mode, setMode]                   = useState<Mode>('schedule')
   const [loading, setLoading]             = useState(false)
@@ -481,10 +484,18 @@ export default function PublishPanel({
 
         <ErrorRow />
 
+        {/* Media gate */}
+        {!hasRequiredMedia && (
+          <div className="flex items-center gap-2 px-3 py-2 bg-amber-900/15 border border-amber-700/30 rounded-lg">
+            <AlertCircle size={12} className="text-amber-400 shrink-0" />
+            <p className="text-xs text-amber-300">Generate the {mediaLabel} below before publishing.</p>
+          </div>
+        )}
+
         {/* Action button */}
         <button
           onClick={handleAction}
-          disabled={loading}
+          disabled={loading || !hasRequiredMedia}
           className="btn-primary w-full justify-center text-sm"
         >
           {loading

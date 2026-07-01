@@ -94,7 +94,7 @@ function BufferHealthPill() {
           if (!fw.data) continue
           for (const post of fw.data.posts ?? []) {
             tot++
-            if (post.status === 'approved' || post.status === 'published') app++
+            if (['approved', 'scheduled', 'published'].includes(post.status)) app++
           }
         }
         setApproved(app)
@@ -115,7 +115,7 @@ function BufferHealthPill() {
       <div className="h-1.5 bg-ink-700 rounded-full overflow-hidden">
         <div className={cn('h-full rounded-full transition-all duration-500', colour)} style={{ width: `${pct}%` }} />
       </div>
-      <p className="text-xs text-ink-500">{approved} posts approved</p>
+      <p className="text-xs text-ink-500">{approved} posts ready</p>
     </div>
   )
 }
