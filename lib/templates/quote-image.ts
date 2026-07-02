@@ -284,9 +284,15 @@ export async function generateQuoteImage(props: QuoteImageProps): Promise<Buffer
       width:  1080,
       height: 1080,
       fonts: [
-        { name: 'Montserrat', data: fonts.regular.buffer,  weight: 400, style: 'normal' },
-        { name: 'Montserrat', data: fonts.semiBold.buffer, weight: 600, style: 'normal' },
-        { name: 'Montserrat', data: fonts.bold.buffer,     weight: 700, style: 'normal' },
+        // Primary: Montserrat for all standard Latin glyphs
+        { name: 'Montserrat', data: fonts.regular.buffer,    weight: 400, style: 'normal' },
+        { name: 'Montserrat', data: fonts.semiBold.buffer,   weight: 600, style: 'normal' },
+        { name: 'Montserrat', data: fonts.bold.buffer,       weight: 700, style: 'normal' },
+        // Fallback: NotoSansDevanagari covers ₹ (U+20B9) and Devanagari script
+        // Satori iterates fonts in order and uses the first that contains a given glyph
+        { name: 'Montserrat', data: fonts.devanagari.buffer, weight: 400, style: 'normal' },
+        { name: 'Montserrat', data: fonts.devanagari.buffer, weight: 600, style: 'normal' },
+        { name: 'Montserrat', data: fonts.devanagari.buffer, weight: 700, style: 'normal' },
       ],
     }
   )

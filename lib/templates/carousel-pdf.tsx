@@ -31,6 +31,29 @@ const GOLD       = '#c8a04a'   // gold accent
 const WHITE      = '#ffffff'
 const BADGE_BORDER = '#555240' // rgba(200,160,74,0.4) on #091e3a, pre-blended
 
+// Devanagari + Currency Symbols block (U+20A0–U+20CF, includes ₹ U+20B9)
+const NOTO_CHAR_RE  = /[ऀ-ॿ₠-⃏]/
+const NOTO_SPLIT_RE = /([ऀ-ॿ₠-⃏]+)/
+
+// Renders a text string with automatic NotoDevanagari fallback for currency
+// symbols and Devanagari characters not present in Montserrat.
+function renderLine(text: string, style: object, key: number): React.ReactNode {
+  const cleaned = normalizeIAST(text)
+  if (!NOTO_CHAR_RE.test(cleaned)) {
+    return <Text key={key} style={style}>{cleaned}</Text>
+  }
+  const parts = cleaned.split(NOTO_SPLIT_RE).filter(p => p.length > 0)
+  return (
+    <Text key={key} style={style}>
+      {parts.map((part, i) =>
+        NOTO_CHAR_RE.test(part)
+          ? <Text key={i} style={{ fontFamily: 'NotoDevanagari' }}>{part}</Text>
+          : part
+      )}
+    </Text>
+  )
+}
+
 function pillarToLabel(pillar: string): string {
   switch (pillar) {
     case 'financial_intelligence':  return 'FINANCE'
@@ -284,8 +307,8 @@ function CarouselDocument({ theme, titleSlide, slides, pillar, seriesLabel, seri
           {/* Zone B — title block centred vertically */}
           <View style={S.coverTitleZone}>
             <View style={S.coverGoldRuleTop} />
-            <Text style={S.coverTitle}>{normalizeIAST(titleSlide)}</Text>
-            <Text style={S.coverSubtitle}>{normalizeIAST(theme)}</Text>
+            {renderLine(titleSlide, S.coverTitle,    0)}
+            {renderLine(theme,      S.coverSubtitle, 1)}
             <View style={S.coverGoldRuleBottom} />
           </View>
 
@@ -322,14 +345,12 @@ function CarouselDocument({ theme, titleSlide, slides, pillar, seriesLabel, seri
                   </Text>
                 </View>
                 <View style={S.goldDivider} />
-                <Text style={S.slideTitle}>{normalizeIAST(slide.headline)}</Text>
+                {renderLine(slide.headline, S.slideTitle, 0)}
               </View>
 
               {/* Zone B — body copy, vertically centred */}
               <View style={S.zoneMiddle}>
-                {bodyLines.map((line, j) => (
-                  <Text key={j} style={S.bodyLine}>{normalizeIAST(line)}</Text>
-                ))}
+                {bodyLines.map((line, j) => renderLine(line, S.bodyLine, j))}
               </View>
 
               {/* Zone C — footer row */}
@@ -347,9 +368,7 @@ function CarouselDocument({ theme, titleSlide, slides, pillar, seriesLabel, seri
       {closingSlide && (
         <Page size={[SIZE, SIZE]} style={{ width: SIZE, height: SIZE }}>
           <View style={[S.slideCanvas, S.closingCanvas]} wrap={false}>
-            <Text style={S.closingQuestion}>
-              {normalizeIAST(closingSlide.headline)}
-            </Text>
+            {renderLine(closingSlide.headline, S.closingQuestion, 0)}
             <View style={S.closingGoldRule} />
             <Text style={S.closingFollow}>Follow Coach Sharath</Text>
             <Text style={S.closingSub}>

@@ -196,7 +196,12 @@ const S = StyleSheet.create({
   },
 })
 
+// Devanagari only — used to detect Sanskrit/Vedic teaching blocks
 const DEVANAGARI_RE = /[ऀ-ॿ]+/
+// Devanagari + entire Currency Symbols block (U+20A0–U+20CF, includes ₹ U+20B9) —
+// these glyphs may be absent from Montserrat; route through NotoDevanagari instead.
+const NOTO_CHAR_RE  = /[ऀ-ॿ₠-⃏]/
+const NOTO_SPLIT_RE = /([ऀ-ॿ₠-⃏]+)/
 
 function stripInlineMarkdown(text: string): string {
   return text
@@ -207,16 +212,16 @@ function stripInlineMarkdown(text: string): string {
 
 function renderMixedScript(text: string, baseStyle: object, devStyle: object, keyBase: number): React.ReactNode {
   const cleaned = stripInlineMarkdown(text)
-  if (!DEVANAGARI_RE.test(cleaned)) {
+  if (!NOTO_CHAR_RE.test(cleaned)) {
     return <Text key={keyBase} style={baseStyle}>{normalizeIAST(cleaned)}</Text>
   }
   const { orphans: _o, widows: _w, marginBottom: _mb, marginTop: _mt, ...inlineDevStyle } =
     devStyle as Record<string, unknown>
-  const parts = cleaned.split(/([ऀ-ॿ]+)/).filter(p => p.length > 0)
+  const parts = cleaned.split(NOTO_SPLIT_RE).filter(p => p.length > 0)
   return (
     <Text key={keyBase} style={baseStyle}>
       {parts.map((part, i) =>
-        DEVANAGARI_RE.test(part)
+        NOTO_CHAR_RE.test(part)
           ? <Text key={i} style={inlineDevStyle as object}>{part}</Text>
           : normalizeIAST(part)
       )}

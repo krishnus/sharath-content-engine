@@ -260,12 +260,23 @@ export function buildGeneratePostPrompt(params: GeneratePostPromptParams): strin
     market_insights: `Write a LinkedIn Market Insights post. Target ${params.targetWordCount} words (180–250). Lead with the key market observation from this week. Connect market data to investor psychology or leadership behaviour. End with a behavioural or strategic implication. Include relevant data points provided in the context.`,
   }
 
-  const audienceContext: Record<string, string> = {
-    'Category A': 'This post is for CXOs and Chairmen (Category A). Position Sharath as a peer, not a service provider. The tone should feel like one senior leader speaking to another.',
-    'Category B': 'This post is for senior professionals at career crossroads (Category B — PRIMARY target). Mirror their exact situation. The reader should feel: "He is describing me." This is the highest-converting content type.',
-    'Category C': 'This post is for working professionals and Bradford students (Category C). Educate and build trust. Accessible, warm, action-oriented.',
-    '5-Swans HNI': 'This post is for HNIs and Family Offices. Demonstrate expertise and trustworthiness with capital. Tone: sophisticated peer-to-peer. Never sound like a product salesperson.',
-    'Bradford': 'This post is for UAE working professionals considering Bradford programmes. Aspirational but accessible. Progress-focused.',
+  // Human-readable audience labels — these appear in the prompt verbatim,
+  // so they must never use internal codes (Category A/B/C etc.) that the model
+  // might copy into the post.
+  const audienceLabel: Record<string, string> = {
+    'Category A':  'CXOs, Chairmen, and board-level leaders',
+    'Category B':  'Senior Directors, VPs, and Heads of Department at career crossroads (35–50 years old)',
+    'Category C':  'Working professionals and aspiring leaders',
+    '5-Swans HNI': 'HNIs and Family Office principals',
+    'Bradford':    'UAE working professionals exploring professional upskilling',
+  }
+
+  const audienceGuidance: Record<string, string> = {
+    'Category A':  'Position Sharath as a peer, not a service provider. Tone: one senior leader speaking to another.',
+    'Category B':  'Mirror the reader\'s exact situation — career crossroads, wondering what the next chapter looks like. The reader should feel: "He is describing me." This is the highest-converting content type.',
+    'Category C':  'Educate and build trust. Accessible, warm, action-oriented.',
+    '5-Swans HNI': 'Demonstrate expertise and trustworthiness with capital. Tone: sophisticated peer-to-peer. Never sound like a product salesperson.',
+    'Bradford':    'Aspirational but accessible. Progress-focused.',
   }
 
   const lines: string[] = [
@@ -274,8 +285,8 @@ export function buildGeneratePostPrompt(params: GeneratePostPromptParams): strin
     `**Pillar:** ${params.pillar.replace(/_/g, ' ')}`,
     `**Weekly Theme:** ${params.theme}`,
     `**Format:** ${params.format.replace(/_/g, ' ')}`,
-    `**Target Audience:** ${params.targetAudience}`,
-    audienceContext[params.targetAudience] ?? '',
+    `**Target Audience:** ${audienceLabel[params.targetAudience] ?? params.targetAudience}`,
+    audienceGuidance[params.targetAudience] ?? '',
     ``,
     `**Format Instructions:**`,
     formatInstructions[params.format],
@@ -285,6 +296,7 @@ export function buildGeneratePostPrompt(params: GeneratePostPromptParams): strin
     params.narrativeContext,
     ``,
     `## OUTPUT INSTRUCTIONS`,
+    `CRITICAL: "Category A", "Category B", "Category C", "5-Swans HNI", and "Bradford" are INTERNAL PLANNING LABELS. They must NEVER appear anywhere in the post content. Describe the audience naturally — "senior leaders", "executives", "working professionals", "investors", etc.`,
     `Write the post now. Do not add any preamble, explanation, or meta-commentary.`,
     `Output only the post content itself — exactly as it would appear on LinkedIn.`,
     `After the post, on a new line starting with "WORD_COUNT:", output the exact word count as an integer.`,
