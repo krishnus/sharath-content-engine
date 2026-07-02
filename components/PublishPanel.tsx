@@ -18,7 +18,7 @@ const DOCUMENT_FORMATS = ['long_form_article', 'carousel']
 
 export default function PublishPanel({
   postId,
-  day,
+  day = 'monday',
   format,
   weekStart,
   approved,
@@ -28,11 +28,14 @@ export default function PublishPanel({
   onPublished,
   onScheduled,
   onStatusReset,
+  publishApiPath = '/api/publish',
+  deleteApiPath = '/api/publish/delete',
+  statusResetPath,
 }: {
   postId: string
-  day: string
+  day?: string
   format?: string
-  weekStart: string
+  weekStart?: string
   approved: boolean
   postStatus: string
   hasRequiredMedia: boolean
@@ -40,6 +43,9 @@ export default function PublishPanel({
   onPublished: (url: string) => void
   onScheduled: (scheduledAt: string) => void
   onStatusReset: () => void
+  publishApiPath?: string
+  deleteApiPath?: string
+  statusResetPath?: string
 }) {
   const isDocumentPost = DOCUMENT_FORMATS.includes(format ?? '')
   const mediaLabel = isDocumentPost ? 'PDF' : 'Quote Image'
@@ -60,10 +66,10 @@ export default function PublishPanel({
       monday: 0, tuesday: 1, wednesday: 2,
       thursday: 3, friday: 4, saturday: 5,
     }
-    const monday   = new Date(weekStart)
-    const offset   = DAY_OFFSET[day] ?? 0
-    const postDate = new Date(monday)
-    postDate.setDate(monday.getDate() + offset)
+    const base   = weekStart ? new Date(weekStart) : new Date()
+    const offset = DAY_OFFSET[day] ?? 0
+    const postDate = new Date(base)
+    postDate.setDate(base.getDate() + offset)
     const [hr, min] = (DEFAULT_TIMES[day] ?? '07:30').split(':').map(Number)
     postDate.setUTCHours(hr - 5, min - 30, 0, 0)
     return postDate.toISOString()
@@ -99,7 +105,7 @@ export default function PublishPanel({
           scheduledAt: new Date(new Date(scheduledAt).getTime() - 5.5 * 60 * 60 * 1000).toISOString(),
         }
 
-      const res  = await fetch('/api/publish', {
+      const res  = await fetch(publishApiPath, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
@@ -131,7 +137,7 @@ export default function PublishPanel({
     setLoading(true)
     setError(null)
     try {
-      const res  = await fetch('/api/publish', {
+      const res  = await fetch(publishApiPath, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ postId, publishNow: true, promotePreview: true, linkedinPostId: previewPostId }),
@@ -155,7 +161,7 @@ export default function PublishPanel({
     setDeleting(true)
     setError(null)
     try {
-      const res = await fetch('/api/publish/delete', {
+      const res = await fetch(deleteApiPath, {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ postId, linkedinPostId: previewPostId }),
@@ -179,7 +185,8 @@ export default function PublishPanel({
     setResetting(true)
     setError(null)
     try {
-      const res = await fetch(`/api/posts/${postId}`, {
+      const resetEndpoint = statusResetPath ?? `/api/posts/${postId}`
+      const res = await fetch(resetEndpoint, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status: 'approved' }),

@@ -4,7 +4,7 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import {
   CalendarDays, BookOpen, Sparkles, BarChart2,
-  Settings, ChevronRight, Flame, Calendar,
+  Settings, ChevronRight, Flame, Calendar, PenLine,
 } from 'lucide-react'
 import { cn } from '@/lib/utils/helpers'
 import { useState, useEffect } from 'react'
@@ -14,8 +14,9 @@ const NAV = [
   { href: '/dashboard/calendar',  label: 'Calendar',       icon: Calendar },
   { href: '/dashboard/arc',       label: 'Story Arc',      icon: BookOpen },
   { href: '/dashboard/rules',     label: 'Voice Rules',    icon: Sparkles },
-  { href: '/dashboard/analytics', label: 'Analytics',      icon: BarChart2 },
-  { href: '/dashboard/settings',  label: 'Settings',       icon: Settings },
+  { href: '/dashboard/analytics',  label: 'Analytics',      icon: BarChart2 },
+  { href: '/dashboard/free-form',  label: 'Random Post',    icon: PenLine },
+  { href: '/dashboard/settings',   label: 'Settings',       icon: Settings },
 ]
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {

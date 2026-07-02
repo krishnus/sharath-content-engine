@@ -21,6 +21,7 @@ type MediaPanelProps = {
   format: string
   onMediaStatusChange?: (hasMedia: boolean) => void
   onMediaRegenerated?: () => void
+  freeFormPostId?: string  // when set, uses /api/free-form/media/* endpoints
 }
 
 const MEDIA_CONFIG: Record<string, { type: MediaType; label: string; icon: typeof FileText }> = {
@@ -38,7 +39,13 @@ const CAPTION_MAX: Record<MediaType, number> = {
   quote_png:    120,
 }
 
-export default function MediaPanel({ postId, format, onMediaStatusChange, onMediaRegenerated }: MediaPanelProps) {
+export default function MediaPanel({ postId, format, onMediaStatusChange, onMediaRegenerated, freeFormPostId }: MediaPanelProps) {
+  const isFreeForm   = Boolean(freeFormPostId)
+  const activePostId = freeFormPostId ?? postId
+  const dataPath     = isFreeForm ? `/api/free-form/posts/${activePostId}` : `/api/posts/${postId}`
+  const generatePath = isFreeForm ? '/api/free-form/media/generate' : '/api/media/generate'
+  const mediaApiPath = isFreeForm ? '/api/free-form/media' : '/api/media'
+  const captionPath  = isFreeForm ? '/api/free-form/media/caption' : '/api/media/caption'
   const config = MEDIA_CONFIG[format]
 
   const [media, setMedia]                     = useState<MediaRecord | null>(null)
@@ -68,26 +75,24 @@ export default function MediaPanel({ postId, format, onMediaStatusChange, onMedi
   async function loadExistingMedia() {
     setLoading(true)
     try {
-      const res = await fetch(`/api/posts/${postId}`)
+      const res = await fetch(dataPath)
       if (!res.ok) return
       const data = await res.json()
 
       // Pre-populate from AI-generated suggestions
       if (config.type === 'article_pdf' && data.suggestedTitle) {
-        // Clamp to titleMax so the pre-populated value always fits in the PDF header
         setConfirmedText(data.suggestedTitle.slice(0, 80))
       }
       if (config.type === 'quote_png' && data.suggestedQuote) {
         setConfirmedText(data.suggestedQuote)
       }
-      // Caption pre-population (long-form + carousel: LINKEDIN_CAPTION; quote: don't need separate caption)
       if ((config.type === 'article_pdf' || config.type === 'carousel_pdf') && data.suggestedCaption) {
         setCaption(data.suggestedCaption)
       }
 
       const existing = data.media?.find((m: { media_type: string }) => m.media_type === config.type)
       if (existing) {
-        const urlRes = await fetch(`/api/media/${existing.id}`)
+        const urlRes = await fetch(`${mediaApiPath}/${existing.id}`)
         if (urlRes.ok) {
           const urlData = await urlRes.json()
           const rec: MediaRecord = {
@@ -100,7 +105,6 @@ export default function MediaPanel({ postId, format, onMediaStatusChange, onMedi
             linkedinCaption: urlData.linkedinCaption,
           }
           setMedia(rec)
-          // DB caption takes priority over suggested
           if (urlData.linkedinCaption) setCaption(urlData.linkedinCaption)
         }
       }
@@ -117,7 +121,7 @@ export default function MediaPanel({ postId, format, onMediaStatusChange, onMedi
   }
 
   async function saveCaption(text: string, mediaId: string) {
-    await fetch(`/api/media/${mediaId}`, {
+    await fetch(`${mediaApiPath}/${mediaId}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ linkedinCaption: text }),
@@ -129,10 +133,10 @@ export default function MediaPanel({ postId, format, onMediaStatusChange, onMedi
     setError(null)
     try {
       const type = config?.type === 'quote_png' ? 'quote' : 'caption'
-      const res = await fetch('/api/media/caption', {
+      const res = await fetch(captionPath, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ postId, type }),
+        body: JSON.stringify({ postId: activePostId, type }),
       })
       if (!res.ok) throw new Error('Regeneration failed')
       const { caption: newCaption } = await res.json()
@@ -153,10 +157,10 @@ export default function MediaPanel({ postId, format, onMediaStatusChange, onMedi
     setRegenTitle(true)
     setError(null)
     try {
-      const res = await fetch('/api/media/caption', {
+      const res = await fetch(captionPath, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ postId, type: 'title' }),
+        body: JSON.stringify({ postId: activePostId, type: 'title' }),
       })
       if (!res.ok) throw new Error('Title regeneration failed')
       const { caption: newTitle } = await res.json()
@@ -182,10 +186,10 @@ export default function MediaPanel({ postId, format, onMediaStatusChange, onMedi
         body.showFooterStrip = showFooterStrip
       }
 
-      const res = await fetch('/api/media/generate', {
+      const res = await fetch(generatePath, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
+        body: JSON.stringify({ ...body, postId: activePostId }),
       })
       if (!res.ok) {
         let errMsg = `Generation failed (${res.status})`
@@ -233,7 +237,7 @@ export default function MediaPanel({ postId, format, onMediaStatusChange, onMedi
 
   async function deleteMedia() {
     if (!media) return
-    await fetch(`/api/media/${media.id}`, { method: 'DELETE' }).catch(() => {})
+    await fetch(`${mediaApiPath}/${media.id}`, { method: 'DELETE' }).catch(() => {})
     setMedia(null)
     onMediaStatusChange?.(false)
   }

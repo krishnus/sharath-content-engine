@@ -150,6 +150,53 @@ export interface PerformanceInsight {
   created_at: string
 }
 
+// ── Free-form post types ──────────────────────────────────────────────
+export interface FreeFormPost {
+  id: string
+  user_prompt: string
+  format: PostFormat
+  pillar: PostPillar | null
+  status: PostStatus
+  hashtags: string[]
+  scheduled_at: string | null
+  approved_at: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface FreeFormDraft {
+  id: string
+  post_id: string
+  version: number
+  content: string
+  word_count: number
+  is_original: boolean
+  is_approved: boolean
+  linkedin_excerpt: string | null
+  created_at: string
+}
+
+export interface FreeFormMedia {
+  id: string
+  post_id: string
+  media_type: string
+  storage_path: string
+  file_name: string
+  file_size: number
+  page_count: number | null
+  linkedin_caption: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface FreeFormLinkedInPost {
+  id: string
+  post_id: string
+  linkedin_post_id: string
+  linkedin_url: string | null
+  published_at: string
+}
+
 // ============================================================
 // Database schema type for Supabase client
 // ============================================================

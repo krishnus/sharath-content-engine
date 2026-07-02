@@ -44,7 +44,11 @@
       "Bash(git -C /Users/sharath/Coaching/sharath-content-engine add app/api/publish/route.ts)",
       "Bash(git -C /Users/sharath/Coaching/sharath-content-engine add app/api/media/caption/route.ts app/api/media/generate/route.ts components/MediaPanel.tsx)",
       "Bash(git log *)",
-      "Bash(gh issue *)"
+      "Bash(gh issue *)",
+      "Bash(mkdir -p /Users/sharath/Coaching/sharath-content-engine/app/api/free-form/posts/\\\\[postId\\\\])",
+      "Bash(mkdir -p /Users/sharath/Coaching/sharath-content-engine/app/api/free-form/drafts/\\\\[draftId\\\\])",
+      "Bash(mkdir -p \"/Users/sharath/Coaching/sharath-content-engine/app/api/free-form/media/[id]\")",
+      "Bash(mkdir -p \"/Users/sharath/Coaching/sharath-content-engine/app/dashboard/free-form/[postId]\")"
     ]
   }
 }

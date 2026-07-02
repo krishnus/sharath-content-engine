@@ -1,0 +1,91 @@
+import { NextRequest, NextResponse } from 'next/server'
+import { createClient } from '@/lib/supabase/server'
+import Anthropic from '@anthropic-ai/sdk'
+import { MODEL } from '@/lib/anthropic/client'
+
+export const runtime = 'nodejs'
+export const maxDuration = 30
+
+export async function POST(req: NextRequest) {
+  const supabase = createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return NextResponse.json({ error: 'Unauthorised' }, { status: 401 })
+
+  const { postId, type } = await req.json() as { postId: string; type?: 'caption' | 'quote' | 'title' }
+
+  const { data: post } = await supabase
+    .from('free_form_posts')
+    .select('format, pillar')
+    .eq('id', postId)
+    .single()
+
+  if (!post) return NextResponse.json({ error: 'Post not found' }, { status: 404 })
+
+  const { data: drafts } = await supabase
+    .from('free_form_drafts')
+    .select('content, is_original, is_approved, version')
+    .eq('post_id', postId)
+    .order('version', { ascending: false })
+
+  const nonOriginals = (drafts ?? []).filter(d => !d.is_original)
+  const current = nonOriginals.find(d => d.is_approved) ?? nonOriginals[0]
+  const original = (drafts ?? []).find(d => d.is_original)
+  const content = current?.content ?? original?.content ?? ''
+
+  if (!content.trim()) return NextResponse.json({ error: 'No content found' }, { status: 400 })
+
+  const format = post.format as string
+  const isQuote = type === 'quote' || (!type && (format === 'text_post' || format === 'market_insights'))
+  const isTitle = type === 'title'
+
+  const prompt = isTitle
+    ? `Write a compelling article title for this LinkedIn long-form article.
+Rules:
+- Maximum 80 characters
+- 5–10 words
+- Specific and evocative — tied to the article's central idea
+- NOT generic (avoid "Leadership Lessons", "Coaching Wisdom", "A Story About X")
+- Must work as a standalone headline on a PDF cover
+- Voice: Sharath Kumar R N — IIT engineer, 28 years global banking, Vedic-grounded executive coach
+
+ARTICLE CONTENT:
+${content.slice(0, 3000)}
+
+Return ONLY the title text, nothing else.`
+    : isQuote
+    ? `Extract or write the single most powerful, self-contained quote from this LinkedIn post.
+Rules:
+- Maximum 120 characters
+- Must stand alone without context
+- Punchy, memorable, and shareable
+- No hashtags, no author attribution
+- Sentence case (not all-caps)
+
+POST CONTENT:
+${content.slice(0, 3000)}
+
+Return ONLY the quote text, nothing else.`
+    : `Write a compelling LinkedIn caption hook for this document post (article or carousel).
+Rules:
+- 200–280 characters total
+- Opens with a provocative question or bold statement
+- Teases the value inside without giving it away
+- Ends with a micro-CTA (e.g. "Read inside →" or "Swipe through →")
+- No hashtags in the caption itself
+- Voice: executive coaching, vedic wisdom, former global banker — Sharath Kumar R N
+
+POST CONTENT:
+${content.slice(0, 3000)}
+
+Return ONLY the caption text, nothing else.`
+
+  const client = new Anthropic()
+  const message = await client.messages.create({
+    model: MODEL,
+    max_tokens: 300,
+    messages: [{ role: 'user', content: prompt }],
+  })
+
+  const caption = (message.content[0] as { text: string }).text.trim()
+  return NextResponse.json({ caption })
+}
