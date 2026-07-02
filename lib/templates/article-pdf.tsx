@@ -383,7 +383,7 @@ function ArticleDocument({
             </View>
           </View>
           <View style={S.goldRule} />
-          <Text style={titleStyle}>{normalizeIAST(title)}</Text>
+          {renderMixedScript(title, titleStyle, { fontFamily: 'NotoDevanagari', ...titleStyle }, 0)}
           <View style={S.metaRow}>
             <Text style={chipStyle}>{pillarLabel}</Text>
             <Text style={{ ...S.metaChipBase, color: sepColor }}>·</Text>
