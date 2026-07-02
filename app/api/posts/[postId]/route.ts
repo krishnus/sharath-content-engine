@@ -37,9 +37,12 @@ export async function GET(
     supabase.from('post_media').select('id, media_type, file_name, file_size, page_count, linkedin_caption, storage_path').eq('post_id', postId),
   ])
 
-  const originalDraft = drafts?.find((d: { is_original: boolean }) => d.is_original)
-  const nonOriginals  = drafts?.filter((d: { is_original: boolean }) => !d.is_original) ?? []
-  const currentDraft  = nonOriginals[nonOriginals.length - 1] ?? originalDraft
+  type DraftRow = { id: string; is_original: boolean; is_approved: boolean; version: number; word_count: number; content: string; created_at: string }
+  const originalDraft = drafts?.find((d: DraftRow) => d.is_original)
+  const nonOriginals  = ((drafts?.filter((d: DraftRow) => !d.is_original)) ?? []) as DraftRow[]
+  // Prefer the explicitly approved version; fall back to highest version number
+  const approvedDraft = nonOriginals.find(d => d.is_approved)
+  const currentDraft  = approvedDraft ?? nonOriginals[nonOriginals.length - 1] ?? originalDraft
 
   // Parse quote/caption suggestions — prefer the current (most recently generated) draft so
   // that regenerating post content immediately reflects in MediaPanel without requiring a
@@ -62,12 +65,13 @@ export async function GET(
     originalContent,
     currentContent:  currentDraft?.content  ?? '',
     wordCount:       currentDraft?.word_count ?? 0,
-    hashtags:        currentDraft?.hashtags  ?? [],
-    versions: nonOriginals.map((d: { id: string; version: number; word_count: number; created_at: string }) => ({
-      id:        d.id,
-      version:   d.version,
-      wordCount: d.word_count,
-      createdAt: d.created_at,
+    versions: nonOriginals.map(d => ({
+      id:         d.id,
+      version:    d.version,
+      wordCount:  d.word_count,
+      createdAt:  d.created_at,
+      isApproved: d.is_approved ?? false,
+      preview:    (d.content ?? '').slice(0, 300),
     })),
     currentVersionId: currentDraft?.id ?? null,
     media: mediaRecords ?? [],

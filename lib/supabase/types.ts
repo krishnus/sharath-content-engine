@@ -80,6 +80,8 @@ export interface Draft {
   content: string
   word_count: number
   is_original: boolean
+  is_approved: boolean
+  linkedin_excerpt: string | null
   created_at: string
 }
 

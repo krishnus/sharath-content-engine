@@ -18,7 +18,7 @@ export async function POST(req: NextRequest) {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorised' }, { status: 401 })
 
-  const { postId } = await req.json() as { postId: string }
+  const { postId, draftId } = await req.json() as { postId: string; draftId?: string }
 
   // ── 1. Fetch original and current drafts ────────────────────────
   const { data: drafts } = await supabase
@@ -31,9 +31,11 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ candidateRules: [], storyLog: null, message: 'No edit diff found' })
   }
 
-  const original    = drafts.find(d => d.is_original)
+  const original     = drafts.find(d => d.is_original)
   const nonOriginals = drafts.filter(d => !d.is_original)
-  const current     = nonOriginals[nonOriginals.length - 1]
+  // If a specific draft was chosen in the version picker, use it; otherwise default to the latest
+  const current = (draftId ? nonOriginals.find(d => d.id === draftId) : null)
+    ?? nonOriginals[nonOriginals.length - 1]
 
   if (!original || !current) {
     return NextResponse.json({ candidateRules: [], storyLog: null })
@@ -106,6 +108,17 @@ export async function POST(req: NextRequest) {
     .from('posts')
     .update({ status: 'approved', approved_at: new Date().toISOString() })
     .eq('id', postId)
+
+  // Mark the chosen draft as approved; clear the flag on all other non-original drafts
+  await supabase
+    .from('drafts')
+    .update({ is_approved: false })
+    .eq('post_id', postId)
+    .eq('is_original', false)
+  await supabase
+    .from('drafts')
+    .update({ is_approved: true })
+    .eq('id', current.id)
 
   // ── 4. Extract voice rules (only if content changed) ────────────
   if (!contentChanged) {

@@ -20,6 +20,7 @@ type MediaPanelProps = {
   postId: string
   format: string
   onMediaStatusChange?: (hasMedia: boolean) => void
+  onMediaRegenerated?: () => void
 }
 
 const MEDIA_CONFIG: Record<string, { type: MediaType; label: string; icon: typeof FileText }> = {
@@ -37,7 +38,7 @@ const CAPTION_MAX: Record<MediaType, number> = {
   quote_png:    120,
 }
 
-export default function MediaPanel({ postId, format, onMediaStatusChange }: MediaPanelProps) {
+export default function MediaPanel({ postId, format, onMediaStatusChange, onMediaRegenerated }: MediaPanelProps) {
   const config = MEDIA_CONFIG[format]
 
   const [media, setMedia]                     = useState<MediaRecord | null>(null)
@@ -209,6 +210,7 @@ export default function MediaPanel({ postId, format, onMediaStatusChange }: Medi
       })
       if (data.linkedinCaption && !caption) setCaption(data.linkedinCaption)
       onMediaStatusChange?.(true)
+      onMediaRegenerated?.()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Generation failed')
     } finally {

@@ -13,6 +13,7 @@ import DiffView from '@/components/DiffView'
 import PublishPanel from '@/components/PublishPanel'
 import MediaPanel from '@/components/MediaPanel'
 import CandidateRulesModal, { type CandidateRule } from '@/components/CandidateRulesModal'
+import VersionPickerModal, { type VersionEntry } from '@/components/VersionPickerModal'
 
 const REQUIRED_MEDIA: Record<string, string> = {
   long_form_article: 'article_pdf',
@@ -45,12 +46,7 @@ type PostData = {
   }
 }
 
-type DraftVersion = {
-  id: string
-  version: number
-  wordCount: number
-  createdAt: string
-}
+type DraftVersion = VersionEntry
 
 // Normalise a metadata line — strips bold markdown so "**KEY:** value" → "KEY: value"
 const normMetaLine = (l: string) => l.replace(/^\*+\s*/, '').replace(/\*+\s*:/g, ':')
@@ -110,6 +106,9 @@ export default function DraftEditorPage() {
   const [rulesSavedCount, setRulesSavedCount]       = useState<number | null>(null)
   const [mediaRefreshKey, setMediaRefreshKey]       = useState(0)
   const [hasRequiredMedia, setHasRequiredMedia]     = useState(false)
+  const [showVersionPicker, setShowVersionPicker]   = useState(false)
+  const [showMediaAdvisory, setShowMediaAdvisory]   = useState(false)
+  const [approvedVersionNum, setApprovedVersionNum] = useState<number | null>(null)
   // Saturday market insights — market context that gates generation for market_insights posts
   const [satMarketContext, setSatMarketContext]     = useState('')
 
@@ -285,34 +284,72 @@ export default function DraftEditorPage() {
     }
   }, [content, post, postId, handleContentChange])
 
-  // Approve
-  const handleApprove = useCallback(async () => {
-    if (!content.trim()) return
+  // Core approval logic — shared by direct approval and version picker
+  const runApproval = useCallback(async (draftId?: string, displayNum?: number) => {
     setIsApproving(true)
     try {
+      const body: Record<string, string> = { postId }
+      if (draftId) body.draftId = draftId
       const res = await fetch('/api/learn', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ postId }),
+        body: JSON.stringify(body),
       })
       if (!res.ok) throw new Error('Approval failed')
       const json = await res.json()
       setApproved(true)
-      // If the engine detected candidate rules from the edit, show the review modal.
-      // If no edits were made (content unchanged), candidateRules will be empty —
-      // in that case just navigate back to the plan.
+      if (displayNum !== undefined) setApprovedVersionNum(displayNum)
+
+      // Show advisory banner if media already exists — it may have been generated from a different version
+      if (hasRequiredMedia) setShowMediaAdvisory(true)
+
       const candidates: CandidateRule[] = json.candidateRules ?? []
       if (candidates.length > 0) {
         setCandidateRules(candidates)
         setShowCandidates(true)
       }
-      // Stay on page — publish panel is now unlocked, user can proceed to publish
     } catch (err) {
       setGenerateError(err instanceof Error ? err.message : 'Approval failed')
     } finally {
       setIsApproving(false)
     }
-  }, [content, postId])
+  }, [postId, hasRequiredMedia])
+
+  // Approve button click — show version picker when 2+ non-original versions exist
+  const handleApprove = useCallback(() => {
+    if (!content.trim()) return
+    if (versions.length >= 2) {
+      setShowVersionPicker(true)
+    } else {
+      runApproval()
+    }
+  }, [content, versions, runApproval])
+
+  // Called from the version picker after the user picks a version
+  const handlePickedApprove = useCallback(async (draftId: string, displayNum: number) => {
+    // Switch editor to the chosen version's content if it's not already active
+    if (draftId !== activeVersionId) {
+      const draftRes = await fetch(`/api/drafts/${draftId}`)
+      if (draftRes.ok) {
+        const draftJson = await draftRes.json()
+        const clean = stripMetadata(draftJson.content ?? '')
+        setContent(clean)
+        setWordCount(countWords(clean))
+        setActiveVersionId(draftId)
+      }
+    }
+    await runApproval(draftId, displayNum)
+    setShowVersionPicker(false)
+    // Refresh versions list so isApproved flags update
+    try {
+      const refreshRes = await fetch(`/api/posts/${postId}`)
+      if (refreshRes.ok) {
+        const refreshJson = await refreshRes.json()
+        setVersions(refreshJson.versions ?? [])
+        setActiveVersionId(refreshJson.currentVersionId ?? null)
+      }
+    } catch { /* non-critical */ }
+  }, [activeVersionId, postId, runApproval])
 
   const { min, max } = getWordCountRange(post?.format ?? '')
   const wcStatus =
@@ -361,6 +398,16 @@ export default function DraftEditorPage() {
             setRulesSavedCount(count)
             setShowCandidates(false)
           }}
+        />
+      )}
+
+      {/* ── Version Picker Modal ──────────────────────────────────── */}
+      {showVersionPicker && (
+        <VersionPickerModal
+          versions={versions}
+          currentVersionId={activeVersionId}
+          onApprove={handlePickedApprove}
+          onClose={() => setShowVersionPicker(false)}
         />
       )}
 
@@ -621,6 +668,22 @@ export default function DraftEditorPage() {
         </div>
       )}
 
+      {/* ── Media advisory banner ────────────────────────────────── */}
+      {showMediaAdvisory && (
+        <div className="px-5 py-2.5 border-b border-amber-700/30 bg-amber-900/10 shrink-0 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <AlertTriangle size={13} className="text-amber-400 shrink-0" />
+            <p className="text-xs text-amber-300">
+              {approvedVersionNum !== null ? `V${approvedVersionNum} approved.` : 'Approved.'}{' '}
+              Media was generated from a previous version — regenerate from the Media panel before publishing.
+            </p>
+          </div>
+          <button onClick={() => setShowMediaAdvisory(false)} className="text-ink-500 hover:text-cream ml-3 shrink-0">
+            <X size={13} />
+          </button>
+        </div>
+      )}
+
       {/* ── Error ───────────────────────────────────────────────── */}
       {generateError && (
         <div className="px-5 py-2 border-b border-red-800/30 bg-red-900/10 shrink-0 flex items-center justify-between">
@@ -741,6 +804,7 @@ export default function DraftEditorPage() {
                   postId={postId}
                   format={post.format}
                   onMediaStatusChange={setHasRequiredMedia}
+                  onMediaRegenerated={() => setShowMediaAdvisory(false)}
                 />
               )}
 
