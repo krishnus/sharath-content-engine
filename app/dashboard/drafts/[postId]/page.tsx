@@ -109,6 +109,7 @@ export default function DraftEditorPage() {
   const [showVersionPicker, setShowVersionPicker]   = useState(false)
   const [showMediaAdvisory, setShowMediaAdvisory]   = useState(false)
   const [approvedVersionNum, setApprovedVersionNum] = useState<number | null>(null)
+  const [regenFeedback, setRegenFeedback]           = useState('')
   // Saturday market insights — market context that gates generation for market_insights posts
   const [satMarketContext, setSatMarketContext]     = useState('')
 
@@ -192,7 +193,8 @@ export default function DraftEditorPage() {
     setContent('')
     setHashtags([])
 
-    const quarter = post.weeks?.quarter ?? getQuarter(new Date())
+    const quarter    = post.weeks?.quarter ?? getQuarter(new Date())
+    const feedbackVal = regenFeedback.trim()
 
     try {
       const res = await fetch('/api/generate', {
@@ -211,6 +213,7 @@ export default function DraftEditorPage() {
           narrativePosition: post.narrative_position ?? 'chapter_opening',
           quarter,
           ...(post.format === 'market_insights' ? { marketContext: satMarketContext } : {}),
+          ...(feedbackVal ? { feedback: feedbackVal } : {}),
           stream: true,
         }),
       })
@@ -241,6 +244,7 @@ export default function DraftEditorPage() {
       setContent(clean)
       setOriginalContent(clean)
       setHashtags(tags)
+      setRegenFeedback('')
       // saveDrafts runs server-side before the stream closes, so rawText (with
       // LINKEDIN_CAPTION + ARTICLE_TITLE) is already in the DB when we get here.
       // Incrementing the key forces MediaPanel to remount and re-fetch.
@@ -501,7 +505,12 @@ export default function DraftEditorPage() {
           >
             {isGenerating ? <Loader2 size={15} className="animate-spin" /> : <Zap size={15} />}
             <span className="hidden sm:inline">
-              {isGenerating ? 'Generating...' : content ? 'Regenerate' : 'Generate draft'}
+              {isGenerating
+                ? 'Generating...'
+                : content
+                  ? regenFeedback.trim() ? 'Regenerate with feedback' : 'Regenerate'
+                  : 'Generate draft'
+              }
             </span>
           </button>
 
@@ -691,6 +700,26 @@ export default function DraftEditorPage() {
           <button onClick={() => setGenerateError(null)} className="text-ink-500 hover:text-cream ml-3">
             <X size={13} />
           </button>
+        </div>
+      )}
+
+      {/* ── Regeneration feedback ────────────────────────────────── */}
+      {content && !approved && (
+        <div className="border-b border-ink-800 bg-ink-950/50 shrink-0">
+          <div className="px-5 py-2.5 space-y-1.5">
+            <label className="text-xs font-medium text-ink-400">
+              Feedback for next version
+              <span className="text-ink-600 font-normal ml-1.5">(optional — leave blank to regenerate as-is)</span>
+            </label>
+            <textarea
+              value={regenFeedback}
+              onChange={e => setRegenFeedback(e.target.value)}
+              rows={2}
+              placeholder="e.g. The opening is too abstract — start with the Singapore trading floor story instead. Make the Vedic section shorter."
+              className="input text-xs leading-relaxed resize-none w-full"
+              disabled={isGenerating}
+            />
+          </div>
         </div>
       )}
 

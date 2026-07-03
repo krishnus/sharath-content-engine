@@ -250,6 +250,8 @@ export interface GeneratePostPromptParams {
   targetWordCount: number
   hookIdea?: string | null
   narrativeContext: string
+  feedback?: string | null
+  previousDraftExcerpt?: string | null
 }
 
 export function buildGeneratePostPrompt(params: GeneratePostPromptParams): string {
@@ -279,7 +281,22 @@ export function buildGeneratePostPrompt(params: GeneratePostPromptParams): strin
     'Bradford':    'Aspirational but accessible. Progress-focused.',
   }
 
+  const revisionBlock = (params.feedback?.trim())
+    ? [
+        `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`,
+        `REVISION BRIEF — Sharath's feedback on the previous version:`,
+        params.feedback.trim(),
+        params.previousDraftExcerpt?.trim()
+          ? `\nPREVIOUS VERSION (first 600 characters — for context only, do not reproduce):\n${params.previousDraftExcerpt.trim().slice(0, 600)}`
+          : '',
+        `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`,
+        `Write a new, improved version that addresses this feedback. Do not patch the old draft — write fresh.`,
+        ``,
+      ].filter(Boolean).join('\n')
+    : ''
+
   const lines: string[] = [
+    revisionBlock,
     `## POST BRIEF`,
     `**Day:** ${params.day.charAt(0).toUpperCase() + params.day.slice(1)}`,
     `**Pillar:** ${params.pillar.replace(/_/g, ' ')}`,

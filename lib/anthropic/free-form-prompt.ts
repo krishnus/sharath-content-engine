@@ -85,19 +85,37 @@ export function buildFreeFormPostPrompt({
   userPrompt,
   format,
   pillar,
+  feedback,
+  previousDraftExcerpt,
 }: {
   userPrompt: string
   format: PostFormat
   pillar: PostPillar | null
+  feedback?: string | null
+  previousDraftExcerpt?: string | null
 }): string {
   const fi = formatInstructions(format)
+
+  const revisionBlock = feedback?.trim()
+    ? [
+        ``,
+        `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`,
+        `REVISION BRIEF — Sharath's feedback on the previous version:`,
+        feedback.trim(),
+        previousDraftExcerpt?.trim()
+          ? `\nPREVIOUS VERSION (first 600 characters — for context only, do not reproduce):\n${previousDraftExcerpt.trim().slice(0, 600)}`
+          : '',
+        `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`,
+        `Write a new, improved version that addresses this feedback. Do not patch the old draft — write fresh.`,
+      ].filter(Boolean).join('\n')
+    : ''
 
   return `Create a LinkedIn post following this exact brief from Sharath:
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ${userPrompt.trim()}
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
+${revisionBlock}
 This is a standalone post — no weekly arc or narrative continuity required. Follow the brief faithfully while maintaining Sharath's authentic voice.
 ${pillarContext(pillar)}
 **Format:** ${fi.label}

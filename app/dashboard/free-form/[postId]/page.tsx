@@ -86,6 +86,7 @@ export default function FreeFormEditorPage() {
   const [approvedVersionNum, setApprovedVersionNum] = useState<number | null>(null)
   const [showHookPreview, setShowHookPreview]   = useState(false)
   const [autoGenTriggered, setAutoGenTriggered] = useState(false)
+  const [regenFeedback, setRegenFeedback]       = useState('')
 
   const textareaRef   = useRef<HTMLTextAreaElement>(null)
   const saveTimerRef  = useRef<ReturnType<typeof setTimeout>>()
@@ -163,6 +164,8 @@ export default function FreeFormEditorPage() {
     setContent('')
     setHashtags([])
 
+    const feedbackVal = regenFeedback.trim()
+
     try {
       const res = await fetch('/api/free-form/generate', {
         method: 'POST',
@@ -172,6 +175,7 @@ export default function FreeFormEditorPage() {
           userPrompt: currentPost.user_prompt,
           format:     currentPost.format,
           pillar:     currentPost.pillar,
+          ...(feedbackVal ? { feedback: feedbackVal } : {}),
           stream:     true,
         }),
       })
@@ -202,6 +206,7 @@ export default function FreeFormEditorPage() {
       setContent(clean)
       setOriginalContent(clean)
       setHashtags(tags)
+      setRegenFeedback('')
       setMediaRefreshKey(k => k + 1)
 
       try {
@@ -439,7 +444,12 @@ export default function FreeFormEditorPage() {
           >
             {isGenerating ? <Loader2 size={15} className="animate-spin" /> : <Zap size={15} />}
             <span className="hidden sm:inline">
-              {isGenerating ? 'Generating...' : content ? 'Regenerate' : 'Generate'}
+              {isGenerating
+                ? 'Generating...'
+                : content
+                  ? regenFeedback.trim() ? 'Regenerate with feedback' : 'Regenerate'
+                  : 'Generate'
+              }
             </span>
           </button>
 
@@ -466,6 +476,26 @@ export default function FreeFormEditorPage() {
           {post.user_prompt}
         </p>
       </div>
+
+      {/* ── Regeneration feedback ────────────────────────────── */}
+      {content && !approved && (
+        <div className="border-b border-ink-800 bg-ink-950/50 shrink-0">
+          <div className="px-5 py-2.5 space-y-1.5">
+            <label className="text-xs font-medium text-ink-400">
+              Feedback for next version
+              <span className="text-ink-600 font-normal ml-1.5">(optional — leave blank to regenerate as-is)</span>
+            </label>
+            <textarea
+              value={regenFeedback}
+              onChange={e => setRegenFeedback(e.target.value)}
+              rows={2}
+              placeholder="e.g. The opening is too abstract — try a more specific client moment. Shorten the middle section."
+              className="input text-xs leading-relaxed resize-none w-full"
+              disabled={isGenerating}
+            />
+          </div>
+        </div>
+      )}
 
       {/* ── Hook warning ─────────────────────────────────────── */}
       {content && hookOver && (

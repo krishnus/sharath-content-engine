@@ -32,6 +32,7 @@ export async function POST(req: NextRequest) {
     narrativePosition: NarrativePosition
     quarter: string
     marketContext?: string
+    feedback?: string | null
     stream?: boolean
   }
 
@@ -107,6 +108,22 @@ export async function POST(req: NextRequest) {
   const voiceRulesBlock = buildVoiceRulesBlock(voiceRules ?? [])
   const systemPrompt = [MASTER_SYSTEM_PROMPT, voiceRulesBlock].filter(Boolean).join('\n\n')
 
+  // ── 3b. Fetch current draft for feedback context (only when feedback is provided) ──
+  let previousDraftExcerpt: string | null = null
+  if (body.feedback?.trim()) {
+    const { data: existingDrafts } = await supabase
+      .from('drafts')
+      .select('content, is_original, version')
+      .eq('post_id', body.postId)
+      .eq('is_original', false)
+      .order('version', { ascending: false })
+      .limit(1)
+    const latestDraft = existingDrafts?.[0]
+    if (latestDraft?.content) {
+      previousDraftExcerpt = latestDraft.content.slice(0, 800)
+    }
+  }
+
   // ── 4. Build user prompt ─────────────────────────────────────────
   let userPrompt: string
 
@@ -130,14 +147,16 @@ export async function POST(req: NextRequest) {
     })
 
     userPrompt = buildGeneratePostPrompt({
-      day:             body.day,
-      pillar:          body.pillar,
-      format:          body.format,
-      theme:           body.theme,
-      targetAudience:  body.targetAudience,
-      targetWordCount: body.targetWordCount,
-      hookIdea:        body.hookIdea,
+      day:                  body.day,
+      pillar:               body.pillar,
+      format:               body.format,
+      theme:                body.theme,
+      targetAudience:       body.targetAudience,
+      targetWordCount:      body.targetWordCount,
+      hookIdea:             body.hookIdea,
       narrativeContext,
+      feedback:             body.feedback ?? null,
+      previousDraftExcerpt,
     })
   }
 

@@ -12,11 +12,12 @@ export async function POST(req: NextRequest) {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorised' }, { status: 401 })
 
-  const { postId, userPrompt, format, pillar, stream = true } = await req.json() as {
+  const { postId, userPrompt, format, pillar, feedback, stream = true } = await req.json() as {
     postId: string
     userPrompt: string
     format: PostFormat
     pillar: PostPillar | null
+    feedback?: string | null
     stream?: boolean
   }
 
@@ -27,8 +28,23 @@ export async function POST(req: NextRequest) {
     .eq('active', true)
     .order('approved_at', { ascending: true })
 
+  // Fetch previous draft content when feedback is provided
+  let previousDraftExcerpt: string | null = null
+  if (feedback?.trim()) {
+    const { data: existingDrafts } = await supabase
+      .from('free_form_drafts')
+      .select('content, version')
+      .eq('post_id', postId)
+      .eq('is_original', false)
+      .order('version', { ascending: false })
+      .limit(1)
+    if (existingDrafts?.[0]?.content) {
+      previousDraftExcerpt = existingDrafts[0].content.slice(0, 800)
+    }
+  }
+
   const systemPrompt = buildFreeFormSystemPrompt(voiceRules ?? [])
-  const userMsg      = buildFreeFormPostPrompt({ userPrompt, format, pillar })
+  const userMsg      = buildFreeFormPostPrompt({ userPrompt, format, pillar, feedback, previousDraftExcerpt })
 
   // ── Streaming path ────────────────────────────────────────────────────
   if (stream) {
