@@ -100,7 +100,7 @@ export async function POST(req: NextRequest) {
   })
 }
 
-// ── Save draft versions (mirrors /api/generate saveDrafts) ──────────────────
+// ── Save draft (free-form keeps exactly one working draft; never accumulates versions) ──
 async function saveDrafts(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   supabase: any,
@@ -111,31 +111,47 @@ async function saveDrafts(
 
   const { data: existing } = await supabase
     .from('free_form_drafts')
-    .select('version, is_original')
+    .select('id, version, is_original')
     .eq('post_id', postId)
     .order('version', { ascending: false })
 
-  const maxVersion  = existing?.[0]?.version ?? 0
   const hasOriginal = existing?.some((d: { is_original: boolean }) => d.is_original) ?? false
 
   if (!hasOriginal) {
+    // First generation — insert V1 (original, locked for diff) + V2 (working draft)
     await supabase.from('free_form_drafts').insert({
-      post_id:    postId,
-      version:    1,
-      content:    rawText,
-      word_count: countWords(rawText),
+      post_id:     postId,
+      version:     1,
+      content:     rawText,
+      word_count:  countWords(rawText),
       is_original: true,
     })
+    await supabase.from('free_form_drafts').insert({
+      post_id:     postId,
+      version:     2,
+      content:     meta.content,
+      word_count:  meta.wordCount,
+      is_original: false,
+    })
+  } else {
+    // Regeneration — update the single working draft in-place (no new version)
+    const workingDraft = (existing as Array<{ id: string; is_original: boolean }>)
+      .find(d => !d.is_original)
+    if (workingDraft) {
+      await supabase
+        .from('free_form_drafts')
+        .update({ content: meta.content, word_count: meta.wordCount })
+        .eq('id', workingDraft.id)
+    } else {
+      await supabase.from('free_form_drafts').insert({
+        post_id:     postId,
+        version:     2,
+        content:     meta.content,
+        word_count:  meta.wordCount,
+        is_original: false,
+      })
+    }
   }
-
-  const insertVersion = hasOriginal ? maxVersion + 1 : 2
-  await supabase.from('free_form_drafts').insert({
-    post_id:    postId,
-    version:    insertVersion,
-    content:    meta.content,
-    word_count: meta.wordCount,
-    is_original: false,
-  })
 
   await supabase
     .from('free_form_posts')
