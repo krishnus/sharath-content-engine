@@ -1,8 +1,7 @@
-import type { NarrativePosition } from '@/lib/supabase/types'
-
 // ── SATURDAY MARKET INSIGHTS PROMPT ──────────────────────────────────
 export function buildSaturdayMarketInsightsPrompt(params: {
   marketContext: string
+  marketSnapshot: string
   theme: string
   quarter: string
   openThread: string | null
@@ -19,10 +18,15 @@ export function buildSaturdayMarketInsightsPrompt(params: {
     ``,
     params.openThread ? `**Open thread to bridge:** "${params.openThread}"` : '',
     ``,
-    `## THIS WEEK'S ACTUAL MARKET DATA`,
+    `## THIS WEEK'S MARKET DATA`,
     `Use ONLY the data below. Never fabricate numbers, indices, or events.`,
     ``,
-    params.marketContext,
+    `AUTO-FETCHED MARKET SNAPSHOT:`,
+    params.marketSnapshot,
+    ``,
+    params.marketContext?.trim()
+      ? `SHARATH'S QUALITATIVE CONTEXT (sector stories, FII sentiment, macro commentary):\n${params.marketContext}`
+      : '',
     ``,
     `## FORMAT INSTRUCTIONS`,
     `Structure:`,

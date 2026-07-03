@@ -252,6 +252,7 @@ export interface GeneratePostPromptParams {
   narrativeContext: string
   feedback?: string | null
   previousDraftExcerpt?: string | null
+  marketSnapshot?: string | null
 }
 
 export function buildGeneratePostPrompt(params: GeneratePostPromptParams): string {
@@ -308,6 +309,7 @@ export function buildGeneratePostPrompt(params: GeneratePostPromptParams): strin
     `**Format Instructions:**`,
     formatInstructions[params.format],
     ``,
+    params.marketSnapshot ? `## LIVE MARKET CONTEXT\n${params.marketSnapshot}` : '',
     params.hookIdea ? `**Hook idea to develop:** ${params.hookIdea}` : '',
     ``,
     params.narrativeContext,

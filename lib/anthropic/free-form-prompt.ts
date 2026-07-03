@@ -87,12 +87,14 @@ export function buildFreeFormPostPrompt({
   pillar,
   feedback,
   previousDraftExcerpt,
+  marketSnapshot,
 }: {
   userPrompt: string
   format: PostFormat
   pillar: PostPillar | null
   feedback?: string | null
   previousDraftExcerpt?: string | null
+  marketSnapshot?: string | null
 }): string {
   const fi = formatInstructions(format)
 
@@ -110,12 +112,16 @@ export function buildFreeFormPostPrompt({
       ].filter(Boolean).join('\n')
     : ''
 
+  const marketBlock = marketSnapshot?.trim()
+    ? `\n## LIVE MARKET CONTEXT\n${marketSnapshot.trim()}\n`
+    : ''
+
   return `Create a LinkedIn post following this exact brief from Sharath:
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ${userPrompt.trim()}
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-${revisionBlock}
+${revisionBlock}${marketBlock}
 This is a standalone post — no weekly arc or narrative continuity required. Follow the brief faithfully while maintaining Sharath's authentic voice.
 ${pillarContext(pillar)}
 **Format:** ${fi.label}

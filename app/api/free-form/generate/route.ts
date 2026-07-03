@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { getAnthropicClient, MODEL, MAX_TOKENS, parseGenerationMetadata, countWords } from '@/lib/anthropic/client'
 import { buildFreeFormPostPrompt, buildFreeFormSystemPrompt } from '@/lib/anthropic/free-form-prompt'
+import { fetchMarketSnapshot } from '@/lib/utils/market-data'
 import type { PostFormat, PostPillar } from '@/lib/supabase/types'
 
 export const runtime = 'nodejs'
@@ -43,8 +44,20 @@ export async function POST(req: NextRequest) {
     }
   }
 
+  // ── Fetch live market snapshot for financial posts ───────────────────
+  let marketSnapshot: string | null = null
+  const needsMarketData = pillar === 'financial_intelligence' || format === 'market_insights'
+  if (needsMarketData) {
+    try {
+      marketSnapshot = await fetchMarketSnapshot()
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Market data temporarily unavailable.'
+      return NextResponse.json({ error: `${msg} Please try again in a few minutes.` }, { status: 503 })
+    }
+  }
+
   const systemPrompt = buildFreeFormSystemPrompt(voiceRules ?? [])
-  const userMsg      = buildFreeFormPostPrompt({ userPrompt, format, pillar, feedback, previousDraftExcerpt })
+  const userMsg      = buildFreeFormPostPrompt({ userPrompt, format, pillar, feedback, previousDraftExcerpt, marketSnapshot })
 
   // ── Streaming path ────────────────────────────────────────────────────
   if (stream) {

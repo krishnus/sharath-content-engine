@@ -184,12 +184,6 @@ export default function DraftEditorPage() {
   const handleGenerate = useCallback(async () => {
     if (!post) return
 
-    // Saturday market insights posts require real market data before generation
-    if (post.format === 'market_insights' && satMarketContext.trim().length < 20) {
-      setGenerateError('Add this week\'s market events (at least 20 characters) before generating.')
-      return
-    }
-
     setIsGenerating(true)
     setGenerateError(null)
     setContent('')
@@ -593,30 +587,22 @@ export default function DraftEditorPage() {
         )}
       </div>
 
-      {/* ── Saturday market data input ───────────────────────────── */}
+      {/* ── Saturday qualitative context (market numbers auto-fetched) ── */}
       {post.format === 'market_insights' && !approved && (
         <div className="border-b border-amber-700/30 bg-amber-900/10 shrink-0">
           <div className="px-5 py-3 space-y-2">
             <div className="flex items-center gap-2 mb-1">
               <TrendingUp size={13} className="text-amber-400 shrink-0" />
-              <p className="text-xs font-medium text-amber-300">This week&apos;s market events</p>
-              <span className={cn(
-                'ml-auto text-xs font-mono',
-                satMarketContext.trim().split(/\s+/).filter(Boolean).length >= 15
-                  ? 'text-emerald-400'
-                  : 'text-ink-500'
-              )}>
-                {satMarketContext.trim().split(/\s+/).filter(Boolean).length}w
-              </span>
+              <p className="text-xs font-medium text-amber-300">Qualitative context <span className="text-ink-500 font-normal">(optional)</span></p>
             </div>
             <textarea
               value={satMarketContext}
               onChange={e => setSatMarketContext(e.target.value)}
-              placeholder="Nifty/Sensex moves, RBI announcements, sector rotations, FII flows — be specific with numbers and sector names."
+              placeholder="Add colour the numbers can't give — RBI tone, FII sentiment, notable earnings surprises, sector stories. Index levels are fetched automatically."
               rows={3}
               className="input text-xs leading-5 resize-none w-full"
             />
-            <p className="text-xs text-ink-500">Required before generating. The AI uses only what you provide here — it never fabricates market data.</p>
+            <p className="text-xs text-ink-500">Nifty, Sensex, Bank Nifty, USD/INR, Gold, Crude, and S&amp;P 500 are fetched live at generation time.</p>
           </div>
         </div>
       )}

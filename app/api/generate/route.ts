@@ -8,6 +8,7 @@ import {
   buildGeneratePostPrompt,
 } from '@/lib/anthropic/prompts'
 import { buildSaturdayMarketInsightsPrompt } from '@/lib/anthropic/saturday-prompt'
+import { fetchMarketSnapshot } from '@/lib/utils/market-data'
 import type { PostDay, PostPillar, PostFormat, NarrativePosition } from '@/lib/supabase/types'
 
 export const runtime = 'nodejs'
@@ -124,12 +125,24 @@ export async function POST(req: NextRequest) {
     }
   }
 
+  // ── 3c. Fetch live market snapshot for financial_intelligence pillar ──
+  let marketSnapshot: string | null = null
+  if (body.pillar === 'financial_intelligence') {
+    try {
+      marketSnapshot = await fetchMarketSnapshot()
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Market data temporarily unavailable.'
+      return NextResponse.json({ error: `${msg} Please try again in a few minutes.` }, { status: 503 })
+    }
+  }
+
   // ── 4. Build user prompt ─────────────────────────────────────────
   let userPrompt: string
 
-  if (body.format === 'market_insights' && body.marketContext) {
+  if (body.format === 'market_insights') {
     userPrompt = buildSaturdayMarketInsightsPrompt({
-      marketContext:   body.marketContext,
+      marketContext:   body.marketContext ?? '',
+      marketSnapshot:  marketSnapshot ?? '',
       theme:           body.theme,
       quarter:         body.quarter,
       openThread:      week?.open_thread ?? null,
@@ -157,6 +170,7 @@ export async function POST(req: NextRequest) {
       narrativeContext,
       feedback:             body.feedback ?? null,
       previousDraftExcerpt,
+      marketSnapshot,
     })
   }
 

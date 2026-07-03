@@ -19,9 +19,9 @@ type SaturdayInsightsModalProps = {
 }
 
 const EXAMPLES = [
-  'Nifty dropped 1.8% mid-week on FII selling, recovered Friday on strong Q4 results from banking sector',
-  'RBI held rates as expected but hawkish tone surprised markets — rupee weakened to 83.6',
-  'IT sector outperformed; Infosys and TCS both beat estimates — rotation from FMCG visible',
+  'RBI held rates but hawkish tone surprised — markets read it as a signal for longer pause',
+  'IT sector outperformed; Infosys and TCS both beat estimates — visible rotation from FMCG',
+  'FII selling accelerated mid-week on US jobs data, DII flows absorbed the dip by Friday',
 ]
 
 export default function SaturdayInsightsModal({
@@ -40,7 +40,7 @@ export default function SaturdayInsightsModal({
   const [step, setStep]                  = useState<'input' | 'generating'>('input')
 
   const wordCount  = marketContext.trim().split(/\s+/).filter(Boolean).length
-  const canGenerate = marketContext.trim().length > 20
+  const canGenerate = true
 
   const handleGenerate = async () => {
     if (!canGenerate) return
@@ -100,7 +100,7 @@ export default function SaturdayInsightsModal({
             <div>
               <p className="section-label mb-0">Saturday · Market Insights</p>
               <p className="text-sm text-cream font-medium mt-0.5">
-                {step === 'input' ? "What happened in markets this week?" : "Generating your post..."}
+                {step === 'input' ? "Add qualitative context for this week" : "Generating your post..."}
               </p>
             </div>
           </div>
@@ -136,47 +136,38 @@ export default function SaturdayInsightsModal({
                 )}
               </div>
 
-              {/* Market context input */}
+              {/* Auto-fetch notice */}
+              <div className="flex items-start gap-2 px-3 py-3 rounded-lg bg-ink-800 border border-ink-700">
+                <Lightbulb size={13} className="text-gold-500 shrink-0 mt-0.5" />
+                <div className="space-y-1">
+                  <p className="text-xs text-cream-muted font-medium">Auto-fetched at generation time</p>
+                  <p className="text-xs text-ink-400">Nifty 50, Sensex, Bank Nifty, USD/INR, Gold, Crude Oil, and S&amp;P 500 — live prices and weekly % changes are pulled automatically. You do not need to enter index levels.</p>
+                </div>
+              </div>
+
+              {/* Qualitative context input */}
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
                   <label className="text-xs font-medium text-cream uppercase tracking-wider">
-                    This week's market events
+                    Qualitative context <span className="text-ink-500 normal-case font-normal">(optional)</span>
                   </label>
-                  <span className={cn(
-                    'text-xs font-mono',
-                    wordCount >= 20 ? 'text-emerald-400' : 'text-ink-500'
-                  )}>
-                    {wordCount} words
+                  <span className="text-xs font-mono text-ink-500">
+                    {wordCount}w
                   </span>
                 </div>
 
                 <textarea
                   value={marketContext}
                   onChange={e => setMarketContext(e.target.value)}
-                  placeholder={`Add 2-3 key market events from this week.\n\nFor example:\n• ${EXAMPLES[0]}\n• ${EXAMPLES[1]}`}
-                  rows={8}
+                  placeholder={`Add colour the numbers can't give — RBI tone, FII sentiment, sector stories, earnings surprises.\n\nFor example:\n• ${EXAMPLES[0]}\n• ${EXAMPLES[1]}`}
+                  rows={6}
                   className="input text-sm leading-6 resize-none"
                   autoFocus
                 />
 
                 <p className="text-xs text-ink-500">
-                  Be specific — exact numbers, sector names, and events. The AI will never
-                  fabricate market data; it only uses what you provide here.
+                  What was the mood? What surprised the market? What did participants miss?
                 </p>
-              </div>
-
-              {/* Guidance tip */}
-              <div className="flex items-start gap-2 px-3 py-3 rounded-lg bg-ink-800 border border-ink-700">
-                <Lightbulb size={13} className="text-gold-500 shrink-0 mt-0.5" />
-                <div className="space-y-1">
-                  <p className="text-xs text-cream-muted font-medium">What to include</p>
-                  <ul className="text-xs text-ink-400 space-y-0.5">
-                    <li>· Index moves (Nifty, Sensex) with % change</li>
-                    <li>· Any RBI / Fed / macro announcements</li>
-                    <li>· Notable sector rotations or earnings surprises</li>
-                    <li>· FII / DII flows if significant</li>
-                  </ul>
-                </div>
               </div>
 
               {error && (
