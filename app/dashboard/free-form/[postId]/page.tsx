@@ -88,9 +88,10 @@ export default function FreeFormEditorPage() {
   const [autoGenTriggered, setAutoGenTriggered] = useState(false)
   const [regenFeedback, setRegenFeedback]       = useState('')
 
-  const textareaRef   = useRef<HTMLTextAreaElement>(null)
-  const saveTimerRef  = useRef<ReturnType<typeof setTimeout>>()
-  const hashtagsRef   = useRef<string[]>([])
+  const textareaRef       = useRef<HTMLTextAreaElement>(null)
+  const saveTimerRef      = useRef<ReturnType<typeof setTimeout>>()
+  const hashtagsRef       = useRef<string[]>([])
+  const regenFeedbackRef  = useRef('')
 
   // Load post data
   useEffect(() => {
@@ -127,6 +128,7 @@ export default function FreeFormEditorPage() {
 
   useEffect(() => { setWordCount(countWords(content)) }, [content])
   useEffect(() => { hashtagsRef.current = hashtags }, [hashtags])
+  useEffect(() => { regenFeedbackRef.current = regenFeedback }, [regenFeedback])
 
   // Auto-generate on first load when there's no content yet
   useEffect(() => {
@@ -164,7 +166,7 @@ export default function FreeFormEditorPage() {
     setContent('')
     setHashtags([])
 
-    const feedbackVal = regenFeedback.trim()
+    const feedbackVal = regenFeedbackRef.current.trim()
 
     try {
       const res = await fetch('/api/free-form/generate', {
@@ -207,6 +209,7 @@ export default function FreeFormEditorPage() {
       setOriginalContent(clean)
       setHashtags(tags)
       setRegenFeedback('')
+      regenFeedbackRef.current = ''
       setMediaRefreshKey(k => k + 1)
 
       try {

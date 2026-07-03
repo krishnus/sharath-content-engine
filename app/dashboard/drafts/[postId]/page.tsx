@@ -113,11 +113,12 @@ export default function DraftEditorPage() {
   // Saturday market insights — market context that gates generation for market_insights posts
   const [satMarketContext, setSatMarketContext]     = useState('')
 
-  const textareaRef   = useRef<HTMLTextAreaElement>(null)
-  const saveTimerRef  = useRef<ReturnType<typeof setTimeout>>()
+  const textareaRef       = useRef<HTMLTextAreaElement>(null)
+  const saveTimerRef      = useRef<ReturnType<typeof setTimeout>>()
   // Ref so the debounced auto-save always reads the latest hashtags without
   // requiring them as a useCallback dependency (avoids timer restarts on every tag change).
-  const hashtagsRef   = useRef<string[]>([])
+  const hashtagsRef       = useRef<string[]>([])
+  const regenFeedbackRef  = useRef('')
 
   // Load real post data on mount
   useEffect(() => {
@@ -159,6 +160,7 @@ export default function DraftEditorPage() {
 
   // Keep ref in sync so debounced auto-save always has the current set
   useEffect(() => { hashtagsRef.current = hashtags }, [hashtags])
+  useEffect(() => { regenFeedbackRef.current = regenFeedback }, [regenFeedback])
 
   // Auto-save
   const handleContentChange = useCallback((value: string) => {
@@ -193,8 +195,8 @@ export default function DraftEditorPage() {
     setContent('')
     setHashtags([])
 
-    const quarter    = post.weeks?.quarter ?? getQuarter(new Date())
-    const feedbackVal = regenFeedback.trim()
+    const quarter     = post.weeks?.quarter ?? getQuarter(new Date())
+    const feedbackVal = regenFeedbackRef.current.trim()
 
     try {
       const res = await fetch('/api/generate', {
@@ -245,6 +247,7 @@ export default function DraftEditorPage() {
       setOriginalContent(clean)
       setHashtags(tags)
       setRegenFeedback('')
+      regenFeedbackRef.current = ''
       // saveDrafts runs server-side before the stream closes, so rawText (with
       // LINKEDIN_CAPTION + ARTICLE_TITLE) is already in the DB when we get here.
       // Incrementing the key forces MediaPanel to remount and re-fetch.
