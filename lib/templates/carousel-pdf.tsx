@@ -326,7 +326,8 @@ function CarouselDocument({ theme, titleSlide, slides, pillar, seriesLabel, seri
 
         const bodyLines = slide.body
           .split('\n')
-          .map(l => l.replace(/^[-•*\d.]\s*/, '').trim())
+          .filter(l => !/^[-=*_]{2,}$/.test(l.trim()))   // drop separator lines (---, ===, etc.)
+          .map(l => l.replace(/^([-•*]\s+|\d+[.)]\s+)/, '').trim())   // strip list markers only
           .filter(l => l.length > 0)
           .slice(0, 2)   // hard cap: max 2 lines
 
@@ -403,6 +404,7 @@ export function parseCarouselSlides(content: string): { titleSlide: string; slid
 
   for (const line of lines) {
     if (line.match(/^(WORD_COUNT|CORE_INSIGHT|CALLBACK_USED|THREAD_PLANTED|REFERENCES|HASHTAGS|LINKEDIN_CAPTION|QUOTE|SERIES_LABEL|SERIES_COUNT|CONTENT_PLAN):/)) continue
+    if (/^[-=*_]{2,}$/.test(line.trim())) continue   // skip markdown separators (---, ===, ***)
 
     // (.*)  not (.+) — BODY may be empty on the closing slide
     const singleLine = line.match(/^SLIDE\s*\d+\s*\|\s*HEADLINE:\s*(.+?)\s*\|\s*BODY:\s*(.*)/i)
