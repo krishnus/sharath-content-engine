@@ -77,7 +77,7 @@ export async function POST(req: NextRequest) {
       const title = truncateAtWord(rawTitle, 80)
       fileBuffer = await generateArticlePDF({
         title,
-        content:         currentDraft.content,
+        content:         meta.content,
         pillar,
         quarter:         'Q1',
         weekNumber:      0,

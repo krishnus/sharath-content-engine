@@ -11,7 +11,7 @@ export function getAnthropicClient(): Anthropic {
 }
 
 export const MODEL = process.env.ANTHROPIC_MODEL ?? 'claude-sonnet-4-5-20250929'
-export const MAX_TOKENS = 2048
+export const MAX_TOKENS = 4096
 
 /** Count words in a string reliably — never trust LLM self-reporting */
 export function countWords(text: string): number {
@@ -43,9 +43,23 @@ export function parseGenerationMetadata(rawOutput: string): {
     return n.startsWith('WORD_COUNT:') || n.startsWith('CORE_INSIGHT:')
   })
 
-  const content = metaStart > -1
+  const rawContent = metaStart > -1
     ? lines.slice(0, metaStart).join('\n').trim()
     : rawOutput.trim()
+
+  // Strip any trailing lines that are pure hashtag blocks (e.g. "#Tag1 #Tag2").
+  // The LLM sometimes appends these to the article body before the metadata separator;
+  // hashtags must only appear in the HASHTAGS: metadata field.
+  const contentLines = rawContent.split('\n')
+  let contentEnd = contentLines.length
+  while (contentEnd > 0) {
+    const trimmed = contentLines[contentEnd - 1].trim()
+    const isBlank = trimmed === ''
+    const isHashtagLine = trimmed.length > 0 && trimmed.split(/\s+/).every(w => w.startsWith('#'))
+    if (isBlank || isHashtagLine) { contentEnd--; continue }
+    break
+  }
+  const content = contentLines.slice(0, contentEnd).join('\n').trim()
 
   const getMeta = (key: string): string | null => {
     const line = lines.find(l => norm(l).startsWith(`${key}:`))

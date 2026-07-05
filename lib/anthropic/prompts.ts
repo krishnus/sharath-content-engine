@@ -23,29 +23,39 @@ A senior leader who has sat in trading floors in Tokyo and Singapore, managed gl
 - STRONG: "I was in a session with a senior executive last week. On paper, he was exceptional..."
 - WEAK: "In today's fast-paced world, many of us face challenges..."
 
-**Sanskrit and scriptural citations:** Uses Sanskrit with confidence, not decoration.
-Every scriptural reference must follow this exact format:
-1. Quote the original Sanskrit in Devanagari script
-2. Provide a simple phonetic romanization using ONLY standard English letters (a–z, hyphens, commas) — NO diacritical marks, NO special characters like ā ī ū ṛ ṭ ḍ ṇ ś ṣ ḥ ṃ. Write what an educated Indian would write phonetically.
-3. Give the source reference in parentheses — e.g. (BG 3.21), (AS 1.6), (YS 1.2), (AG 1.4)
-4. Provide an English translation
-5. Apply it specifically to the post context
+**Sanskrit and scriptural citations:** Uses Vedic references with precision and depth — never as decoration, never as assumption.
 
-Reference codes:
+CRITICAL RULE — ACCURACY OVER COMPLETENESS:
+Only cite a specific verse with Devanagari text and a verse number when you are 100% certain of its exact wording. When any doubt exists — even slight — use a prose reference instead. A well-framed prose reference is far stronger than a fabricated or garbled verse. An incorrect citation causes direct, lasting damage to Sharath's authority as a Vedic scholar; a missing verse number does not.
+
+NEVER construct Devanagari text by assembling vocabulary you recognise from other verses.
+NEVER cite a verse number you cannot verify with complete confidence.
+NEVER guess. If there is any possibility the shloka is not verbatim correct, do not output Devanagari.
+
+When you ARE certain of the exact verse, use this full format:
+1. Quote the original Sanskrit in Devanagari script — exact, not approximated
+2. Phonetic romanization using ONLY standard English letters (a–z, hyphens, commas) — NO diacritical marks, NO special characters like ā ī ū ṛ ṭ ḍ ṇ ś ṣ ḥ ṃ
+3. Source reference in parentheses — e.g. (BG 3.21), (AS 1.6), (YS 1.2), (AG 1.4)
+4. English translation
+5. Specific application to the post context
+
+Reference codes (use only when exact wording is certain):
 - Bhagavad Gita: BG [chapter].[verse] — e.g. BG 2.47, BG 3.21, BG 18.66
 - Arthashastra: AS [book].[chapter] — e.g. AS 1.6
 - Yoga Sutras: YS [pada].[sutra] — e.g. YS 1.2
 - Ashtavakra Gita: AG [chapter].[verse] — e.g. AG 1.4
 
-Example of correct format:
+Example of a CORRECT full citation (only when 100% certain):
 "कर्मण्येवाधिकारस्ते मा फलेषु कदाचन।
 मा कर्मफलहेतुर्भूर्मा ते सङ्गोऽस्त्वकर्मणि॥"
 (Karmanya evadhikarasthe, ma phaleshu kadachana)
 (BG 2.47)
 "You have a right to perform your duty, but never to the fruits of action."
 
-If the exact Sanskrit is uncertain, reference the concept and chapter only — never fabricate.
-WEAK: Dropping Sanskrit words without the verse, reference, or depth.
+When NOT certain of the exact verse, use this prose form instead (no Devanagari, no verse number):
+"In the third chapter of the Bhagavad Gita, Krishna instructs Arjuna on action without attachment — not passive detachment, but full engagement without ownership of the outcome. This is not philosophy. It is instruction for how a leader moves."
+
+WEAK: Dropping Sanskrit words without genuine certainty of the verse. A fabricated shloka is the worst possible outcome.
 
 **Mythological characters:** References as living teachers with specific lessons.
 - STRONG: "Ranchhordas — the name most people don't know for Lord Krishna — means the one who walked away from the battlefield. Not out of fear. Out of discernment."
@@ -251,7 +261,6 @@ export interface GeneratePostPromptParams {
   hookIdea?: string | null
   narrativeContext: string
   feedback?: string | null
-  previousDraftExcerpt?: string | null
   marketSnapshot?: string | null
 }
 
@@ -287,9 +296,6 @@ export function buildGeneratePostPrompt(params: GeneratePostPromptParams): strin
         `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`,
         `REVISION BRIEF — Sharath's feedback on the previous version:`,
         params.feedback.trim(),
-        params.previousDraftExcerpt?.trim()
-          ? `\nPREVIOUS VERSION (first 600 characters — for context only, do not reproduce):\n${params.previousDraftExcerpt.trim().slice(0, 600)}`
-          : '',
         `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`,
         `Write a new, improved version that addresses this feedback. Do not patch the old draft — write fresh.`,
         ``,
@@ -318,6 +324,7 @@ export function buildGeneratePostPrompt(params: GeneratePostPromptParams): strin
     `CRITICAL: "Category A", "Category B", "Category C", "5-Swans HNI", and "Bradford" are INTERNAL PLANNING LABELS. They must NEVER appear anywhere in the post content. Describe the audience naturally — "senior leaders", "executives", "working professionals", "investors", etc.`,
     `Write the post now. Do not add any preamble, explanation, or meta-commentary.`,
     `Output only the post content itself — exactly as it would appear on LinkedIn.`,
+    `CRITICAL: Do NOT place hashtags anywhere inside the post body. Hashtags belong ONLY in the HASHTAGS: metadata line below. The post body must end with the closing reflection — never with a hashtag block.`,
     `After the post, on a new line starting with "WORD_COUNT:", output the exact word count as an integer.`,
     `After that, on a new line starting with "CORE_INSIGHT:", output a 1–2 sentence summary of the post's central idea.`,
     `After that, on a new line starting with "CALLBACK_USED:", output the exact callback line used in the opening.`,

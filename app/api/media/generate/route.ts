@@ -100,7 +100,7 @@ export async function POST(req: NextRequest) {
 
       fileBuffer = await generateArticlePDF({
         title,
-        content:          currentDraft.content,
+        content:          meta.content,
         pillar,
         quarter:          week.quarter ?? 'Q1',
         weekNumber:       week.week_number,

@@ -109,23 +109,7 @@ export async function POST(req: NextRequest) {
   const voiceRulesBlock = buildVoiceRulesBlock(voiceRules ?? [])
   const systemPrompt = [MASTER_SYSTEM_PROMPT, voiceRulesBlock].filter(Boolean).join('\n\n')
 
-  // ── 3b. Fetch current draft for feedback context (only when feedback is provided) ──
-  let previousDraftExcerpt: string | null = null
-  if (body.feedback?.trim()) {
-    const { data: existingDrafts } = await supabase
-      .from('drafts')
-      .select('content, is_original, version')
-      .eq('post_id', body.postId)
-      .eq('is_original', false)
-      .order('version', { ascending: false })
-      .limit(1)
-    const latestDraft = existingDrafts?.[0]
-    if (latestDraft?.content) {
-      previousDraftExcerpt = latestDraft.content.slice(0, 800)
-    }
-  }
-
-  // ── 3c. Fetch live market snapshot for financial_intelligence pillar ──
+  // ── 3b. Fetch live market snapshot for financial_intelligence pillar ──
   let marketSnapshot: string | null = null
   if (body.pillar === 'financial_intelligence') {
     try {
@@ -169,7 +153,6 @@ export async function POST(req: NextRequest) {
       hookIdea:             body.hookIdea,
       narrativeContext,
       feedback:             body.feedback ?? null,
-      previousDraftExcerpt,
       marketSnapshot,
     })
   }

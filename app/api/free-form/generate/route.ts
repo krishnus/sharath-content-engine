@@ -29,21 +29,6 @@ export async function POST(req: NextRequest) {
     .eq('active', true)
     .order('approved_at', { ascending: true })
 
-  // Fetch previous draft content when feedback is provided
-  let previousDraftExcerpt: string | null = null
-  if (feedback?.trim()) {
-    const { data: existingDrafts } = await supabase
-      .from('free_form_drafts')
-      .select('content, version')
-      .eq('post_id', postId)
-      .eq('is_original', false)
-      .order('version', { ascending: false })
-      .limit(1)
-    if (existingDrafts?.[0]?.content) {
-      previousDraftExcerpt = existingDrafts[0].content.slice(0, 800)
-    }
-  }
-
   // ── Fetch live market snapshot for financial posts ───────────────────
   let marketSnapshot: string | null = null
   const needsMarketData = pillar === 'financial_intelligence' || format === 'market_insights'
@@ -57,7 +42,7 @@ export async function POST(req: NextRequest) {
   }
 
   const systemPrompt = buildFreeFormSystemPrompt(voiceRules ?? [])
-  const userMsg      = buildFreeFormPostPrompt({ userPrompt, format, pillar, feedback, previousDraftExcerpt, marketSnapshot })
+  const userMsg      = buildFreeFormPostPrompt({ userPrompt, format, pillar, feedback, marketSnapshot })
 
   // ── Streaming path ────────────────────────────────────────────────────
   if (stream) {

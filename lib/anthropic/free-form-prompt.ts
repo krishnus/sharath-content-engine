@@ -86,14 +86,12 @@ export function buildFreeFormPostPrompt({
   format,
   pillar,
   feedback,
-  previousDraftExcerpt,
   marketSnapshot,
 }: {
   userPrompt: string
   format: PostFormat
   pillar: PostPillar | null
   feedback?: string | null
-  previousDraftExcerpt?: string | null
   marketSnapshot?: string | null
 }): string {
   const fi = formatInstructions(format)
@@ -104,9 +102,6 @@ export function buildFreeFormPostPrompt({
         `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`,
         `REVISION BRIEF — Sharath's feedback on the previous version:`,
         feedback.trim(),
-        previousDraftExcerpt?.trim()
-          ? `\nPREVIOUS VERSION (first 600 characters — for context only, do not reproduce):\n${previousDraftExcerpt.trim().slice(0, 600)}`
-          : '',
         `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`,
         `Write a new, improved version that addresses this feedback. Do not patch the old draft — write fresh.`,
       ].filter(Boolean).join('\n')
@@ -133,6 +128,7 @@ CRITICAL OUTPUT RULES:
 - "Category A", "Category B", "Category C", "5-Swans HNI", "Bradford" are INTERNAL LABELS — never appear in the post.
 - First 210 characters must be complete and compelling — LinkedIn cuts there.
 - No generic openers ("In today's fast-paced world", "Many of us struggle with").
+- Do NOT place hashtags anywhere inside the post body. Hashtags belong ONLY in the HASHTAGS: metadata line at the end.
 - Write only in Sharath's voice as described in the system prompt.`
 }
 
