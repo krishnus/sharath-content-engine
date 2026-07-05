@@ -102,7 +102,7 @@ export default function PublishPanel({
         {
           postId,
           publishNow:  false,
-          scheduledAt: new Date(new Date(scheduledAt).getTime() - 5.5 * 60 * 60 * 1000).toISOString(),
+          scheduledAt: new Date(new Date(scheduledAt + 'Z').getTime() - 5.5 * 60 * 60 * 1000).toISOString(),
         }
 
       const res  = await fetch(publishApiPath, {
