@@ -220,10 +220,10 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: result.error }, { status: 502 })
     }
 
-    await supabase.from('linkedin_posts').insert({
+    await supabase.from('linkedin_posts').upsert({
       post_id: postId, linkedin_post_id: result.postId!,
       linkedin_url: result.url ?? null, published_at: new Date().toISOString(),
-    })
+    }, { onConflict: 'post_id' })
     await supabase.from('posts').update({ status: 'published' }).eq('id', postId)
 
     return NextResponse.json({
@@ -262,10 +262,10 @@ export async function POST(req: NextRequest) {
     }
 
     if (!preview) {
-      await supabase.from('linkedin_posts').insert({
+      await supabase.from('linkedin_posts').upsert({
         post_id: postId, linkedin_post_id: result.postId!,
         linkedin_url: result.url ?? null, published_at: new Date().toISOString(),
-      })
+      }, { onConflict: 'post_id' })
       await supabase.from('posts').update({ status: 'published' }).eq('id', postId)
     }
 
@@ -293,10 +293,10 @@ export async function POST(req: NextRequest) {
   }
 
   if (!preview) {
-    await supabase.from('linkedin_posts').insert({
+    await supabase.from('linkedin_posts').upsert({
       post_id: postId, linkedin_post_id: result.postId!,
       linkedin_url: result.url ?? null, published_at: new Date().toISOString(),
-    })
+    }, { onConflict: 'post_id' })
     await supabase.from('posts').update({ status: 'published' }).eq('id', postId)
   }
 
