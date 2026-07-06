@@ -25,6 +25,7 @@ export default function PublishPanel({
   postStatus,
   hasRequiredMedia,
   scheduledAt: scheduledAtFromDB,
+  initialPublishedUrl,
   onPublished,
   onScheduled,
   onStatusReset,
@@ -40,6 +41,7 @@ export default function PublishPanel({
   postStatus: string
   hasRequiredMedia: boolean
   scheduledAt?: string
+  initialPublishedUrl?: string | null
   onPublished: (url: string) => void
   onScheduled: (scheduledAt: string) => void
   onStatusReset: () => void
@@ -50,16 +52,18 @@ export default function PublishPanel({
   const isDocumentPost = DOCUMENT_FORMATS.includes(format ?? '')
   const mediaLabel = isDocumentPost ? 'PDF' : 'Quote Image'
 
+  const alreadyPublished = postStatus === 'published' && !!initialPublishedUrl
+
   const [mode, setMode]                   = useState<Mode>('schedule')
   const [loading, setLoading]             = useState(false)
   const [resetting, setResetting]         = useState(false)
   const [deleting, setDeleting]           = useState(false)
   const [error, setError]                 = useState<string | null>(null)
-  const [done, setDone]                   = useState(false)
-  const [doneMode, setDoneMode]           = useState<Mode>('schedule')
+  const [done, setDone]                   = useState(alreadyPublished)
+  const [doneMode, setDoneMode]           = useState<Mode>(alreadyPublished ? 'now' : 'schedule')
   const [previewUrl, setPreviewUrl]       = useState<string | null>(null)
   const [previewPostId, setPreviewPostId] = useState<string | null>(null)
-  const [publishedUrl, setPublishedUrl]   = useState<string | null>(null)
+  const [publishedUrl, setPublishedUrl]   = useState<string | null>(initialPublishedUrl ?? null)
 
   function buildDefaultScheduledAt(): string {
     const DAY_OFFSET: Record<string, number> = {

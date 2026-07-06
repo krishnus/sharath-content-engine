@@ -80,6 +80,7 @@ export default function FreeFormEditorPage() {
   const [showCandidates, setShowCandidates]     = useState(false)
   const [rulesSavedCount, setRulesSavedCount]   = useState<number | null>(null)
   const [mediaRefreshKey, setMediaRefreshKey]   = useState(0)
+  const [linkedinUrl, setLinkedinUrl]           = useState<string | null>(null)
   const [hasRequiredMedia, setHasRequiredMedia] = useState(false)
   const [showVersionPicker, setShowVersionPicker] = useState(false)
   const [showMediaAdvisory, setShowMediaAdvisory] = useState(false)
@@ -112,6 +113,7 @@ export default function FreeFormEditorPage() {
         setHashtags(dbHashtags)
         hashtagsRef.current = dbHashtags
         setApproved(['approved', 'published', 'scheduled'].includes(json.post?.status ?? ''))
+        if (json.linkedinUrl) setLinkedinUrl(json.linkedinUrl)
         const requiredType = REQUIRED_MEDIA[json.post?.format ?? '']
         const mediaExists = requiredType
           ? (json.media ?? []).some((m: { media_type: string }) => m.media_type === requiredType)
@@ -664,7 +666,8 @@ export default function FreeFormEditorPage() {
               postStatus={post.status}
               hasRequiredMedia={hasRequiredMedia}
               scheduledAt={post.scheduled_at ?? undefined}
-              onPublished={() => {/* url tracked via postStatus */ }}
+              initialPublishedUrl={linkedinUrl}
+              onPublished={(url) => setLinkedinUrl(url)}
               onScheduled={() => {}}
               onStatusReset={() => {
                 setPost(p => p ? { ...p, status: 'approved', scheduled_at: null } : p)

@@ -49,6 +49,12 @@ export async function POST(req: NextRequest) {
   }
 
   if (!preview && !promotePreview) {
+    if (post.status === 'published' && publishNow) {
+      return NextResponse.json(
+        { error: 'This post has already been published to LinkedIn.' },
+        { status: 400 }
+      )
+    }
     if (post.status !== 'approved' && post.status !== 'scheduled' && post.status !== 'published') {
       return NextResponse.json(
         { error: `Post must be approved before publishing (current status: ${post.status})` },

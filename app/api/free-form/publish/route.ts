@@ -36,6 +36,12 @@ export async function POST(req: NextRequest) {
   }
 
   if (!preview && !promotePreview) {
+    if (post.status === 'published' && publishNow) {
+      return NextResponse.json(
+        { error: 'This post has already been published to LinkedIn.' },
+        { status: 400 }
+      )
+    }
     if (post.status !== 'approved' && post.status !== 'scheduled' && post.status !== 'published') {
       return NextResponse.json(
         { error: `Post must be approved before publishing (current status: ${post.status})` },
@@ -192,10 +198,10 @@ export async function POST(req: NextRequest) {
       await supabase.from('free_form_posts').update({ status: 'publish_failed', updated_at: new Date().toISOString() }).eq('id', postId)
       return NextResponse.json({ error: result.error }, { status: 502 })
     }
-    await supabase.from('free_form_linkedin_posts').insert({
+    await supabase.from('free_form_linkedin_posts').upsert({
       post_id: postId, linkedin_post_id: result.postId!,
       linkedin_url: result.url ?? null, published_at: new Date().toISOString(),
-    })
+    }, { onConflict: 'post_id' })
     await supabase.from('free_form_posts').update({ status: 'published', updated_at: new Date().toISOString() }).eq('id', postId)
     return NextResponse.json({ published: true, url: result.url, linkedinPostId: result.postId, hasMedia: true, mediaType: mediaRecord.media_type })
   }
@@ -234,10 +240,10 @@ export async function POST(req: NextRequest) {
   }
 
   if (!preview) {
-    await supabase.from('free_form_linkedin_posts').insert({
+    await supabase.from('free_form_linkedin_posts').upsert({
       post_id: postId, linkedin_post_id: result.postId!,
       linkedin_url: result.url ?? null, published_at: new Date().toISOString(),
-    })
+    }, { onConflict: 'post_id' })
     await supabase.from('free_form_posts').update({ status: 'published', updated_at: new Date().toISOString() }).eq('id', postId)
   }
 

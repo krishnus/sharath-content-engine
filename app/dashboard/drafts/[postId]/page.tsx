@@ -100,6 +100,7 @@ export default function DraftEditorPage() {
   const [isApproving, setIsApproving]         = useState(false)
   const [approved, setApproved]               = useState(false)
   const [publishedUrl, setPublishedUrl] = useState<string | null>(null)
+  const [linkedinUrl, setLinkedinUrl]   = useState<string | null>(null)
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false)
   const [candidateRules, setCandidateRules]         = useState<CandidateRule[]>([])
   const [showCandidates, setShowCandidates]         = useState(false)
@@ -139,9 +140,7 @@ export default function DraftEditorPage() {
         const dbHashtags: string[] = json.post?.hashtags ?? []
         setHashtags(dbHashtags)
         setApproved(json.post?.status === 'approved' || json.post?.status === 'published' || json.post?.status === 'scheduled')
-        if (json.post?.status === 'published' && json.post?.linkedin_url) {
-          setPublishedUrl(json.post.linkedin_url)
-        }
+        if (json.linkedinUrl) setLinkedinUrl(json.linkedinUrl)
         const requiredType = REQUIRED_MEDIA[json.post?.format ?? '']
         const mediaExists = requiredType
           ? (json.media ?? []).some((m: { media_type: string }) => m.media_type === requiredType)
@@ -807,7 +806,8 @@ export default function DraftEditorPage() {
                 postStatus={post.status}
                 hasRequiredMedia={hasRequiredMedia}
                 scheduledAt={post.scheduled_at ?? undefined}
-                onPublished={(url) => setPublishedUrl(url)}
+                initialPublishedUrl={linkedinUrl}
+                onPublished={(url) => { setPublishedUrl(url); setLinkedinUrl(url) }}
                 onScheduled={() => {/* status tracked via postStatus prop */}}
                 onStatusReset={() => {
                   setPost(p => p ? { ...p, status: 'approved', scheduled_at: null } : p)

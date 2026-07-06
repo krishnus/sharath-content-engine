@@ -14,10 +14,11 @@ export async function GET(
 
   const { postId } = params
 
-  const [{ data: post, error: postError }, { data: drafts }, { data: media }] = await Promise.all([
+  const [{ data: post, error: postError }, { data: drafts }, { data: media }, { data: liPost }] = await Promise.all([
     supabase.from('free_form_posts').select('*').eq('id', postId).single(),
     supabase.from('free_form_drafts').select('*').eq('post_id', postId).order('version', { ascending: true }),
     supabase.from('free_form_media').select('id, media_type, file_name, file_size, page_count, linkedin_caption, storage_path').eq('post_id', postId),
+    supabase.from('free_form_linkedin_posts').select('linkedin_post_id, linkedin_url').eq('post_id', postId).maybeSingle(),
   ])
 
   if (postError || !post) {
@@ -62,6 +63,8 @@ export async function GET(
     suggestedTitle:   getMetaField('ARTICLE_TITLE'),
     suggestedQuote:   getMetaField('QUOTE'),
     suggestedCaption: getMetaField('LINKEDIN_CAPTION'),
+    linkedinUrl:      liPost?.linkedin_url ?? null,
+    linkedinPostId:   liPost?.linkedin_post_id ?? null,
   })
 }
 

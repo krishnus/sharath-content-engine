@@ -32,9 +32,10 @@ export async function GET(
     return NextResponse.json({ error: 'Post not found' }, { status: 404 })
   }
 
-  const [{ data: drafts }, { data: mediaRecords }] = await Promise.all([
+  const [{ data: drafts }, { data: mediaRecords }, { data: liPost }] = await Promise.all([
     supabase.from('drafts').select('*').eq('post_id', postId).order('version', { ascending: true }),
     supabase.from('post_media').select('id, media_type, file_name, file_size, page_count, linkedin_caption, storage_path').eq('post_id', postId),
+    supabase.from('linkedin_posts').select('linkedin_post_id, linkedin_url').eq('post_id', postId).maybeSingle(),
   ])
 
   type DraftRow = { id: string; is_original: boolean; is_approved: boolean; version: number; word_count: number; content: string; created_at: string }
@@ -80,6 +81,8 @@ export async function GET(
     suggestedTitle:   getMetaField('ARTICLE_TITLE'),
     suggestedQuote:   getMetaField('QUOTE'),
     suggestedCaption: getMetaField('LINKEDIN_CAPTION'),
+    linkedinUrl:      liPost?.linkedin_url ?? null,
+    linkedinPostId:   liPost?.linkedin_post_id ?? null,
   })
 }
 
