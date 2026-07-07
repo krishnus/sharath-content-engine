@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createServiceClient } from '@/lib/supabase/server'
+import { createClient } from '@supabase/supabase-js'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -12,19 +12,34 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'Unauthorised' }, { status: 401 })
   }
 
-  const supabase = createServiceClient()
+  // Use the admin client directly — no cookie dependency in cron context
+  const supabase = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    { auth: { autoRefreshToken: false, persistSession: false } }
+  )
 
-  // Get the stored user OAuth token (service client can bypass RLS)
-  const { data: tokenRow } = await supabase
+  // Get the stored user OAuth token (service client bypasses RLS)
+  const { data: tokenRow, error: tokenFetchError } = await supabase
     .from('linkedin_tokens')
     .select('access_token, expires_at')
     .order('updated_at', { ascending: false })
     .limit(1)
     .maybeSingle()
 
+  if (tokenFetchError) {
+    console.error('[cron/analytics] Failed to fetch LinkedIn token:', tokenFetchError)
+    return NextResponse.json({ fetched: 0, message: 'DB error fetching token' })
+  }
+
   if (!tokenRow) {
     console.warn('[cron/analytics] No LinkedIn token stored — connect LinkedIn in Settings')
     return NextResponse.json({ fetched: 0, message: 'LinkedIn not connected' })
+  }
+
+  if (!tokenRow.access_token) {
+    console.warn('[cron/analytics] LinkedIn token is empty — reconnect LinkedIn in Settings')
+    return NextResponse.json({ fetched: 0, message: 'LinkedIn token is empty — please reconnect' })
   }
 
   if (new Date(tokenRow.expires_at) <= new Date()) {
@@ -38,14 +53,19 @@ export async function GET(req: NextRequest) {
   const cutoff = new Date()
   cutoff.setDate(cutoff.getDate() - 90)
 
-  const { data: liPosts, error } = await supabase
+  const { data: liPosts, error: postsError } = await supabase
     .from('linkedin_posts')
     .select('id, linkedin_post_id, linkedin_url')
     .gte('published_at', cutoff.toISOString())
     .limit(50)
 
-  if (error || !liPosts?.length) {
-    return NextResponse.json({ fetched: 0 })
+  if (postsError) {
+    console.error('[cron/analytics] Failed to fetch linkedin_posts:', postsError)
+    return NextResponse.json({ fetched: 0, message: 'DB error fetching linkedin_posts' })
+  }
+
+  if (!liPosts?.length) {
+    return NextResponse.json({ fetched: 0, message: 'No published posts in last 90 days' })
   }
 
   const results = await Promise.allSettled(
@@ -66,12 +86,13 @@ async function fetchAndStoreAnalytics(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   supabase: any
 ): Promise<void> {
-  // /v2/socialActions/{shareUrn} returns like/comment counts using the post owner's OAuth token
+  // Use /rest/socialActions (versioned REST, same API family as /rest/posts publishing)
   const res = await fetch(
-    `https://api.linkedin.com/v2/socialActions/${encodeURIComponent(liPost.linkedin_post_id)}`,
+    `https://api.linkedin.com/rest/socialActions/${encodeURIComponent(liPost.linkedin_post_id)}`,
     {
       headers: {
         Authorization:                 `Bearer ${accessToken}`,
+        'LinkedIn-Version':            '202604',
         'X-Restli-Protocol-Version':   '2.0.0',
       },
     }
@@ -79,24 +100,26 @@ async function fetchAndStoreAnalytics(
 
   if (!res.ok) {
     const body = await res.text().catch(() => '')
+    console.error(`[cron/analytics] LinkedIn REST socialActions ${res.status} for ${liPost.linkedin_post_id}: ${body}`)
     throw new Error(`LinkedIn socialActions error ${res.status}: ${body}`)
   }
 
   const data = await res.json()
+  console.log(`[cron/analytics] socialActions response keys: ${Object.keys(data).join(', ')}`)
 
-  // LinkedIn v2 socialActions response shape has nested paging objects for likes/comments
-  // and totalSocialActivityCounts at the root — try multiple field locations
-  const likes    = data.totalSocialActivityCounts?.numLikes    ?? data.likes?.paging?.total    ?? data.numLikes    ?? 0
-  const comments = data.totalSocialActivityCounts?.numComments ?? data.comments?.paging?.total ?? data.numComments ?? 0
-  const reposts  = data.totalSocialActivityCounts?.numShares   ?? data.shares?.paging?.total   ?? data.numShares   ?? 0
+  // REST socialActions response — try multiple known field locations
+  const counts = data.totalSocialActivityCounts ?? data.socialActivityCounts ?? {}
+  const likes    = counts.numLikes    ?? data.numLikes    ?? data.likesSummary?.totalLikes ?? 0
+  const comments = counts.numComments ?? data.numComments ?? data.commentsSummary?.totalFirstLevelComments ?? 0
+  const reposts  = counts.numShares   ?? data.numShares   ?? data.sharesSummary?.totalShares ?? 0
 
   await supabase.from('performance_data').insert({
     linkedin_post_id: liPost.id,
     source:      'api',
-    impressions: 0,       // Not available via LinkedIn personal profile API — entered manually via check-in
+    impressions: 0,
     likes,
     comments,
-    shares:  reposts,     // legacy field kept for backwards compat
+    shares:  reposts,
     reposts,
     clicks:  0,
     fetched_at: new Date().toISOString(),
