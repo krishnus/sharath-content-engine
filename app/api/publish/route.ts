@@ -114,6 +114,13 @@ export async function POST(req: NextRequest) {
     publishText = (publishText + '\n\n' + hashtagStr).slice(0, LI_MAX_CHARS)
   }
 
+  // ── Resolve [REF:post_id] placeholders → actual LinkedIn URLs ────────────
+  const { text: refResolvedText, unresolvedCount: unresolvedRefs } = await resolveRefs(publishText, supabase)
+  publishText = refResolvedText
+  if (unresolvedRefs > 0) {
+    console.warn(`[publish] ${unresolvedRefs} [REF:...] placeholder(s) unresolved — referenced post(s) not yet published, removed from text`)
+  }
+
   // ── Get LinkedIn token (needed for both schedule and immediate publish) ─
   const tokenQuery = userId
     ? supabase.from('linkedin_tokens').select('*').eq('user_id', userId).single()
@@ -238,6 +245,7 @@ export async function POST(req: NextRequest) {
       linkedinPostId: result.postId,
       hasMedia:       true,
       mediaType:      mediaRecord.media_type,
+      unresolvedRefs,
     })
   }
 
@@ -282,6 +290,7 @@ export async function POST(req: NextRequest) {
       linkedinPostId: result.postId,
       hasMedia:       true,
       mediaType:      mediaRecord.media_type,
+      unresolvedRefs,
     })
   }
 
@@ -312,7 +321,50 @@ export async function POST(req: NextRequest) {
     url:            result.url,
     linkedinPostId: result.postId,
     hasMedia:       false,
+    unresolvedRefs,
   })
+}
+
+
+// ── Resolve [REF:uuid] placeholders → LinkedIn URLs ───────────────────────
+async function resolveRefs(
+  text: string,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  supabase: any
+): Promise<{ text: string; unresolvedCount: number }> {
+  const REF_RE = /\[REF:([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\]/gi
+  const matches = [...text.matchAll(REF_RE)]
+  if (matches.length === 0) return { text, unresolvedCount: 0 }
+
+  const postIds = [...new Set(matches.map(m => m[1]))]
+  const { data: liPosts } = await supabase
+    .from('linkedin_posts')
+    .select('post_id, linkedin_url')
+    .in('post_id', postIds)
+
+  const urlMap = new Map<string, string>(
+    (liPosts ?? [])
+      .filter((lp: { linkedin_url: string | null }) => lp.linkedin_url)
+      .map((lp: { post_id: string; linkedin_url: string }) => [lp.post_id, lp.linkedin_url])
+  )
+
+  let unresolvedCount = 0
+  let resolved = text.replace(REF_RE, (_match, postId) => {
+    const url = urlMap.get(postId)
+    if (url) return url
+    unresolvedCount++
+    return ''
+  })
+
+  // Remove orphaned ↳ lines (↳ with nothing after it once the ref was stripped)
+  resolved = resolved
+    .split('\n')
+    .filter(line => line.trim() !== '↳' && line.trim() !== '↳ ')
+    .join('\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim()
+
+  return { text: resolved, unresolvedCount }
 }
 
 

@@ -141,8 +141,26 @@ Use phrasings like:
 Do NOT repeat the full story or shloka citation if used within the last 4 weeks.
 Instead, reference it briefly and build deeper — this creates the serialised book effect.
 
-Note: When LinkedIn publishing is live, replace "a recent post" with the actual LinkedIn post URL.
-The story log stores post_id linking to linkedin_posts.linkedin_url for this purpose.
+## EMBEDDING POST LINKS WITH [REF:post_id]
+
+When the NARRATIVE CONTEXT PACKET includes a REFERENCEABLE POSTS section, you can embed a clickable link to a specific past post using the [REF:post_id] token. The URL is resolved automatically at publishing time.
+
+PLACEMENT RULE — always place [REF:post_id] on its own line with a ↳ prefix, never embedded mid-sentence:
+
+CORRECT:
+"I explored the Arjuna paradox in depth last Monday.
+↳ [REF:abc-123-uuid]"
+
+INCORRECT:
+"As I mentioned in [REF:abc-123-uuid], the transition..."
+
+Use [REF:...] only when:
+- The reference adds genuine value for the reader who wants to go deeper
+- The post being referenced is directly relevant (not just tangentially related)
+- It reads naturally, not like a self-promotion mechanism
+
+Do NOT force a reference into every post. One well-placed reference in a week is more powerful than three.
+Only use post IDs exactly as listed in the REFERENCEABLE POSTS section — do not invent or guess IDs.
 
 ## QUARTERLY ARC TONES
 - Q1 (Jan–Mar): The Awakening — recognition, discomfort, honest questioning
@@ -156,6 +174,16 @@ The story log stores post_id linking to linkedin_posts.linkedin_url for this pur
 // NARRATIVE CONTEXT PACKET
 // Built fresh for each generation call from Supabase data.
 // ============================================================
+export type ReferenceablePost = {
+  id: string
+  day: string
+  pillar: string
+  weekNumber: number
+  weekTheme: string | null
+  coreInsight: string | null
+  linkedinUrl: string | null
+}
+
 export function buildNarrativeContext(context: {
   previousPostInsight?: string | null
   previousPostTiming?: string | null
@@ -164,6 +192,7 @@ export function buildNarrativeContext(context: {
   quarter: string
   recentReferences?: { vedic: string[]; banking: string[]; coaching: string[] }
   performanceInsights?: string | null
+  referenceablePosts?: ReferenceablePost[]
 }): string {
   const parts: string[] = ['## NARRATIVE CONTEXT FOR THIS POST']
 
@@ -201,6 +230,23 @@ export function buildNarrativeContext(context: {
 
   if (context.performanceInsights) {
     parts.push(`## AUDIENCE-VALIDATED PERFORMANCE LEARNINGS\n(These patterns produced the highest engagement in previous posts — apply them where natural)\n\n${context.performanceInsights}`)
+  }
+
+  if (context.referenceablePosts && context.referenceablePosts.length > 0) {
+    const catalogue = context.referenceablePosts.map(p => {
+      const status = p.linkedinUrl ? '[LIVE ✓]' : '[NOT YET PUBLISHED]'
+      const label = p.coreInsight
+        ? `"${p.coreInsight.slice(0, 70)}${p.coreInsight.length > 70 ? '...' : ''}"`
+        : `${p.day} — ${p.pillar.replace(/_/g, ' ')}`
+      return `[REF:${p.id}] Week ${p.weekNumber} ${p.day} — ${label} ${status}`
+    }).join('\n')
+
+    parts.push(
+      `## REFERENCEABLE POSTS\n` +
+      `Place [REF:post_id] on its own line with ↳ prefix when you want to link to a past post.\n` +
+      `URL resolves at publishing time. Only use when it adds genuine value.\n\n` +
+      catalogue
+    )
   }
 
   return parts.join('\n\n')

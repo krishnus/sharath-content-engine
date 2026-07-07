@@ -32,10 +32,17 @@ export async function GET(
     return NextResponse.json({ error: 'Post not found' }, { status: 404 })
   }
 
-  const [{ data: drafts }, { data: mediaRecords }, { data: liPost }] = await Promise.all([
+  const [{ data: drafts }, { data: mediaRecords }, { data: liPost }, { data: refPostsRaw }] = await Promise.all([
     supabase.from('drafts').select('*').eq('post_id', postId).order('version', { ascending: true }),
     supabase.from('post_media').select('id, media_type, file_name, file_size, page_count, linkedin_caption, storage_path').eq('post_id', postId),
     supabase.from('linkedin_posts').select('linkedin_post_id, linkedin_url').eq('post_id', postId).maybeSingle(),
+    supabase
+      .from('posts')
+      .select('id, day, pillar, weeks ( week_number, theme ), linkedin_posts ( linkedin_url ), story_log ( core_insight )')
+      .in('status', ['published', 'approved', 'scheduled'])
+      .neq('id', postId)
+      .order('created_at', { ascending: false })
+      .limit(12),
   ])
 
   type DraftRow = { id: string; is_original: boolean; is_approved: boolean; version: number; word_count: number; content: string; created_at: string }
@@ -83,6 +90,21 @@ export async function GET(
     suggestedCaption: getMetaField('LINKEDIN_CAPTION'),
     linkedinUrl:      liPost?.linkedin_url ?? null,
     linkedinPostId:   liPost?.linkedin_post_id ?? null,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    referenceablePosts: (refPostsRaw ?? []).map((p: any) => {
+      const weeks    = Array.isArray(p.weeks)          ? p.weeks[0]          : p.weeks
+      const liP      = Array.isArray(p.linkedin_posts)  ? p.linkedin_posts[0]  : p.linkedin_posts
+      const storyLog = Array.isArray(p.story_log)      ? p.story_log[0]      : p.story_log
+      return {
+        id:          p.id,
+        day:         p.day,
+        pillar:      p.pillar,
+        weekNumber:  weeks?.week_number ?? 0,
+        weekTheme:   weeks?.theme ?? null,
+        coreInsight: storyLog?.core_insight ?? null,
+        linkedinUrl: liP?.linkedin_url ?? null,
+      }
+    }),
   })
 }
 

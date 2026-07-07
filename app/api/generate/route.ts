@@ -6,6 +6,7 @@ import {
   buildNarrativeContext,
   buildVoiceRulesBlock,
   buildGeneratePostPrompt,
+  type ReferenceablePost,
 } from '@/lib/anthropic/prompts'
 import { buildSaturdayMarketInsightsPrompt } from '@/lib/anthropic/saturday-prompt'
 import { fetchMarketSnapshot } from '@/lib/utils/market-data'
@@ -44,8 +45,8 @@ export async function POST(req: NextRequest) {
     .eq('active', true)
     .order('approved_at', { ascending: true })
 
-  // ── 2. Fetch narrative context + performance insights ───────────
-  const [prevStoryLogResult, weekResult, insightResult] = await Promise.all([
+  // ── 2. Fetch narrative context + performance insights + referenceable posts ──
+  const [prevStoryLogResult, weekResult, insightResult, refPostsResult] = await Promise.all([
     supabase
       .from('story_log')
       .select('core_insight, thread_planted, references_used, posts(day, weeks(week_start))')
@@ -63,6 +64,18 @@ export async function POST(req: NextRequest) {
       .order('created_at', { ascending: false })
       .limit(1)
       .maybeSingle(),
+    supabase
+      .from('posts')
+      .select(`
+        id, day, pillar,
+        weeks ( week_number, theme ),
+        linkedin_posts ( linkedin_url ),
+        story_log ( core_insight )
+      `)
+      .in('status', ['published', 'approved', 'scheduled'])
+      .neq('id', body.postId)
+      .order('created_at', { ascending: false })
+      .limit(12),
   ])
 
   const prevStoryLog = prevStoryLogResult.data
@@ -133,6 +146,22 @@ export async function POST(req: NextRequest) {
       targetWordCount: body.targetWordCount,
     })
   } else {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const referenceablePosts: ReferenceablePost[] = (refPostsResult.data ?? []).map((p: any) => {
+      const weeks    = Array.isArray(p.weeks)         ? p.weeks[0]         : p.weeks
+      const liPost   = Array.isArray(p.linkedin_posts) ? p.linkedin_posts[0] : p.linkedin_posts
+      const storyLog = Array.isArray(p.story_log)     ? p.story_log[0]     : p.story_log
+      return {
+        id:          p.id as string,
+        day:         p.day as string,
+        pillar:      p.pillar as string,
+        weekNumber:  (weeks?.week_number as number) ?? 0,
+        weekTheme:   (weeks?.theme as string | null) ?? null,
+        coreInsight: (storyLog?.core_insight as string | null) ?? null,
+        linkedinUrl: (liPost?.linkedin_url as string | null) ?? null,
+      }
+    })
+
     const narrativeContext = buildNarrativeContext({
       previousPostInsight: prevStoryLog?.core_insight ?? null,
       previousPostTiming,
@@ -141,6 +170,7 @@ export async function POST(req: NextRequest) {
       quarter:             body.quarter,
       recentReferences:    prevStoryLog?.references_used ?? undefined,
       performanceInsights,
+      referenceablePosts,
     })
 
     userPrompt = buildGeneratePostPrompt({

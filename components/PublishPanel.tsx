@@ -26,6 +26,7 @@ export default function PublishPanel({
   hasRequiredMedia,
   scheduledAt: scheduledAtFromDB,
   initialPublishedUrl,
+  unresolvedRefCount,
   onPublished,
   onScheduled,
   onStatusReset,
@@ -42,6 +43,7 @@ export default function PublishPanel({
   hasRequiredMedia: boolean
   scheduledAt?: string
   initialPublishedUrl?: string | null
+  unresolvedRefCount?: number
   onPublished: (url: string) => void
   onScheduled: (scheduledAt: string) => void
   onStatusReset: () => void
@@ -500,6 +502,16 @@ export default function PublishPanel({
           <div className="flex items-center gap-2 px-3 py-2 bg-amber-900/15 border border-amber-700/30 rounded-lg">
             <AlertCircle size={12} className="text-amber-400 shrink-0" />
             <p className="text-xs text-amber-300">Generate the {mediaLabel} below before publishing.</p>
+          </div>
+        )}
+
+        {/* Unresolved post-reference warning */}
+        {(unresolvedRefCount ?? 0) > 0 && (
+          <div className="flex items-start gap-2 px-3 py-2 bg-amber-900/15 border border-amber-700/30 rounded-lg">
+            <AlertCircle size={12} className="text-amber-400 shrink-0 mt-0.5" />
+            <p className="text-xs text-amber-300">
+              {unresolvedRefCount} post reference{unresolvedRefCount === 1 ? '' : 's'} not yet published — {unresolvedRefCount === 1 ? 'it' : 'they'} will be removed from the LinkedIn post at publish time.
+            </p>
           </div>
         )}
 

@@ -66,6 +66,14 @@ function extractHashtags(raw: string): string[] {
   return normMetaLine(line).replace('HASHTAGS:', '').trim().split(/\s+/).filter(h => h.startsWith('#'))
 }
 
+function parseRefIds(text: string): string[] {
+  const ids: string[] = []
+  const re = /\[REF:([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\]/gi
+  let m: RegExpExecArray | null
+  while ((m = re.exec(text)) !== null) ids.push(m[1])
+  return [...new Set(ids)]
+}
+
 function getWordCountRange(format: string): { min: number; max: number } {
   switch (format) {
     case 'long_form_article': return { min: 900, max: 1100 }
@@ -116,6 +124,9 @@ export default function DraftEditorPage() {
   // Saturday market insights — market context that gates generation for market_insights posts
   const [satMarketContext, setSatMarketContext]     = useState('')
 
+  type RefPost = { id: string; day: string; pillar: string; weekNumber: number; weekTheme: string | null; coreInsight: string | null; linkedinUrl: string | null }
+  const [referenceablePosts, setReferenceablePosts] = useState<RefPost[]>([])
+
   const textareaRef       = useRef<HTMLTextAreaElement>(null)
   const saveTimerRef      = useRef<ReturnType<typeof setTimeout>>()
   // Ref so the debounced auto-save always reads the latest hashtags without
@@ -143,6 +154,7 @@ export default function DraftEditorPage() {
         setHashtags(dbHashtags)
         setApproved(json.post?.status === 'approved' || json.post?.status === 'published' || json.post?.status === 'scheduled')
         if (json.linkedinUrl) setLinkedinUrl(json.linkedinUrl)
+        setReferenceablePosts(json.referenceablePosts ?? [])
         const requiredType = REQUIRED_MEDIA[json.post?.format ?? '']
         const mediaExists = requiredType
           ? (json.media ?? []).some((m: { media_type: string }) => m.media_type === requiredType)
@@ -791,6 +803,43 @@ export default function DraftEditorPage() {
               </div>
             </div>
           )}
+          {/* Post References panel */}
+          {(() => {
+            const refIds = parseRefIds(content)
+            if (refIds.length === 0) return null
+            return (
+              <div className="border-t border-ink-800 px-6 py-3 shrink-0 bg-ink-900/50">
+                <p className="text-xs font-medium text-ink-400 mb-2">Post References</p>
+                <div className="space-y-1.5">
+                  {refIds.map(id => {
+                    const ref = referenceablePosts.find(p => p.id === id)
+                    if (!ref) return (
+                      <div key={id} className="flex items-center gap-2 text-xs text-red-400">
+                        <span>⚠</span>
+                        <span className="font-mono text-xs opacity-60">[REF:{id.slice(0, 8)}…]</span>
+                        <span>unknown post</span>
+                      </div>
+                    )
+                    return (
+                      <div key={id} className="flex items-center gap-2 text-xs">
+                        <span className={ref.linkedinUrl ? 'text-emerald-500' : 'text-amber-500'}>
+                          {ref.linkedinUrl ? '✓' : '⏳'}
+                        </span>
+                        <span className="text-ink-300">
+                          Wk {ref.weekNumber} {ref.day} — {ref.pillar.replace(/_/g, ' ')}
+                        </span>
+                        {ref.linkedinUrl
+                          ? <a href={ref.linkedinUrl} target="_blank" rel="noreferrer" className="text-sky-400 hover:underline ml-auto shrink-0">view ↗</a>
+                          : <span className="text-ink-600 italic ml-auto shrink-0">not yet published</span>
+                        }
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            )
+          })()}
+
         </div>{/* end editor column */}
 
         {/* ── Right sidebar: Publish + Media ─────────────────────── */}
@@ -809,6 +858,7 @@ export default function DraftEditorPage() {
                 hasRequiredMedia={hasRequiredMedia}
                 scheduledAt={post.scheduled_at ?? undefined}
                 initialPublishedUrl={linkedinUrl}
+                unresolvedRefCount={parseRefIds(content).filter(id => !referenceablePosts.find(p => p.id === id && p.linkedinUrl)).length}
                 onPublished={(url) => { setPublishedUrl(url); setLinkedinUrl(url) }}
                 onScheduled={() => {/* status tracked via postStatus prop */}}
                 onStatusReset={() => {
