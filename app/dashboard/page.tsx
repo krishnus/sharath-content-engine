@@ -5,6 +5,7 @@ import { format, addDays, isSaturday, addWeeks, startOfISOWeek } from 'date-fns'
 import {
   Plus, CheckCircle2, Clock, AlertCircle,
   Loader2, CalendarDays, ChevronDown, ChevronUp, TrendingUp,
+  ChevronLeft, ChevronRight,
 } from 'lucide-react'
 import { cn, PILLAR_LABELS, FORMAT_LABELS, DAY_ORDER, formatDay } from '@/lib/utils/helpers'
 import Link from 'next/link'
@@ -79,18 +80,19 @@ export default function DashboardPage() {
   const [error, setError]             = useState<string | null>(null)
   const [showSession, setShowSession] = useState(false)
   const [saturdayModal, setSaturdayModal] = useState<SaturdayModalData | null>(null)
+  const [weekOffset, setWeekOffset]   = useState(0)
   const today = new Date()
   const todayIsSaturday = isSaturday(today)
 
   const fetchPlan = useCallback(async () => {
     setLoading(true); setError(null)
     try {
-      const res = await fetch('/api/plan')
+      const res = await fetch(`/api/plan?weekOffset=${weekOffset}`)
       if (!res.ok) throw new Error(`Failed to fetch plan: ${res.status}`)
       setWeeks((await res.json()).weeks ?? [])
     } catch (err) { setError(err instanceof Error ? err.message : 'Failed to load plan') }
     finally { setLoading(false) }
-  }, [])
+  }, [weekOffset])
 
   useEffect(() => { fetchPlan() }, [fetchPlan])
 
@@ -103,7 +105,7 @@ export default function DashboardPage() {
   // FIX 2: expose to PlanningSessionModal so it can unlock week 3
   const week1MonFriApproved = isWeek1MonFriApproved(weeks)
 
-  const pendingSaturdayPost = todayIsSaturday
+  const pendingSaturdayPost = (todayIsSaturday && weekOffset === 0)
     ? weeks.flatMap(w => (w.data?.posts ?? []).map(p => ({ ...p, week: w.data! }))).find(p => p.day === 'saturday' && p.status === 'awaiting_market_data')
     : null
 
@@ -158,12 +160,36 @@ export default function DashboardPage() {
       )}
 
       {/* Header */}
-      <div className="flex items-start justify-between">
+      <div className="flex items-start justify-between gap-4">
         <div>
           <p className="section-label mb-2">Forward Plan</p>
           <h1 className="display-heading text-3xl">{format(today, 'EEEE, d MMMM yyyy')}</h1>
         </div>
-        {hasAnyData && <button className="btn-primary" onClick={() => setShowSession(true)}><Plus size={15} /> Plan ahead</button>}
+        <div className="flex items-center gap-2 shrink-0 mt-1">
+          <button
+            onClick={() => setWeekOffset(o => o - 2)}
+            className="btn-secondary flex items-center gap-1.5 text-xs px-3 py-1.5"
+          >
+            <ChevronLeft size={13} /> Prev 2 weeks
+          </button>
+          {weekOffset !== 0 && (
+            <button
+              onClick={() => setWeekOffset(0)}
+              className="btn-secondary text-xs px-3 py-1.5"
+            >
+              Today
+            </button>
+          )}
+          <button
+            onClick={() => setWeekOffset(o => o + 2)}
+            className="btn-secondary flex items-center gap-1.5 text-xs px-3 py-1.5"
+          >
+            Next 2 weeks <ChevronRight size={13} />
+          </button>
+          {hasAnyData && weekOffset >= 0 && (
+            <button className="btn-primary" onClick={() => setShowSession(true)}><Plus size={15} /> Plan ahead</button>
+          )}
+        </div>
       </div>
 
       {loading && <div className="flex items-center justify-center py-24"><Loader2 size={18} className="animate-spin text-ink-400" /><span className="text-sm text-ink-400 ml-3">Loading...</span></div>}

@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase/server'
 import { getAnthropicClient, MODEL } from '@/lib/anthropic/client'
 import { buildThemeProposalPrompt, buildWeekPlanPrompt } from '@/lib/anthropic/prompts'
 import { getForwardPlanWeeks } from '@/lib/utils/helpers'
+import { addWeeks } from 'date-fns'
 import type { PlanSlot } from '@/lib/supabase/types'
 
 export const runtime = 'nodejs'
@@ -14,7 +15,9 @@ export async function GET(req: NextRequest) {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorised' }, { status: 401 })
 
-  const forwardWeeks = getForwardPlanWeeks(new Date())
+  const weekOffset = parseInt(req.nextUrl.searchParams.get('weekOffset') ?? '0', 10)
+  const fromDate   = addWeeks(new Date(), weekOffset)
+  const forwardWeeks = getForwardPlanWeeks(fromDate)
 
   // Fetch existing weeks from DB
   const weeks = await Promise.all(forwardWeeks.map(async fw => {

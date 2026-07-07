@@ -739,7 +739,15 @@ function DayCell({
       </Link>
     )
   } else if (post.status === 'published') {
-    action = null
+    action = (
+      <Link
+        href={`/dashboard/drafts/${post.id}`}
+        onClick={e => e.stopPropagation()}
+        className="flex items-center gap-1 text-xs text-emerald-400 hover:text-emerald-300 mt-1"
+      >
+        <CheckCircle2 size={10} /> View post
+      </Link>
+    )
   } else if (post.hasDraft || post.status === 'edited') {
     action = (
       <Link
@@ -825,14 +833,13 @@ function PostDrawer({ entry, onClose }: { entry: DrawerPost; onClose: () => void
           </p>
         </div>
         <div className="flex items-center gap-2 shrink-0">
-          {post.status !== 'published' && (
-            <Link href={`/dashboard/drafts/${post.id}`} className="btn-primary text-sm">
-              {post.status === 'approved'             ? 'Open to publish' :
-               post.status === 'awaiting_market_data' ? 'Enter market data' :
-               post.hasDraft                          ? 'Open editor' :
-               'Generate'}
-            </Link>
-          )}
+          <Link href={`/dashboard/drafts/${post.id}`} className="btn-primary text-sm">
+            {post.status === 'published'              ? 'View post' :
+             post.status === 'approved'               ? 'Open to publish' :
+             post.status === 'awaiting_market_data'   ? 'Enter market data' :
+             post.hasDraft                            ? 'Open editor' :
+             'Generate'}
+          </Link>
           <button onClick={onClose} className="btn-ghost p-2"><X size={15} /></button>
         </div>
       </div>
