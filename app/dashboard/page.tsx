@@ -283,9 +283,9 @@ function PostRow({ post, week, onOpenSaturdayModal }: { post: Post; week: Week; 
       <div className="hidden lg:block w-14 shrink-0 text-right"><p className="text-xs font-mono text-ink-500">{post.target_word_count}w</p></div>
       <div className="flex items-center gap-2 shrink-0">
         <StatusBadge status={post.status} />
-        {!isSat && post.status !== 'published' && <Link href={`/dashboard/drafts/${post.id}`} className="btn-ghost text-xs px-2.5 py-1.5">{post.status==='draft'?'Generate':'Open'}</Link>}
+        {!isSat && <Link href={`/dashboard/drafts/${post.id}`} className="btn-ghost text-xs px-2.5 py-1.5">{post.status==='draft'?'Generate':post.status==='published'?'View post':'Open'}</Link>}
         {satDue && <button onClick={() => onOpenSaturdayModal({...post,week})} className="btn-primary text-xs px-2.5 py-1.5"><TrendingUp size={12}/> Add market data</button>}
-        {isSat && !satDue && post.status!=='awaiting_market_data' && <Link href={`/dashboard/drafts/${post.id}`} className="btn-ghost text-xs px-2.5 py-1.5">Open</Link>}
+        {isSat && !satDue && <Link href={`/dashboard/drafts/${post.id}`} className="btn-ghost text-xs px-2.5 py-1.5">{post.status==='published'?'View post':'Open'}</Link>}
       </div>
     </div>
   )
