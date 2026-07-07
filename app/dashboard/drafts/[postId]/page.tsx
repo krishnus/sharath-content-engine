@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useCallback, useEffect, useRef } from 'react'
-import { useParams, useRouter } from 'next/navigation'
+import { useParams, useRouter, useSearchParams } from 'next/navigation'
 import {
   ArrowLeft, Zap, GitCompare, CheckCheck,
   Loader2, AlertTriangle, ChevronDown, ChevronUp,
@@ -79,7 +79,9 @@ function getWordCountRange(format: string): { min: number; max: number } {
 // ── Page ──────────────────────────────────────────────────────────────
 export default function DraftEditorPage() {
   const params = useParams()
-  const router = useRouter()
+  const router       = useRouter()
+  const searchParams = useSearchParams()
+  const backHref     = searchParams.get('from') === 'calendar' ? '/dashboard/calendar' : '/dashboard'
   const postId = params.postId as string
 
   const [post, setPost]                       = useState<PostData | null>(null)
@@ -376,7 +378,7 @@ export default function DraftEditorPage() {
     return (
       <div className="flex flex-col items-center justify-center h-screen gap-4">
         <p className="text-sm text-red-400">{loadError ?? 'Post not found'}</p>
-        <Link href="/dashboard" className="btn-secondary text-sm">
+        <Link href={backHref} className="btn-secondary text-sm">
           <ArrowLeft size={14} /> Back
         </Link>
       </div>
@@ -414,7 +416,7 @@ export default function DraftEditorPage() {
       {/* ── Top bar ─────────────────────────────────────────────── */}
       <header className="flex items-center justify-between px-5 py-3 border-b border-ink-800 bg-ink-900 shrink-0">
         <div className="flex items-center gap-3 min-w-0">
-          <Link href="/dashboard" className="btn-ghost px-2 py-1.5 shrink-0">
+          <Link href={backHref} className="btn-ghost px-2 py-1.5 shrink-0">
             <ArrowLeft size={15} />
           </Link>
           <div className="min-w-0">

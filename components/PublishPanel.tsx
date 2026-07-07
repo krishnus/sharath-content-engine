@@ -517,7 +517,7 @@ export default function PublishPanel({
               ? <><Eye size={14} /> Preview on LinkedIn</>
               : effectiveMode === 'now'
                 ? <><Send size={14} /> Publish now</>
-                : <><Clock size={14} /> Schedule on LinkedIn</>
+                : <><Clock size={14} /> Schedule to Publish</>
           }
         </button>
       </div>

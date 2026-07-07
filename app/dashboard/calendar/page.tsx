@@ -731,7 +731,7 @@ function DayCell({
   } else if (post.status === 'approved') {
     action = (
       <Link
-        href={`/dashboard/drafts/${post.id}`}
+        href={`/dashboard/drafts/${post.id}?from=calendar`}
         onClick={e => e.stopPropagation()}
         className="flex items-center gap-1 text-xs text-teal-400 hover:text-teal-300 mt-1"
       >
@@ -741,7 +741,7 @@ function DayCell({
   } else if (post.status === 'published') {
     action = (
       <Link
-        href={`/dashboard/drafts/${post.id}`}
+        href={`/dashboard/drafts/${post.id}?from=calendar`}
         onClick={e => e.stopPropagation()}
         className="flex items-center gap-1 text-xs text-emerald-400 hover:text-emerald-300 mt-1"
       >
@@ -751,7 +751,7 @@ function DayCell({
   } else if (post.hasDraft || post.status === 'edited') {
     action = (
       <Link
-        href={`/dashboard/drafts/${post.id}`}
+        href={`/dashboard/drafts/${post.id}?from=calendar`}
         onClick={e => e.stopPropagation()}
         className="flex items-center gap-1 text-xs text-ink-400 hover:text-cream mt-1"
       >
@@ -761,7 +761,7 @@ function DayCell({
   } else {
     action = (
       <Link
-        href={`/dashboard/drafts/${post.id}`}
+        href={`/dashboard/drafts/${post.id}?from=calendar`}
         onClick={e => e.stopPropagation()}
         className="flex items-center gap-1 text-xs text-blue-400 hover:text-blue-300 mt-1"
       >
@@ -833,7 +833,7 @@ function PostDrawer({ entry, onClose }: { entry: DrawerPost; onClose: () => void
           </p>
         </div>
         <div className="flex items-center gap-2 shrink-0">
-          <Link href={`/dashboard/drafts/${post.id}`} className="btn-primary text-sm">
+          <Link href={`/dashboard/drafts/${post.id}?from=calendar`} className="btn-primary text-sm">
             {post.status === 'published'              ? 'View post' :
              post.status === 'approved'               ? 'Open to publish' :
              post.status === 'awaiting_market_data'   ? 'Enter market data' :
