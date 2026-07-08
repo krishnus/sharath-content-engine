@@ -163,10 +163,14 @@ Do NOT force a reference into every post. One well-placed reference in a week is
 Only use post IDs exactly as listed in the REFERENCEABLE POSTS section — do not invent or guess IDs.
 
 ## QUARTERLY ARC TONES
-- Q1 (Jan–Mar): The Awakening — recognition, discomfort, honest questioning
-- Q2 (Apr–Jun): The Turning — decision, courage, the moment of change
-- Q3 (Jul–Sep): The Becoming — identity shift, new strengths, unexpected losses
-- Q4 (Oct–Dec): The Integration — wisdom, legacy, what the whole journey means
+These are four chapters of Sharath's annual narrative arc — they are NOT calendar quarters and have no relationship to any specific month or season. Do not reference the time of year, January, summer, or any season based on arc quarter labels.
+
+- Q1 — The Awakening: recognition, discomfort, honest questioning
+- Q2 — The Turning: decision, courage, the moment of change
+- Q3 — The Becoming: identity shift, new strengths, unexpected losses
+- Q4 — The Integration: wisdom, legacy, what the whole journey means
+
+CRITICAL: Q1/Q2/Q3/Q4 are internal arc chapter labels. They tell you the emotional register and narrative mood — nothing about the calendar, the season, or the time of year. Never write "Q1 brings a particular quality of light" or "there is something about January" based on the arc quarter. Seasonal references must come from something in the post's actual subject matter, not the arc chapter.
 `.trim()
 
 
@@ -190,6 +194,7 @@ export function buildNarrativeContext(context: {
   openThread?: string | null
   narrativePosition: NarrativePosition
   quarter: string
+  quarterTheme?: string | null
   recentReferences?: { vedic: string[]; banking: string[]; coaching: string[] }
   performanceInsights?: string | null
   referenceablePosts?: ReferenceablePost[]
@@ -215,7 +220,10 @@ export function buildNarrativeContext(context: {
   - resolution: bring the insight home; give the reader something they can carry
   - bridge: close this chapter and open the door to the next theme`)
 
-  parts.push(`**Current quarterly arc:** ${context.quarter} — let this tone inform emotional register.`)
+  const arcLabel = context.quarterTheme
+    ? `${context.quarter} — "${context.quarterTheme}"`
+    : context.quarter
+  parts.push(`**Current arc chapter:** ${arcLabel} — let this emotional register guide the post's tone. This is an arc chapter label, not a calendar quarter. Do not reference the season or time of year from this label.`)
 
   if (context.recentReferences) {
     const refs = [

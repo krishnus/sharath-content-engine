@@ -55,7 +55,7 @@ export async function POST(req: NextRequest) {
       .maybeSingle(),
     supabase
       .from('weeks')
-      .select('open_thread, week_start')
+      .select('open_thread, week_start, quarter, annual_arcs ( q1_theme, q2_theme, q3_theme, q4_theme )')
       .eq('id', body.weekId)
       .single(),
     supabase
@@ -80,6 +80,12 @@ export async function POST(req: NextRequest) {
 
   const prevStoryLog = prevStoryLogResult.data
   const week         = weekResult.data
+
+  // Resolve arc quarter theme name (e.g. "The Awakening") from the annual_arcs join
+  type ArcRow = { q1_theme: string; q2_theme: string; q3_theme: string; q4_theme: string }
+  const arcRaw = week ? (Array.isArray((week as any).annual_arcs) ? (week as any).annual_arcs[0] : (week as any).annual_arcs) as ArcRow | null : null
+  const quarterThemeKey = ({ Q1: 'q1_theme', Q2: 'q2_theme', Q3: 'q3_theme', Q4: 'q4_theme' } as Record<string, keyof ArcRow>)[body.quarter]
+  const quarterTheme: string | null = arcRaw && quarterThemeKey ? arcRaw[quarterThemeKey] ?? null : null
 
   // Extract insights relevant to this post's pillar / format
   let performanceInsights: string | null = null
@@ -168,6 +174,7 @@ export async function POST(req: NextRequest) {
       openThread:          week?.open_thread ?? null,
       narrativePosition:   body.narrativePosition,
       quarter:             body.quarter,
+      quarterTheme,
       recentReferences:    prevStoryLog?.references_used ?? undefined,
       performanceInsights,
       referenceablePosts,
