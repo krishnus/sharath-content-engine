@@ -1,7 +1,7 @@
 // @ts-nocheck  — react-pdf JSX types don't fully align with React's in strict mode
 import React from 'react'
 import {
-  Document, Page, Text, View, Image, Font, StyleSheet, renderToBuffer,
+  Document, Page, Text, View, Image, Font, StyleSheet, renderToBuffer, Link,
 } from '@react-pdf/renderer'
 import { BRAND_BLUE, BRAND_GOLD, FONT_PATHS, DARK_BG_LOGO_PATH, LIGHT_BG_LOGO_PATH, normalizeIAST } from './fonts'
 
@@ -147,6 +147,24 @@ const S = StyleSheet.create({
     flex:       1,
     lineHeight: 1.7,
     fontSize:   17,
+  },
+  // Cross-reference link line (↳ url) inserted by the ref resolver
+  refLine: {
+    flexDirection: 'row',
+    alignItems:    'center',
+    marginTop:     4,
+    marginBottom:  10,
+    paddingLeft:   8,
+  },
+  refArrow: {
+    color:       BRAND_GOLD,
+    fontSize:    11,
+    marginRight: 6,
+  },
+  refLink: {
+    color:          '#3B7DD8',
+    fontSize:       10,
+    textDecoration: 'underline',
   },
   // ── Footer ───────────────────────────────────────────────────────────
   // Outer wrapper: absolute-positioned, full-width anchor
@@ -319,6 +337,18 @@ function parseContent(text: string): React.ReactNode[] {
         </View>
       )
       isFirstParagraph = false
+      continue
+    }
+
+    // Cross-reference link line: ↳ https://... (inserted after [REF:uuid] resolution)
+    if (/^↳\s+https?:\/\//.test(line)) {
+      const url = line.replace(/^↳\s+/, '')
+      nodes.push(
+        <View key={key++} style={S.refLine}>
+          <Text style={S.refArrow}>↳</Text>
+          <Link src={url} style={S.refLink}>{url}</Link>
+        </View>
+      )
       continue
     }
 

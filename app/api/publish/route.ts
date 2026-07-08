@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient, createServiceClient } from '@/lib/supabase/server'
 import { parseGenerationMetadata } from '@/lib/anthropic/client'
+import { generateArticlePDF } from '@/lib/templates/article-pdf'
+import { resolveRefs } from '@/lib/utils/refs'
+import { format } from 'date-fns'
 
 export const runtime = 'nodejs'
 export const maxDuration = 60
@@ -36,9 +39,9 @@ export async function POST(req: NextRequest) {
   const { data: post, error: postError } = await supabase
     .from('posts')
     .select(`
-      id, day, format, status, week_id, hashtags,
+      id, day, pillar, format, status, week_id, hashtags, hook_idea,
       drafts ( id, content, is_original, version ),
-      weeks ( id, week_start )
+      weeks ( id, week_start, week_number, quarter )
     `)
     .eq('id', postId)
     .single()
@@ -77,11 +80,11 @@ export async function POST(req: NextRequest) {
   }
 
   // ── Check for attached media ──────────────────────────────────────────
-  const format: string = post.format as string
+  const postFormat: string = post.format as string
   const expectedMediaType =
-    format === 'long_form_article' ? 'article_pdf'   :
-    format === 'carousel'          ? 'carousel_pdf'  :
-    format === 'text_post' || format === 'market_insights' ? 'quote_png' : null
+    postFormat === 'long_form_article' ? 'article_pdf'   :
+    postFormat === 'carousel'          ? 'carousel_pdf'  :
+    postFormat === 'text_post' || postFormat === 'market_insights' ? 'quote_png' : null
 
   let mediaRecord: {
     id: string; storage_path: string; file_name: string;
@@ -170,11 +173,23 @@ export async function POST(req: NextRequest) {
         result = await postTextToLinkedIn(publishText, tokenRow.access_token, authorUrn, 'PUBLIC')
       }
     } else if (mediaRecord && (mediaRecord.media_type === 'article_pdf' || mediaRecord.media_type === 'carousel_pdf')) {
-      const { data: fileData } = await supabase.storage
-        .from(STORAGE_BUCKET)
-        .download(mediaRecord.storage_path)
-      if (fileData) {
-        const fileBuffer = Buffer.from(await fileData.arrayBuffer())
+      let fileBuffer: Buffer | null = null
+      if (mediaRecord.media_type === 'article_pdf') {
+        // Regenerate with freshly resolved refs so all published cross-references become clickable links
+        try {
+          fileBuffer = await buildArticlePdfBuffer(post, meta, supabase)
+        } catch (err) {
+          console.error('[publish] Article PDF regeneration failed during promotePreview:', err)
+        }
+      }
+      if (!fileBuffer) {
+        // Fallback: download stored file (carousel_pdf, or article regen failure)
+        const { data: fileData } = await supabase.storage
+          .from(STORAGE_BUCKET)
+          .download(mediaRecord.storage_path)
+        if (fileData) fileBuffer = Buffer.from(await fileData.arrayBuffer())
+      }
+      if (fileBuffer) {
         result = await postDocumentToLinkedIn(publishText, mediaRecord.file_name, fileBuffer, tokenRow.access_token, authorUrn)
       } else {
         result = await postTextToLinkedIn(publishText, tokenRow.access_token, authorUrn, 'PUBLIC')
@@ -211,18 +226,35 @@ export async function POST(req: NextRequest) {
 
   // ── Document post (PDF) — publish immediately ──────────────────────────
   if (isDocumentMedia && mediaRecord) {
-    const { data: fileData, error: dlError } = await supabase.storage
-      .from(STORAGE_BUCKET)
-      .download(mediaRecord.storage_path)
+    let fileBuffer: Buffer
 
-    if (dlError || !fileData) {
-      return NextResponse.json(
-        { error: `Could not download media file: ${dlError?.message}` },
-        { status: 500 }
-      )
+    if (mediaRecord.media_type === 'article_pdf') {
+      // Regenerate from current draft content so all cross-references that are now
+      // published resolve to live clickable links in the PDF.
+      try {
+        fileBuffer = await buildArticlePdfBuffer(post, meta, supabase)
+      } catch (err) {
+        console.error('[publish] Article PDF regeneration failed:', err)
+        return NextResponse.json(
+          { error: `PDF regeneration failed: ${err instanceof Error ? err.message : 'Unknown error'}` },
+          { status: 500 }
+        )
+      }
+    } else {
+      // carousel_pdf: use the stored file as-is
+      const { data: fileData, error: dlError } = await supabase.storage
+        .from(STORAGE_BUCKET)
+        .download(mediaRecord.storage_path)
+
+      if (dlError || !fileData) {
+        return NextResponse.json(
+          { error: `Could not download media file: ${dlError?.message}` },
+          { status: 500 }
+        )
+      }
+      fileBuffer = Buffer.from(await fileData.arrayBuffer())
     }
 
-    const fileBuffer = Buffer.from(await fileData.arrayBuffer())
     const result = await postDocumentToLinkedIn(
       publishText, mediaRecord.file_name, fileBuffer,
       tokenRow.access_token, authorUrn
@@ -326,45 +358,36 @@ export async function POST(req: NextRequest) {
 }
 
 
-// ── Resolve [REF:uuid] placeholders → LinkedIn URLs ───────────────────────
-async function resolveRefs(
-  text: string,
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  supabase: any
-): Promise<{ text: string; unresolvedCount: number }> {
-  const REF_RE = /\[REF:([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\]/gi
-  const matches = [...text.matchAll(REF_RE)]
-  if (matches.length === 0) return { text, unresolvedCount: 0 }
+// ── Regenerate article PDF from current draft with freshly resolved refs ──────
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function buildArticlePdfBuffer(post: any, meta: ReturnType<typeof parseGenerationMetadata>, supabase: any): Promise<Buffer> {
+  const { text: resolvedContent, unresolvedCount } = await resolveRefs(meta.content, supabase)
+  if (unresolvedCount > 0) {
+    console.warn(`[publish] ${unresolvedCount} ref(s) unresolved in article PDF body — stripped`)
+  }
 
-  const postIds = [...new Set(matches.map(m => m[1]))]
-  const { data: liPosts } = await supabase
-    .from('linkedin_posts')
-    .select('post_id, linkedin_url')
-    .in('post_id', postIds)
+  const weeksArr = Array.isArray(post.weeks) ? post.weeks : [post.weeks]
+  const week = weeksArr[0] as { week_start: string; week_number: number; quarter: string | null } | null
 
-  const urlMap = new Map<string, string>(
-    (liPosts ?? [])
-      .filter((lp: { linkedin_url: string | null }) => lp.linkedin_url)
-      .map((lp: { post_id: string; linkedin_url: string }) => [lp.post_id, lp.linkedin_url])
-  )
+  const dateStr = week?.week_start
+    ? format(new Date(`${week.week_start}T00:00:00`), 'd MMM yyyy')
+    : ''
 
-  let unresolvedCount = 0
-  let resolved = text.replace(REF_RE, (_match, postId) => {
-    const url = urlMap.get(postId)
-    if (url) return url
-    unresolvedCount++
-    return ''
+  const rawTitle = meta.articleTitle || (post.hook_idea as string | null) || meta.coreInsight || 'Weekly Article'
+  const title = rawTitle.length <= 80
+    ? rawTitle
+    : (() => { const s = rawTitle.slice(0, 80); const i = s.lastIndexOf(' '); return i > 40 ? s.slice(0, i) : s })()
+
+  return generateArticlePDF({
+    title,
+    content:        resolvedContent,
+    pillar:         post.pillar as string,
+    quarter:        (week?.quarter ?? 'Q1') as string,
+    weekNumber:     (week?.week_number ?? 0) as number,
+    dateStr,
+    showHeaderStrip: true,
+    showFooterStrip: true,
   })
-
-  // Remove orphaned ↳ lines (↳ with nothing after it once the ref was stripped)
-  resolved = resolved
-    .split('\n')
-    .filter(line => line.trim() !== '↳' && line.trim() !== '↳ ')
-    .join('\n')
-    .replace(/\n{3,}/g, '\n\n')
-    .trim()
-
-  return { text: resolved, unresolvedCount }
 }
 
 

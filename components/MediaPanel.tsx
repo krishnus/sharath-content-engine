@@ -54,6 +54,7 @@ export default function MediaPanel({ postId, format, onMediaStatusChange, onMedi
   const [regenCaption, setRegenCaption]       = useState(false)
   const [regenTitle,   setRegenTitle]         = useState(false)
   const [error, setError]                     = useState<string | null>(null)
+  const [refUnresolvedCount, setRefUnresolvedCount] = useState(0)
 
   // LI Hook / Caption text (for article_pdf + carousel_pdf: 200-280 chars; for quote_png: max 120)
   const [caption, setCaption]                 = useState('')
@@ -176,6 +177,7 @@ export default function MediaPanel({ postId, format, onMediaStatusChange, onMedi
     if (!config) return
     setGenerating(true)
     setError(null)
+    setRefUnresolvedCount(0)
     try {
       const body: Record<string, string | boolean> = { postId, mediaType: config.type }
       if (config.type === 'article_pdf'  && confirmedText)  body.customTitle = confirmedText
@@ -213,6 +215,7 @@ export default function MediaPanel({ postId, format, onMediaStatusChange, onMedi
         linkedinCaption: data.linkedinCaption,
       })
       if (data.linkedinCaption && !caption) setCaption(data.linkedinCaption)
+      setRefUnresolvedCount(data.refUnresolvedCount ?? 0)
       onMediaStatusChange?.(true)
       onMediaRegenerated?.()
     } catch (err) {
@@ -509,6 +512,16 @@ export default function MediaPanel({ postId, format, onMediaStatusChange, onMedi
                   <div className="flex items-center gap-2 px-3 py-2 bg-blue-900/10 rounded-lg border border-blue-900/20">
                     <FileText size={11} className="text-blue-400" />
                     <span className="text-xs text-blue-300">Publishes as LinkedIn document post</span>
+                  </div>
+                )}
+
+                {/* Unresolved cross-references advisory (article PDF only) */}
+                {isArticle && refUnresolvedCount > 0 && (
+                  <div className="flex items-start gap-2 px-3 py-2 bg-amber-900/15 border border-amber-700/30 rounded-lg">
+                    <AlertCircle size={12} className="text-amber-400 shrink-0 mt-0.5" />
+                    <p className="text-xs text-amber-300">
+                      {refUnresolvedCount} cross-reference{refUnresolvedCount === 1 ? '' : 's'} in this PDF {refUnresolvedCount === 1 ? 'is' : 'are'} not yet clickable — the referenced post{refUnresolvedCount === 1 ? ' is' : 's are'} not yet published. Regenerate the PDF after those posts go live to include clickable links.
+                    </p>
                   </div>
                 )}
 

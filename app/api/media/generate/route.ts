@@ -4,6 +4,7 @@ import { generateArticlePDF } from '@/lib/templates/article-pdf'
 import { generateCarouselPDF, parseCarouselSlides } from '@/lib/templates/carousel-pdf'
 import { generateQuoteImage } from '@/lib/templates/quote-image'
 import { parseGenerationMetadata } from '@/lib/anthropic/client'
+import { resolveRefs } from '@/lib/utils/refs'
 import { format } from 'date-fns'
 
 export const runtime = 'nodejs'
@@ -86,6 +87,7 @@ export async function POST(req: NextRequest) {
   let fileName: string
   let mimeType: string
   let pageCount: number | undefined
+  let refUnresolvedCount = 0
 
   // ── Generate the media ───────────────────────────────────────────────
   try {
@@ -98,9 +100,14 @@ export async function POST(req: NextRequest) {
       // Truncate at the last word boundary before 80 chars to avoid mid-word cuts
       const title = truncateAtWord(rawTitle || '', 80)
 
+      // Resolve [REF:uuid] → LinkedIn URLs; unresolved refs (future posts) are stripped.
+      // Resolved refs become ↳ url lines which the PDF template renders as clickable links.
+      const { text: resolvedContent, unresolvedCount } = await resolveRefs(meta.content, supabase)
+      refUnresolvedCount = unresolvedCount
+
       fileBuffer = await generateArticlePDF({
         title,
-        content:          meta.content,
+        content:          resolvedContent,
         pillar,
         quarter:          week.quarter ?? 'Q1',
         weekNumber:       week.week_number,
@@ -195,13 +202,14 @@ export async function POST(req: NextRequest) {
     .createSignedUrl(storagePath, 3600)  // 1 hour
 
   return NextResponse.json({
-    id:              record.id,
+    id:                 record.id,
     mediaType,
     fileName,
-    fileSize:        fileBuffer.length,
-    pageCount:       pageCount ?? null,
-    signedUrl:       signedUrl?.signedUrl ?? null,
-    linkedinCaption: linkedinCaption ?? null,
+    fileSize:           fileBuffer.length,
+    pageCount:          pageCount ?? null,
+    signedUrl:          signedUrl?.signedUrl ?? null,
+    linkedinCaption:    linkedinCaption ?? null,
+    refUnresolvedCount,
   })
 }
 
