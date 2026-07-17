@@ -323,6 +323,18 @@ export default function DraftEditorPage() {
         setShowCandidates(true)
       }
     } catch (err) {
+      // The route may have timed out after the DB status update — check actual state
+      // before surfacing the error so we don't show "failed" for a successful approval.
+      try {
+        const checkRes = await fetch(`/api/posts/${postId}`)
+        if (checkRes.ok) {
+          const checkJson = await checkRes.json()
+          if (['approved', 'published', 'scheduled'].includes(checkJson.post?.status ?? '')) {
+            setApproved(true)
+            return
+          }
+        }
+      } catch { /* non-fatal — fall through to show error */ }
       setGenerateError(err instanceof Error ? err.message : 'Approval failed')
     } finally {
       setIsApproving(false)

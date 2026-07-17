@@ -5,7 +5,7 @@ import { buildEditDiffPrompt, buildStoryLogExtractionPrompt } from '@/lib/anthro
 import type { RuleCategory } from '@/lib/supabase/types'
 
 export const runtime = 'nodejs'
-export const maxDuration = 30
+export const maxDuration = 60
 
 // ── POST /api/learn ──────────────────────────────────────────────────
 // Called when Sharath approves an edited post.
@@ -47,7 +47,24 @@ export async function POST(req: NextRequest) {
   // ── 2. Check if content actually changed ────────────────────────
   const contentChanged = originalContent.trim() !== finalContent.trim()
 
-  // ── 3. Extract story log metadata (always) ──────────────────────
+  // ── 3. Approve the post immediately — before any Anthropic calls so that a
+  //        slow or timed-out LLM call never leaves the post in an unapproved state.
+  await supabase
+    .from('posts')
+    .update({ status: 'approved', approved_at: new Date().toISOString() })
+    .eq('id', postId)
+
+  await supabase
+    .from('drafts')
+    .update({ is_approved: false })
+    .eq('post_id', postId)
+    .eq('is_original', false)
+  await supabase
+    .from('drafts')
+    .update({ is_approved: true })
+    .eq('id', current.id)
+
+  // ── 4. Extract story log metadata (always) ──────────────────────
   const storyLogMessage = await getAnthropicClient().messages.create({
     model: MODEL,
     max_tokens: 512,
@@ -103,24 +120,7 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  // Update post status to approved
-  await supabase
-    .from('posts')
-    .update({ status: 'approved', approved_at: new Date().toISOString() })
-    .eq('id', postId)
-
-  // Mark the chosen draft as approved; clear the flag on all other non-original drafts
-  await supabase
-    .from('drafts')
-    .update({ is_approved: false })
-    .eq('post_id', postId)
-    .eq('is_original', false)
-  await supabase
-    .from('drafts')
-    .update({ is_approved: true })
-    .eq('id', current.id)
-
-  // ── 4. Extract voice rules (only if content changed) ────────────
+  // ── 5. Extract voice rules (only if content changed) ────────────
   if (!contentChanged) {
     return NextResponse.json({ candidateRules: [], storyLog: storyLogData })
   }

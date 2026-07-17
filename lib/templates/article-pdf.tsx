@@ -166,6 +166,10 @@ const S = StyleSheet.create({
     fontSize:       10,
     textDecoration: 'underline',
   },
+  inlineLink: {
+    color:          '#3B7DD8',
+    textDecoration: 'underline',
+  },
   // ── Footer ───────────────────────────────────────────────────────────
   // Outer wrapper: absolute-positioned, full-width anchor
   footer: {
@@ -247,6 +251,54 @@ function renderMixedScript(text: string, baseStyle: object, devStyle: object, ke
   )
 }
 
+function renderLineWithLinks(
+  text: string,
+  baseStyle: object,
+  devStyle: object,
+  keyBase: number
+): React.ReactNode {
+  const linkRe = /\[([^\]]+)\]\((https?:\/\/[^\)]+)\)/
+  if (!linkRe.test(text)) return renderMixedScript(text, baseStyle, devStyle, keyBase)
+
+  const re = /\[([^\]]+)\]\((https?:\/\/[^\)]+)\)/g
+  const segments: Array<{ type: 'text'; content: string } | { type: 'link'; label: string; url: string }> = []
+  let lastIndex = 0
+  let match: RegExpExecArray | null
+  while ((match = re.exec(text)) !== null) {
+    if (match.index > lastIndex) segments.push({ type: 'text', content: text.slice(lastIndex, match.index) })
+    segments.push({ type: 'link', label: match[1], url: match[2] })
+    lastIndex = match.index + match[0].length
+  }
+  if (lastIndex < text.length) segments.push({ type: 'text', content: text.slice(lastIndex) })
+
+  const { orphans: _o, widows: _w, marginBottom: _mb, marginTop: _mt, ...inlineDevStyle } =
+    devStyle as Record<string, unknown>
+
+  return (
+    <Text key={keyBase} style={baseStyle}>
+      {segments.map((seg, i) => {
+        if (seg.type === 'link') {
+          return <Link key={i} src={seg.url} style={S.inlineLink}>{seg.label}</Link>
+        }
+        const cleaned = stripInlineMarkdown(seg.content)
+        if (!NOTO_CHAR_RE.test(cleaned)) {
+          return <Text key={i}>{normalizeIAST(cleaned)}</Text>
+        }
+        const parts = cleaned.split(NOTO_SPLIT_RE).filter(p => p.length > 0)
+        return (
+          <Text key={i}>
+            {parts.map((part, j) =>
+              NOTO_CHAR_RE.test(part)
+                ? <Text key={j} style={inlineDevStyle as object}>{part}</Text>
+                : normalizeIAST(part)
+            )}
+          </Text>
+        )
+      })}
+    </Text>
+  )
+}
+
 function parseContent(text: string): React.ReactNode[] {
   const lines = text.split('\n')
   const nodes: React.ReactNode[] = []
@@ -270,7 +322,7 @@ function parseContent(text: string): React.ReactNode[] {
     // Headings — do not consume isFirstParagraph
     if (/^#{1,3}\s/.test(line) || /^[A-Z][^a-z]{5,}:$/.test(line)) {
       const t = line.replace(/^#{1,3}\s/, '').replace(/:$/, '')
-      nodes.push(renderMixedScript(t, S.heading, { ...S.heading, ...devStyle }, key++))
+      nodes.push(renderLineWithLinks(t, S.heading, { ...S.heading, ...devStyle }, key++))
       continue
     }
 
@@ -280,7 +332,7 @@ function parseContent(text: string): React.ReactNode[] {
       nodes.push(
         <View key={key++} style={S.bulletRow}>
           <Text style={S.bullet}>{match[1]}.</Text>
-          {renderMixedScript(rest, S.bulletText, { ...S.bulletText, ...devStyle }, key++)}
+          {renderLineWithLinks(rest, S.bulletText, { ...S.bulletText, ...devStyle }, key++)}
         </View>
       )
       isFirstParagraph = false
@@ -291,7 +343,7 @@ function parseContent(text: string): React.ReactNode[] {
       nodes.push(
         <View key={key++} style={S.bulletRow}>
           <Text style={S.bullet}>•</Text>
-          {renderMixedScript(line.replace(/^[-•]\s/, ''), S.bulletText, { ...S.bulletText, ...devStyle }, key++)}
+          {renderLineWithLinks(line.replace(/^[-•]\s/, ''), S.bulletText, { ...S.bulletText, ...devStyle }, key++)}
         </View>
       )
       isFirstParagraph = false
@@ -332,7 +384,7 @@ function parseContent(text: string): React.ReactNode[] {
       nodes.push(
         <View key={boxKey} style={S.teachingBox} wrap={false}>
           {rawLines.map((bl, bi) =>
-            renderMixedScript(bl, S.teachingLine, { ...S.teachingLine, ...devStyle }, lineKeys[bi])
+            renderLineWithLinks(bl, S.teachingLine, { ...S.teachingLine, ...devStyle }, lineKeys[bi])
           )}
         </View>
       )
@@ -355,11 +407,11 @@ function parseContent(text: string): React.ReactNode[] {
     // Opening hook — pull-quote treatment (gold left bar, navy text, larger size)
     if (isFirstParagraph) {
       isFirstParagraph = false
-      nodes.push(renderMixedScript(line, S.pullQuote, { ...S.pullQuote, ...devStyle }, key++))
+      nodes.push(renderLineWithLinks(line, S.pullQuote, { ...S.pullQuote, ...devStyle }, key++))
       continue
     }
 
-    nodes.push(renderMixedScript(line, S.paragraph, { ...S.paragraph, ...devStyle }, key++))
+    nodes.push(renderLineWithLinks(line, S.paragraph, { ...S.paragraph, ...devStyle }, key++))
   }
 
   return nodes
