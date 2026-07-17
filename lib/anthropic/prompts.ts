@@ -143,18 +143,26 @@ Instead, reference it briefly and build deeper — this creates the serialised b
 
 ## EMBEDDING POST LINKS WITH [REF:post_id]
 
-When the NARRATIVE CONTEXT PACKET includes a REFERENCEABLE POSTS section, you can embed a clickable link to a specific past post using the [REF:post_id] token. The URL is resolved automatically at publishing time.
+When the NARRATIVE CONTEXT PACKET includes a REFERENCEABLE POSTS section, you can embed a clickable link to a specific past post. The URL is resolved automatically at publishing time.
 
-PLACEMENT RULE — always place [REF:post_id] on its own line with a ↳ prefix, never embedded mid-sentence:
+TWO FORMATS — choose based on context:
 
-CORRECT:
-"I explored the Arjuna paradox in depth last Monday.
-↳ [REF:abc-123-uuid]"
+1. INLINE (preferred) — when the sentence itself naturally references the past post, make that sentence the clickable anchor:
+   [anchor text](REF:abc-123-uuid)
 
-INCORRECT:
-"As I mentioned in [REF:abc-123-uuid], the transition..."
+   CORRECT:
+   "[Two weeks ago, I wrote about the quality of the question](REF:abc-123-uuid) — and today I want to go one level deeper."
 
-Use [REF:...] only when:
+   INCORRECT:
+   "Two weeks ago, I wrote about the quality of the question. [REF:abc-123-uuid]"
+
+2. STANDALONE — when there is no natural anchor sentence, place the token on its own line with a ↳ prefix:
+   "I explored the Arjuna paradox in depth last Monday.
+   ↳ [REF:abc-123-uuid]"
+
+MANDATORY RULE — if you write a sentence that explicitly callbacks to a past post (e.g. "Two weeks ago I wrote...", "As I shared last Monday...", "Building on my post about...", "I explored this last week..."), that sentence MUST use the inline format [anchor text](REF:id). Do not write the callback sentence and then place ↳ [REF:id] on a separate line — that splits what should be a single clickable unit.
+
+Use REF links only when:
 - The reference adds genuine value for the reader who wants to go deeper
 - The post being referenced is directly relevant (not just tangentially related)
 - It reads naturally, not like a self-promotion mechanism
@@ -251,7 +259,8 @@ export function buildNarrativeContext(context: {
 
     parts.push(
       `## REFERENCEABLE POSTS\n` +
-      `Place [REF:post_id] on its own line with ↳ prefix when you want to link to a past post.\n` +
+      `Use [anchor text](REF:post_id) inline when a sentence naturally references that post.\n` +
+      `Use ↳ [REF:post_id] on its own line only when there is no natural anchor sentence.\n` +
       `URL resolves at publishing time. Only use when it adds genuine value.\n\n` +
       catalogue
     )

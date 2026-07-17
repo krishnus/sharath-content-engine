@@ -272,6 +272,7 @@ export type CarouselSlide = {
 export type CarouselPDFProps = {
   theme:         string
   titleSlide:    string
+  titleBody?:    string            // Slide 1 BODY — AI-crafted cover subtitle; falls back to theme
   slides:        CarouselSlide[]   // last item is the closing slide
   pillar:        string
   seriesLabel?:  string            // e.g. "TAX", "STEP", "INSIGHT" — from AI SERIES_LABEL
@@ -281,7 +282,7 @@ export type CarouselPDFProps = {
   useSwansLogo?: boolean
 }
 
-function CarouselDocument({ theme, titleSlide, slides, pillar, seriesLabel, seriesCount, useSwansLogo }: CarouselPDFProps) {
+function CarouselDocument({ theme, titleSlide, titleBody, slides, pillar, seriesLabel, seriesCount, useSwansLogo }: CarouselPDFProps) {
   const logoSrc       = useSwansLogo ? SWANS_LOGO_PATH : DARK_BG_LOGO_PATH
   // Badge label: from AI SERIES_LABEL, else pillar fallback
   const label         = (seriesLabel ?? pillarToLabel(pillar)).toUpperCase()
@@ -307,8 +308,8 @@ function CarouselDocument({ theme, titleSlide, slides, pillar, seriesLabel, seri
           {/* Zone B — title block centred vertically */}
           <View style={S.coverTitleZone}>
             <View style={S.coverGoldRuleTop} />
-            {renderLine(titleSlide, S.coverTitle,    0)}
-            {renderLine(theme,      S.coverSubtitle, 1)}
+            {renderLine(titleSlide,          S.coverTitle,    0)}
+            {renderLine(titleBody || theme,  S.coverSubtitle, 1)}
             <View style={S.coverGoldRuleBottom} />
           </View>
 
@@ -387,16 +388,20 @@ function CarouselDocument({ theme, titleSlide, slides, pillar, seriesLabel, seri
 }
 
 // ── Parse carousel content from structured LLM output ─────────────────────
-export function parseCarouselSlides(content: string): { titleSlide: string; slides: CarouselSlide[] } {
+export function parseCarouselSlides(content: string): { titleSlide: string; titleBody: string; slides: CarouselSlide[] } {
   const lines = content.split('\n')
   const slides: CarouselSlide[] = []
   let titleSlide = ''
+  let titleBody  = ''
   let currentHeadline = ''
   let currentBodyLines: string[] = []
 
   function flushSlide() {
     if (!currentHeadline) return
-    if (slides.length === 0 && !titleSlide) titleSlide = currentHeadline
+    if (slides.length === 0 && !titleSlide) {
+      titleSlide = currentHeadline
+      titleBody  = currentBodyLines.join('\n').trim()
+    }
     slides.push({ headline: currentHeadline, body: currentBodyLines.join('\n') })
     currentHeadline = ''
     currentBodyLines = []
@@ -435,7 +440,7 @@ export function parseCarouselSlides(content: string): { titleSlide: string; slid
   flushSlide()
 
   if (!titleSlide && slides.length > 0) titleSlide = slides[0].headline
-  return { titleSlide, slides: slides.slice(1) }
+  return { titleSlide, titleBody, slides: slides.slice(1) }
 }
 
 export async function generateCarouselPDF(props: CarouselPDFProps): Promise<Buffer> {

@@ -1,23 +1,39 @@
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type SupabaseLike = any
 
-const REF_UUID = '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}'
-const refRe = () => new RegExp(`\\[REF:(${REF_UUID})\\]`, 'gi')
+const REF_UUID   = '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}'
+const inlineRefRe    = () => new RegExp(`\\[([^\\]]+)\\]\\(REF:(${REF_UUID})\\)`, 'gi')
+const standaloneRefRe = () => new RegExp(`\\[REF:(${REF_UUID})\\]`, 'gi')
 
 /**
- * Resolve [REF:post_id] placeholders to LinkedIn post URLs.
- * Unresolved refs (post not yet published) are stripped, and any orphaned ↳ prefix
- * line is also removed. Resolved refs become the raw URL string, which the article
- * PDF template renders as a clickable link when it encounters a ↳ url line.
+ * Resolve REF tokens to real LinkedIn URLs.
+ *
+ * Two token formats are supported:
+ *   [anchor text](REF:uuid)  — inline link; resolves to [anchor](url) in PDF context,
+ *                               or just `anchor` in linkedin context (no markdown links on LI)
+ *   [REF:uuid]               — standalone; used with a ↳ prefix line; always resolves to the raw URL
+ *
+ * Unresolved tokens (post not yet published) degrade gracefully:
+ *   inline    → anchor text only (sentence reads naturally without the link)
+ *   standalone → empty string; orphaned ↳ lines are stripped
  */
 export async function resolveRefs(
   text: string,
-  supabase: SupabaseLike
+  supabase: SupabaseLike,
+  context: 'pdf' | 'linkedin' = 'pdf'
 ): Promise<{ text: string; unresolvedCount: number }> {
-  const matches = [...text.matchAll(refRe())]
-  if (matches.length === 0) return { text, unresolvedCount: 0 }
+  const inlineMatches    = [...text.matchAll(inlineRefRe())]
+  const standaloneMatches = [...text.matchAll(standaloneRefRe())]
 
-  const postIds = [...new Set(matches.map(m => m[1]))]
+  if (inlineMatches.length === 0 && standaloneMatches.length === 0) {
+    return { text, unresolvedCount: 0 }
+  }
+
+  const postIds = [...new Set([
+    ...inlineMatches.map(m => m[2]),
+    ...standaloneMatches.map(m => m[1]),
+  ])]
+
   const { data: liPosts } = await supabase
     .from('linkedin_posts')
     .select('post_id, linkedin_url')
@@ -30,14 +46,24 @@ export async function resolveRefs(
   )
 
   let unresolvedCount = 0
-  let resolved = text.replace(refRe(), (_match, postId) => {
+
+  // 1. Inline [anchor](REF:uuid) → [anchor](url) for PDF, anchor-only for LinkedIn
+  let resolved = text.replace(inlineRefRe(), (_match, label, postId) => {
+    const url = urlMap.get(postId)
+    if (url) return context === 'pdf' ? `[${label}](${url})` : label
+    unresolvedCount++
+    return label  // degrade to plain text regardless of context
+  })
+
+  // 2. Standalone [REF:uuid] → raw URL (or empty when unresolved)
+  resolved = resolved.replace(standaloneRefRe(), (_match, postId) => {
     const url = urlMap.get(postId)
     if (url) return url
     unresolvedCount++
     return ''
   })
 
-  // Remove orphaned ↳ lines (↳ with nothing after it once the ref was stripped)
+  // Strip orphaned ↳ lines left behind by unresolved standalone refs
   resolved = resolved
     .split('\n')
     .filter(line => line.trim() !== '↳' && line.trim() !== '↳ ')

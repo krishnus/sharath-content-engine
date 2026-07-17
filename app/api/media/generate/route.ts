@@ -120,12 +120,13 @@ export async function POST(req: NextRequest) {
       pageCount = undefined   // react-pdf doesn't expose page count at generation time
 
     } else if (mediaType === 'carousel_pdf') {
-      const { titleSlide, slides } = parseCarouselSlides(currentDraft.content)
+      const { titleSlide, titleBody, slides } = parseCarouselSlides(currentDraft.content)
       pageCount = slides.length + 1   // cover + content slides (last = closing slide)
 
       fileBuffer = await generateCarouselPDF({
         theme:         week.theme ?? 'Weekly Insights',
         titleSlide:    titleSlide || (week.theme ?? 'Weekly Insights'),
+        titleBody:     titleBody  || undefined,
         slides,
         pillar,
         seriesLabel:   meta.seriesLabel ?? undefined,

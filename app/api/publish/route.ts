@@ -118,7 +118,7 @@ export async function POST(req: NextRequest) {
   }
 
   // ── Resolve [REF:post_id] placeholders → actual LinkedIn URLs ────────────
-  const { text: refResolvedText, unresolvedCount: unresolvedRefs } = await resolveRefs(publishText, supabase)
+  const { text: refResolvedText, unresolvedCount: unresolvedRefs } = await resolveRefs(publishText, supabase, 'linkedin')
   publishText = refResolvedText
   if (unresolvedRefs > 0) {
     console.warn(`[publish] ${unresolvedRefs} [REF:...] placeholder(s) unresolved — referenced post(s) not yet published, removed from text`)
