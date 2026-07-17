@@ -563,114 +563,106 @@ function WeekBlock({
   const outgoingThread = week.open_thread
 
   return (
-    <div className={cn('border-b border-ink-800', isCurrent && 'bg-gold-500/[0.02]')}>
+    <div className={cn('border-b border-ink-800 flex', isCurrent && 'bg-gold-500/[0.02]')}>
 
-      {/* ── Row 1: Theme ── */}
-      <div className="grid" style={{ gridTemplateColumns: '72px 1fr' }}>
-        {/* Week meta */}
-        <div className="border-r border-ink-800 px-2 py-2 flex flex-col justify-center gap-0.5">
-          <span className="text-xs font-semibold text-cream">Wk {week.week_number}</span>
-          <span className="text-xs text-ink-400">
-            {format(weekMonday, 'd MMM')}–{format(weekSaturday, 'd MMM')}
+      {/* ── Left: week meta — spans full week height ── */}
+      <div className="w-[72px] shrink-0 border-r border-ink-800 px-2 py-2 flex flex-col justify-center gap-0.5">
+        <span className="text-xs font-semibold text-cream">Wk {week.week_number}</span>
+        <span className="text-xs text-ink-400">
+          {format(weekMonday, 'd MMM')}–{format(weekSaturday, 'd MMM')}
+        </span>
+        <span className={cn('text-[10px] font-semibold leading-none', QUARTER_COLORS[arcQ] ?? 'text-ink-500')}>
+          {arcQ}
+        </span>
+        <span className="text-[9px] text-ink-600 leading-none truncate">
+          {(arcThemes[arcQ] ?? QUARTER_THEMES[arcQ] ?? '').split(' — ')[0].replace('The ', '')}
+        </span>
+        {isCurrent && (
+          <span className="text-[9px] bg-blue-900/60 text-blue-400 px-1 py-0.5 rounded mt-0.5 w-fit leading-none">
+            Current
           </span>
-          <span className={cn('text-[10px] font-semibold leading-none', QUARTER_COLORS[arcQ] ?? 'text-ink-500')}>
-            {arcQ}
-          </span>
-          <span className="text-[9px] text-ink-600 leading-none truncate">
-            {(arcThemes[arcQ] ?? QUARTER_THEMES[arcQ] ?? '').split(' — ')[0].replace('The ', '')}
-          </span>
-          {isCurrent && (
-            <span className="text-xs bg-blue-900/60 text-blue-400 px-1.5 py-0.5 rounded mt-0.5 w-fit">
-              Current
-            </span>
-          )}
-        </div>
+        )}
+      </div>
 
-        {/* Theme banner */}
+      {/* ── Right: theme row + thread strip + day cells ── */}
+      <div className="flex-1 flex flex-col min-w-0">
+
+        {/* Theme row */}
         {!hasTheme ? (
-          /* Empty state */
-          <div className="px-4 flex items-center border-b border-ink-800/50">
+          <div className="px-4 py-1.5 flex items-center border-b border-ink-800/50">
             <button
               onClick={() => onOpenPicker(week)}
-              className="flex items-center gap-1.5 text-xs text-ink-500 border border-dashed border-ink-700 px-3 py-1.5 rounded-full hover:border-blue-700 hover:text-blue-400 hover:bg-blue-900/20 transition-all"
+              className="flex items-center gap-1.5 text-xs text-ink-500 border border-dashed border-ink-700 px-3 py-1 rounded-full hover:border-blue-700 hover:text-blue-400 hover:bg-blue-900/20 transition-all"
             >
               <Sparkles size={11} />
               Choose theme for this week
             </button>
           </div>
         ) : !hasPosts ? (
-          /* Theme set, plan not generated */
-          <div className="px-4 flex items-center gap-3 border-b border-ink-800/50 bg-stone-900/40 border-l-2 border-l-stone-600">
+          <div className="px-4 py-1.5 flex items-center gap-3 border-b border-ink-800/50 bg-stone-900/40 border-l-2 border-l-stone-600">
             <Bookmark size={12} className="text-stone-500 shrink-0" />
-            <span className="text-xs font-medium text-stone-400 flex-1 truncate">{week.theme}</span>
+            <span className="text-sm font-semibold text-stone-300 flex-1 truncate">{week.theme}</span>
             <button
               onClick={() => onGeneratePlan(week)}
               disabled={isLoading}
-              className="shrink-0 flex items-center gap-1.5 text-xs btn-secondary px-3 py-1.5"
+              className="shrink-0 flex items-center gap-1.5 text-xs btn-secondary px-3 py-1"
             >
               {isLoading ? <Loader2 size={11} className="animate-spin" /> : <Sparkles size={11} />}
               Generate plan
             </button>
           </div>
         ) : allDone ? (
-          /* All published */
-          <div className="px-4 flex items-center gap-3 border-b border-ink-800/50 bg-emerald-900/20 border-l-2 border-l-emerald-600">
+          <div className="px-4 py-1.5 flex items-center gap-3 border-b border-ink-800/50 bg-emerald-900/20 border-l-2 border-l-emerald-600">
             <Bookmark size={12} className="text-emerald-500 shrink-0" />
-            <span className="text-xs font-medium text-emerald-300 flex-1 truncate">{week.theme}</span>
+            <span className="text-sm font-semibold text-emerald-200 flex-1 truncate">{week.theme}</span>
             <span className="text-xs text-emerald-500 shrink-0">6 / 6 published</span>
           </div>
         ) : (
-          /* In progress */
-          <div className="px-4 flex items-center gap-3 border-b border-ink-800/50 bg-blue-900/10 border-l-2 border-l-blue-700">
+          <div className="px-4 py-1.5 flex items-center gap-3 border-b border-ink-800/50 bg-blue-900/10 border-l-2 border-l-blue-700">
             <Bookmark size={12} className="text-blue-400 shrink-0" />
-            <span className="text-xs font-medium text-blue-300 flex-1 truncate">{week.theme}</span>
-            <span className="text-xs text-blue-500 shrink-0 whitespace-nowrap">
-              {progressSummary}
-            </span>
+            <span className="text-sm font-semibold text-blue-200 flex-1 truncate">{week.theme}</span>
+            <span className="text-xs text-blue-500 shrink-0 whitespace-nowrap">{progressSummary}</span>
           </div>
         )}
-      </div>
 
-      {/* ── Row 2: Thread strip — incoming only ── */}
-      {incomingThread && (
-        <div className="grid border-b border-ink-800/40" style={{ gridTemplateColumns: '72px 1fr' }}>
-          <div className="border-r border-ink-800" />
-          <div className="flex items-center gap-2 px-3 py-1 min-h-[26px] bg-blue-900/10">
+        {/* Thread strip — incoming only */}
+        {incomingThread && (
+          <div className="flex items-center gap-2 px-3 py-1 min-h-[26px] bg-blue-900/10 border-b border-ink-800/40">
             <span className="text-xs text-blue-500 font-medium whitespace-nowrap shrink-0">
               Thread Planted from Week {prevWeekNumber}
             </span>
             <ArrowRight size={11} className="text-blue-500 shrink-0" />
             <span className="text-xs text-ink-300 italic truncate">"{incomingThread}"</span>
           </div>
+        )}
+
+        {/* Day cells — 6 columns, no left spacer needed */}
+        <div className="grid flex-1" style={{ gridTemplateColumns: 'repeat(6, minmax(0, 1fr))' }}>
+          {DAY_NAMES.map(dayName => {
+            const postDate = addDays(weekMonday, DAY_OFFSET[dayName])
+            const dateStr  = format(postDate, 'yyyy-MM-dd')
+            const isToday  = dateStr === todayStr
+            const post     = week.posts.find(p => p.day === dayName) ?? null
+            const locked   = !hasTheme || !hasPosts
+
+            return (
+              <DayCell
+                key={dayName}
+                dayName={dayName}
+                post={post}
+                postDate={postDate}
+                isToday={isToday}
+                locked={locked}
+                hasTheme={hasTheme}
+                week={week}
+                arcQ={arcQ}
+                onClick={() => { if (post) onClickPost(post, postDate) }}
+                onSaturdayModal={onSaturdayModal}
+              />
+            )
+          })}
         </div>
-      )}
 
-      {/* ── Row 3: Day cells ── */}
-      <div className="grid" style={{ gridTemplateColumns: '72px repeat(6, minmax(0, 1fr))' }}>
-        <div className="border-r border-ink-800 bg-ink-900/20" />
-        {DAY_NAMES.map(dayName => {
-          const postDate = addDays(weekMonday, DAY_OFFSET[dayName])
-          const dateStr  = format(postDate, 'yyyy-MM-dd')
-          const isToday  = dateStr === todayStr
-          const post     = week.posts.find(p => p.day === dayName) ?? null
-          const locked   = !hasTheme || !hasPosts
-
-          return (
-            <DayCell
-              key={dayName}
-              dayName={dayName}
-              post={post}
-              postDate={postDate}
-              isToday={isToday}
-              locked={locked}
-              hasTheme={hasTheme}
-              week={week}
-              arcQ={arcQ}
-              onClick={() => { if (post) onClickPost(post, postDate) }}
-              onSaturdayModal={onSaturdayModal}
-            />
-          )
-        })}
       </div>
     </div>
   )
