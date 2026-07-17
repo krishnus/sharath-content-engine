@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { getAnthropicClient, MODEL } from '@/lib/anthropic/client'
-import { buildEditDiffPrompt, buildStoryLogExtractionPrompt } from '@/lib/anthropic/prompts'
+import { buildEditDiffPrompt, buildStoryLogExtractionPrompt, buildThreadSynthesisPrompt, type NarrativeLogEntry } from '@/lib/anthropic/prompts'
 import type { RuleCategory } from '@/lib/supabase/types'
 
 export const runtime = 'nodejs'
@@ -103,21 +103,76 @@ export async function POST(req: NextRequest) {
       references_used: storyLogData.references_used,
     }, { onConflict: 'post_id' })
 
-    // Update open_thread on the week
-    if (storyLogData.thread_planted) {
-      const { data: post } = await supabase
-        .from('posts')
-        .select('week_id')
-        .eq('id', postId)
-        .single()
+    // ── Narrative core synthesis ──────────────────────────────────
+    // Only Mon/Wed/Thu posts drive the forward thread. Market posts
+    // (Tue/Fri/Sat) are data-dependent and approved late — they never
+    // set open_thread. When the third narrative post is approved the
+    // three story logs are synthesised into one forward thread.
+    const NARRATIVE_DAYS = ['monday', 'wednesday', 'thursday']
 
-      if (post) {
-        await supabase
-          .from('weeks')
-          .update({ open_thread: storyLogData.thread_planted })
-          .eq('id', post.week_id)
+    const { data: thisPost } = await supabase
+      .from('posts')
+      .select('day, week_id')
+      .eq('id', postId)
+      .single()
+
+    if (thisPost && NARRATIVE_DAYS.includes(thisPost.day)) {
+      // Fetch all narrative posts for this week + their story_log entries
+      const { data: narrativePosts } = await supabase
+        .from('posts')
+        .select('id, day, story_log(core_insight, thread_planted)')
+        .eq('week_id', thisPost.week_id)
+        .in('day', NARRATIVE_DAYS)
+
+      type NarrativeRow = {
+        id: string
+        day: string
+        story_log: Array<{ core_insight: string | null; thread_planted: string | null }> | null
       }
+      const done = (narrativePosts as NarrativeRow[] ?? []).filter(p => {
+        const logs = Array.isArray(p.story_log) ? p.story_log : (p.story_log ? [p.story_log] : [])
+        return logs.length > 0
+      })
+
+      if (done.length === NARRATIVE_DAYS.length) {
+        // All three narrative posts now have story logs — synthesise
+        const { data: rawLogs } = await supabase
+          .from('story_log')
+          .select('core_insight, thread_planted, posts(day)')
+          .in('post_id', done.map(p => p.id))
+
+        const logs: NarrativeLogEntry[] = (rawLogs ?? []).map((l: {
+          core_insight: string | null
+          thread_planted: string | null
+          posts: { day: string } | Array<{ day: string }> | null
+        }) => ({
+          day:            Array.isArray(l.posts) ? (l.posts[0]?.day ?? '') : ((l.posts as { day: string } | null)?.day ?? ''),
+          core_insight:   l.core_insight,
+          thread_planted: l.thread_planted,
+        }))
+
+        const synthesisMsg = await getAnthropicClient().messages.create({
+          model:      MODEL,
+          max_tokens: 200,
+          messages:   [{ role: 'user', content: buildThreadSynthesisPrompt(logs) }],
+        })
+
+        const synthesisedThread = synthesisMsg.content
+          .filter(b => b.type === 'text')
+          .map(b => (b as { type: 'text'; text: string }).text)
+          .join('')
+          .trim()
+
+        if (synthesisedThread) {
+          await supabase
+            .from('weeks')
+            .update({ open_thread: synthesisedThread })
+            .eq('id', thisPost.week_id)
+        }
+      }
+      // 1 or 2 narrative posts done — leave open_thread untouched for now
     }
+    // Tue/Fri/Sat — never update open_thread
   }
 
   // ── 5. Extract voice rules (only if content changed) ────────────

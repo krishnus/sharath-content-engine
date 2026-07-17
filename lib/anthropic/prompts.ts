@@ -379,6 +379,24 @@ export function buildGeneratePostPrompt(params: GeneratePostPromptParams): strin
     formatInstructions[params.format],
     ``,
     params.marketSnapshot ? `## LIVE MARKET CONTEXT\n${params.marketSnapshot}` : '',
+    (params.pillar === 'financial_intelligence' && params.format === 'text_post')
+      ? [
+          `## MARKET DATA RESTRICTION`,
+          `This post is drafted in advance and will be published 2–5 days later.`,
+          `Do NOT cite specific current market levels, index values, or recent percentages`,
+          `(e.g. "Nifty is at 24,000", "Gold is up 8% this week", "Crude has risen 8%").`,
+          `Any live figures you include will be stale or wrong by the time it publishes.`,
+          ``,
+          `Use timeless market framing instead:`,
+          `  ✓ "when markets correct sharply"`,
+          `  ✓ "in a rising rate environment"`,
+          `  ✓ "when equity valuations compress"`,
+          `  ✓ "during periods of liquidity expansion"`,
+          ``,
+          `Historical references with specific data are fine:`,
+          `  ✓ "the 2008 crash", "the March 2020 Covid low", "the 2021 liquidity surge"`,
+        ].join('\n')
+      : '',
     params.hookIdea ? `**Hook idea to develop:** ${params.hookIdea}` : '',
     ``,
     params.narrativeContext,
@@ -457,6 +475,46 @@ export function buildStoryLogExtractionPrompt(postContent: string): string {
 
 POST:
 ${postContent}`
+}
+
+
+// ============================================================
+// NARRATIVE THREAD SYNTHESIS PROMPT
+// Synthesises one forward thread from Mon/Wed/Thu story logs.
+// ============================================================
+export type NarrativeLogEntry = {
+  day: string
+  core_insight: string | null
+  thread_planted: string | null
+}
+
+export function buildThreadSynthesisPrompt(logs: NarrativeLogEntry[]): string {
+  const dayOrder = ['monday', 'wednesday', 'thursday']
+  const sorted = [...logs].sort((a, b) => dayOrder.indexOf(a.day) - dayOrder.indexOf(b.day))
+
+  const entries = sorted.map(l => {
+    const day = l.day.charAt(0).toUpperCase() + l.day.slice(1)
+    return [
+      `${day}:`,
+      `  Core insight: ${l.core_insight ?? '(none)'}`,
+      `  Thread planted in closing: ${l.thread_planted ?? '(none)'}`,
+    ].join('\n')
+  }).join('\n\n')
+
+  return `You are reading the narrative arc of this week's approved coaching posts by Sharath Kumar R N — an IIT-trained executive coach and former global banker.
+
+These three posts (Monday, Wednesday, Thursday) are the narrative core of the week. They carry the story arc forward across the 52-week content journey.
+
+${entries}
+
+Synthesise ONE forward thread for next week. This thread should:
+- Emerge from the dominant insight or tension across these three posts — not from just one of them
+- Feel like a chapter ending that opens the next chapter — a question, a provocation, or an unresolved idea
+- Be specific and concrete, not generic
+- Be 1–2 sentences maximum
+- Sound like Sharath's voice — direct, reflective, grounded in both Vedic wisdom and real-world leadership
+
+Output only the thread text. No preamble, no explanation.`
 }
 
 

@@ -128,9 +128,11 @@ export async function POST(req: NextRequest) {
   const voiceRulesBlock = buildVoiceRulesBlock(voiceRules ?? [])
   const systemPrompt = [MASTER_SYSTEM_PROMPT, voiceRulesBlock].filter(Boolean).join('\n\n')
 
-  // ── 3b. Fetch live market snapshot for financial_intelligence pillar ──
+  // ── 3b. Fetch live market snapshot — Saturday market_insights only ──
+  // Tue/Fri financial posts are drafted in advance; injecting live numbers
+  // produces stale data by publish date. Only Saturday's same-day post gets live data.
   let marketSnapshot: string | null = null
-  if (body.pillar === 'financial_intelligence') {
+  if (body.format === 'market_insights') {
     try {
       marketSnapshot = await fetchMarketSnapshot()
     } catch (err) {

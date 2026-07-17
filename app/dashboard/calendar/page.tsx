@@ -530,6 +530,25 @@ function WeekBlock({
   onClickPost: (post: SlotPost, postDate: Date) => void
   onSaturdayModal: (data: SatModalData) => void
 }) {
+  const [resynthesising, setResynthesising] = useState(false)
+  const [resynThread, setResynThread]       = useState<string | null>(null)
+
+  const handleResynthesize = async () => {
+    if (!week.id || resynthesising) return
+    setResynthesising(true)
+    try {
+      const res = await fetch('/api/weeks/synthesise', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ weekId: week.id }),
+      })
+      if (!res.ok) throw new Error('failed')
+      const json = await res.json()
+      setResynThread(json.open_thread)
+    } catch { /* silent — user can retry */ }
+    finally { setResynthesising(false) }
+  }
+
   // Arc-relative quarter for this week (used for display and passed to DayCell)
   const arcQ = week.quarter ?? getArcQuarter(week.week_start, liveDate)
 
@@ -625,16 +644,78 @@ function WeekBlock({
           </div>
         )}
 
-        {/* Thread strip — incoming only */}
-        {incomingThread && (
-          <div className="flex items-center gap-2 px-3 py-1 min-h-[26px] bg-blue-900/10 border-b border-ink-800/40">
-            <span className="text-xs text-blue-500 font-medium whitespace-nowrap shrink-0">
-              Thread Planted from Week {prevWeekNumber}
-            </span>
-            <ArrowRight size={11} className="text-blue-500 shrink-0" />
-            <span className="text-xs text-ink-300 italic truncate">"{incomingThread}"</span>
-          </div>
-        )}
+        {/* Thread strip: incoming thread + outgoing synthesis status */}
+        {(() => {
+          const NARRATIVE_DAYS    = new Set(['monday', 'wednesday', 'thursday'])
+          const narrativePosts    = week.posts.filter(p => NARRATIVE_DAYS.has(p.day))
+          const narrativeApproved = narrativePosts.filter(p =>
+            ['approved', 'scheduled', 'published'].includes(p.status)
+          ).length
+          const narrativePlanned  = narrativePosts.length
+          const effectiveThread   = resynThread ?? week.open_thread
+          const synthesised       = narrativeApproved === 3 && !!effectiveThread
+
+          const showIncoming = !!incomingThread
+          const showStatus   = narrativePlanned > 0
+
+          if (!showIncoming && !showStatus) return null
+
+          return (
+            <div className="border-b border-ink-800/40">
+              {/* Incoming thread from previous week */}
+              {showIncoming && (
+                <div className="flex items-center gap-2 px-3 py-1.5 bg-blue-900/10">
+                  <span className="text-xs text-blue-500 font-medium whitespace-nowrap shrink-0">
+                    Thread from Wk {prevWeekNumber}
+                  </span>
+                  <ArrowRight size={11} className="text-blue-500 shrink-0" />
+                  <span className="text-xs text-ink-300 italic truncate">"{incomingThread}"</span>
+                </div>
+              )}
+
+              {/* Outgoing thread synthesis status for this week */}
+              {showStatus && (
+                <div className={cn(
+                  'flex items-center gap-2 px-3 py-1.5',
+                  showIncoming && 'border-t border-ink-800/30',
+                  synthesised           ? 'bg-emerald-900/10' :
+                  narrativeApproved > 0 ? 'bg-amber-900/10'   : 'bg-ink-900/20'
+                )}>
+                  <span className={cn(
+                    'text-[10px] font-semibold uppercase tracking-wider whitespace-nowrap shrink-0',
+                    synthesised           ? 'text-emerald-500' :
+                    narrativeApproved > 0 ? 'text-amber-500'   : 'text-ink-600'
+                  )}>
+                    {synthesised ? '✓ Thread synthesised' : `⏳ ${narrativeApproved}/3 narrative approved`}
+                  </span>
+                  <span className="text-[10px] text-ink-600 shrink-0">·</span>
+                  <span className="text-[10px] text-ink-500 whitespace-nowrap shrink-0">Mon · Wed · Thu</span>
+                  {effectiveThread && (
+                    <>
+                      <span className="text-[10px] text-ink-700 shrink-0">→</span>
+                      <span className="text-[10px] text-emerald-400/70 italic truncate">"{effectiveThread}"</span>
+                    </>
+                  )}
+                  {/* Re-synthesise button — visible whenever at least 1 narrative post is approved */}
+                  {narrativeApproved > 0 && week.id && (
+                    <button
+                      onClick={handleResynthesize}
+                      disabled={resynthesising}
+                      className="ml-auto shrink-0 flex items-center gap-1 text-[10px] text-ink-500 hover:text-cream transition-colors disabled:opacity-40"
+                      title="Re-synthesise thread from approved narrative posts"
+                    >
+                      {resynthesising
+                        ? <Loader2 size={9} className="animate-spin" />
+                        : <RotateCcw size={9} />
+                      }
+                      {resynthesising ? 'Synthesising…' : 'Re-synthesise'}
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
+          )
+        })()}
 
         {/* Day cells — 6 columns, no left spacer needed */}
         <div className="grid flex-1" style={{ gridTemplateColumns: 'repeat(6, minmax(0, 1fr))' }}>
