@@ -304,17 +304,29 @@ export default function CalendarPage() {
     }
   }, [])
 
+  const NARRATIVE_DAYS = new Set(['monday', 'wednesday', 'thursday'])
+
   // Determine incoming thread for each displayed week
   function getIncomingThread(weekIndex: number): string | null {
-    // weekIndex is the index in displayWeeks (0-4)
-    // displayWeeks[0]'s incoming = contextWeek.open_thread
-    // displayWeeks[n]'s incoming = displayWeeks[n-1].open_thread
     if (weekIndex === 0) return contextWeek?.open_thread ?? null
     return displayWeeks[weekIndex - 1]?.open_thread ?? null
   }
   function getPrevWeekNumber(weekIndex: number): number {
     if (weekIndex === 0) return contextWeek?.week_number ?? 0
     return displayWeeks[weekIndex - 1]?.week_number ?? 0
+  }
+  // ID and narrative approval count of the week that produced the incoming thread
+  function getIncomingWeekId(weekIndex: number): string | null {
+    if (weekIndex === 0) return contextWeek?.id ?? null
+    return displayWeeks[weekIndex - 1]?.id ?? null
+  }
+  function getIncomingNarrativeApproved(weekIndex: number): number {
+    const prevWeek = weekIndex === 0 ? contextWeek : (displayWeeks[weekIndex - 1] ?? null)
+    if (!prevWeek) return 0
+    return prevWeek.posts
+      .filter(p => NARRATIVE_DAYS.has(p.day))
+      .filter(p => ['approved', 'scheduled', 'published'].includes(p.status))
+      .length
   }
 
   return (
@@ -431,6 +443,8 @@ export default function CalendarPage() {
                 weekIndex={wi}
                 incomingThread={getIncomingThread(wi)}
                 prevWeekNumber={getPrevWeekNumber(wi)}
+                incomingWeekId={getIncomingWeekId(wi)}
+                incomingNarrativeApproved={getIncomingNarrativeApproved(wi)}
                 todayStr={todayStr}
                 genPlanLoading={genPlanLoading}
                 liveDate={liveDate}
@@ -439,6 +453,7 @@ export default function CalendarPage() {
                 onGeneratePlan={generatePlanForWeek}
                 onClickPost={(post, postDate) => setDrawer({ post, week, postDate })}
                 onSaturdayModal={setSatModal}
+                onRefresh={() => setRefreshKey(k => k + 1)}
               />
             ))}
           </div>
@@ -514,13 +529,15 @@ export default function CalendarPage() {
 
 // ── WeekBlock ────────────────────────────────────────────────────────────
 function WeekBlock({
-  week, weekIndex, incomingThread, prevWeekNumber, todayStr,
-  genPlanLoading, liveDate, arcThemes, onOpenPicker, onGeneratePlan, onClickPost, onSaturdayModal,
+  week, weekIndex, incomingThread, prevWeekNumber, incomingWeekId, incomingNarrativeApproved,
+  todayStr, genPlanLoading, liveDate, arcThemes, onOpenPicker, onGeneratePlan, onClickPost, onSaturdayModal, onRefresh,
 }: {
   week: WeekSlot
   weekIndex: number
   incomingThread: string | null
   prevWeekNumber: number
+  incomingWeekId: string | null
+  incomingNarrativeApproved: number
   todayStr: string
   genPlanLoading: string | null
   liveDate: string | null
@@ -529,22 +546,22 @@ function WeekBlock({
   onGeneratePlan: (week: WeekSlot) => void
   onClickPost: (post: SlotPost, postDate: Date) => void
   onSaturdayModal: (data: SatModalData) => void
+  onRefresh: () => void
 }) {
   const [resynthesising, setResynthesising] = useState(false)
-  const [resynThread, setResynThread]       = useState<string | null>(null)
 
   const handleResynthesize = async () => {
-    if (!week.id || resynthesising) return
+    if (!incomingWeekId || resynthesising) return
     setResynthesising(true)
     try {
       const res = await fetch('/api/weeks/synthesise', {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({ weekId: week.id }),
+        body:    JSON.stringify({ weekId: incomingWeekId }),
       })
       if (!res.ok) throw new Error('failed')
-      const json = await res.json()
-      setResynThread(json.open_thread)
+      // Refresh parent so incomingThread prop updates with newly synthesised value
+      onRefresh()
     } catch { /* silent — user can retry */ }
     finally { setResynthesising(false) }
   }
@@ -644,19 +661,11 @@ function WeekBlock({
           </div>
         )}
 
-        {/* Thread strip: incoming thread + outgoing synthesis status */}
+        {/* Thread strip: incoming thread + synthesis status of the week that produced it */}
         {(() => {
-          const NARRATIVE_DAYS    = new Set(['monday', 'wednesday', 'thursday'])
-          const narrativePosts    = week.posts.filter(p => NARRATIVE_DAYS.has(p.day))
-          const narrativeApproved = narrativePosts.filter(p =>
-            ['approved', 'scheduled', 'published'].includes(p.status)
-          ).length
-          const narrativePlanned  = narrativePosts.length
-          const effectiveThread   = resynThread ?? week.open_thread
-          const synthesised       = narrativeApproved === 3 && !!effectiveThread
-
+          const synthesised  = incomingNarrativeApproved === 3 && !!incomingThread
           const showIncoming = !!incomingThread
-          const showStatus   = narrativePlanned > 0
+          const showStatus   = showIncoming && !!incomingWeekId
 
           if (!showIncoming && !showStatus) return null
 
@@ -673,31 +682,21 @@ function WeekBlock({
                 </div>
               )}
 
-              {/* Outgoing thread synthesis status for this week */}
+              {/* Synthesis status row */}
               {showStatus && (
                 <div className={cn(
-                  'flex items-center gap-2 px-3 py-1.5',
+                  'flex items-center gap-2 px-3 py-1',
                   showIncoming && 'border-t border-ink-800/30',
-                  synthesised           ? 'bg-emerald-900/10' :
-                  narrativeApproved > 0 ? 'bg-amber-900/10'   : 'bg-ink-900/20'
+                  'bg-ink-900/30'
                 )}>
                   <span className={cn(
-                    'text-[10px] font-semibold uppercase tracking-wider whitespace-nowrap shrink-0',
-                    synthesised           ? 'text-emerald-500' :
-                    narrativeApproved > 0 ? 'text-amber-500'   : 'text-ink-600'
+                    'text-[10px] font-medium px-1.5 py-0.5 rounded whitespace-nowrap shrink-0',
+                    synthesised                        ? 'bg-emerald-900/40 text-emerald-400' :
+                    incomingNarrativeApproved > 0      ? 'bg-amber-900/40 text-amber-400'     : 'bg-ink-800 text-ink-500'
                   )}>
-                    {synthesised ? '✓ Thread synthesised' : `⏳ ${narrativeApproved}/3 narrative approved`}
+                    {synthesised ? '✓ Synthesised' : `⏳ ${incomingNarrativeApproved}/3 approved`}
                   </span>
-                  <span className="text-[10px] text-ink-600 shrink-0">·</span>
-                  <span className="text-[10px] text-ink-500 whitespace-nowrap shrink-0">Mon · Wed · Thu</span>
-                  {effectiveThread && (
-                    <>
-                      <span className="text-[10px] text-ink-700 shrink-0">→</span>
-                      <span className="text-[10px] text-emerald-400/70 italic truncate">"{effectiveThread}"</span>
-                    </>
-                  )}
-                  {/* Re-synthesise button — visible whenever at least 1 narrative post is approved */}
-                  {narrativeApproved > 0 && week.id && (
+                  {incomingNarrativeApproved > 0 && incomingWeekId && (
                     <button
                       onClick={handleResynthesize}
                       disabled={resynthesising}
