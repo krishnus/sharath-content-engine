@@ -8,6 +8,7 @@ import {
   Wand2, X, Hash, TrendingUp,
 } from 'lucide-react'
 import Link from 'next/link'
+import { addDays, format as formatDate, parseISO } from 'date-fns'
 import { cn, countWords, PILLAR_LABELS, FORMAT_LABELS, getQuarter } from '@/lib/utils/helpers'
 import DiffView from '@/components/DiffView'
 import PublishPanel from '@/components/PublishPanel'
@@ -455,7 +456,15 @@ export default function DraftEditorPage() {
                 {PILLAR_LABELS[post.pillar] ?? post.pillar}
               </span>
               <span className="text-ink-600">·</span>
-              <span className="text-xs text-ink-400 capitalize">{post.day}</span>
+              <span className="text-xs text-ink-400">
+                {(() => {
+                  const DAY_OFFSET: Record<string, number> = { monday: 0, tuesday: 1, wednesday: 2, thursday: 3, friday: 4, saturday: 5 }
+                  const weekStart = post.weeks?.week_start
+                  if (!weekStart) return post.day
+                  const date = addDays(parseISO(weekStart), DAY_OFFSET[post.day] ?? 0)
+                  return formatDate(date, 'EEE, d MMM yyyy')
+                })()}
+              </span>
               <span className="text-ink-600">·</span>
               <span className="text-xs text-ink-400">{FORMAT_LABELS[post.format] ?? post.format}</span>
               <span className="text-ink-600">·</span>

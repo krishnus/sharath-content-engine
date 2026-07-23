@@ -55,6 +55,7 @@ export default function MediaPanel({ postId, format, onMediaStatusChange, onMedi
   const [regenTitle,   setRegenTitle]         = useState(false)
   const [error, setError]                     = useState<string | null>(null)
   const [refUnresolvedCount, setRefUnresolvedCount] = useState(0)
+  const [refStatus, setRefStatus]             = useState<{ resolvedCount: number; unresolvedCount: number } | null>(null)
 
   // LI Hook / Caption text (for article_pdf + carousel_pdf: 200-280 chars; for quote_png: max 120)
   const [caption, setCaption]                 = useState('')
@@ -72,6 +73,14 @@ export default function MediaPanel({ postId, format, onMediaStatusChange, onMedi
     loadExistingMedia()
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [postId, format])
+
+  async function loadRefStatus() {
+    if (isFreeForm) return  // free-form posts don't use the REF system
+    try {
+      const res = await fetch(`/api/media/ref-status?postId=${postId}`)
+      if (res.ok) setRefStatus(await res.json())
+    } catch { /* non-fatal */ }
+  }
 
   async function loadExistingMedia() {
     setLoading(true)
@@ -107,6 +116,8 @@ export default function MediaPanel({ postId, format, onMediaStatusChange, onMedi
           }
           setMedia(rec)
           if (urlData.linkedinCaption) setCaption(urlData.linkedinCaption)
+          // Check REF resolution status now that we know a PDF exists
+          loadRefStatus()
         }
       }
     } catch { /* non-fatal */ }
@@ -218,6 +229,7 @@ export default function MediaPanel({ postId, format, onMediaStatusChange, onMedi
       setRefUnresolvedCount(data.refUnresolvedCount ?? 0)
       onMediaStatusChange?.(true)
       onMediaRegenerated?.()
+      loadRefStatus()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Generation failed')
     } finally {
@@ -515,12 +527,20 @@ export default function MediaPanel({ postId, format, onMediaStatusChange, onMedi
                   </div>
                 )}
 
-                {/* Unresolved cross-references advisory (article PDF only) */}
-                {isArticle && refUnresolvedCount > 0 && (
+                {/* Cross-reference status advisories (article PDF only) */}
+                {isArticle && refStatus && refStatus.resolvedCount > 0 && (
                   <div className="flex items-start gap-2 px-3 py-2 bg-amber-900/15 border border-amber-700/30 rounded-lg">
                     <AlertCircle size={12} className="text-amber-400 shrink-0 mt-0.5" />
                     <p className="text-xs text-amber-300">
-                      {refUnresolvedCount} cross-reference{refUnresolvedCount === 1 ? '' : 's'} in this PDF {refUnresolvedCount === 1 ? 'is' : 'are'} not yet clickable — the referenced post{refUnresolvedCount === 1 ? ' is' : 's are'} not yet published. Regenerate the PDF after those posts go live to include clickable links.
+                      {refStatus.resolvedCount} referenced post{refStatus.resolvedCount === 1 ? ' is' : 's are'} now live — regenerate PDF to embed clickable links. They will also be refreshed automatically at publish time.
+                    </p>
+                  </div>
+                )}
+                {isArticle && refStatus && refStatus.unresolvedCount > 0 && (
+                  <div className="flex items-start gap-2 px-3 py-2 bg-ink-800/40 border border-ink-700/30 rounded-lg">
+                    <AlertCircle size={12} className="text-ink-500 shrink-0 mt-0.5" />
+                    <p className="text-xs text-ink-400">
+                      {refStatus.unresolvedCount} referenced post{refStatus.unresolvedCount === 1 ? ' is' : 's are'} not yet published — PDF link{refStatus.unresolvedCount === 1 ? '' : 's'} will be missing until those posts go live.
                     </p>
                   </div>
                 )}

@@ -178,6 +178,12 @@ export async function POST(req: NextRequest) {
         // Regenerate with freshly resolved refs so all published cross-references become clickable links
         try {
           fileBuffer = await buildArticlePdfBuffer(post, meta, supabase)
+          // Persist refreshed PDF back to storage + DB
+          await supabase.storage.from(STORAGE_BUCKET)
+            .upload(mediaRecord.storage_path, fileBuffer, { contentType: 'application/pdf', upsert: true })
+          await supabase.from('post_media')
+            .update({ file_size: fileBuffer.length, updated_at: new Date().toISOString() })
+            .eq('id', mediaRecord.id)
         } catch (err) {
           console.error('[publish] Article PDF regeneration failed during promotePreview:', err)
         }
@@ -233,6 +239,12 @@ export async function POST(req: NextRequest) {
       // published resolve to live clickable links in the PDF.
       try {
         fileBuffer = await buildArticlePdfBuffer(post, meta, supabase)
+        // Persist the refreshed PDF back to storage + DB so MediaPanel stays in sync
+        await supabase.storage.from(STORAGE_BUCKET)
+          .upload(mediaRecord.storage_path, fileBuffer, { contentType: 'application/pdf', upsert: true })
+        await supabase.from('post_media')
+          .update({ file_size: fileBuffer.length, updated_at: new Date().toISOString() })
+          .eq('id', mediaRecord.id)
       } catch (err) {
         console.error('[publish] Article PDF regeneration failed:', err)
         return NextResponse.json(
